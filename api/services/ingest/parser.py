@@ -26,8 +26,8 @@ def parse_excel_manifest(file_path: str, password: str = None) -> List[Dict[str,
         IOError: If file cannot be read
     """
     try:
-        # Load workbook (with password if provided)
-        wb = openpyxl.load_workbook(file_path, password=password, data_only=True)
+        # Load workbook (password parameter not reliably supported in all openpyxl versions)
+        wb = openpyxl.load_workbook(file_path, data_only=True)
 
         # Use first sheet
         ws = wb.active
@@ -57,16 +57,34 @@ def _extract_rows(ws: Worksheet) -> List[Dict[str, Any]]:
     if not headers:
         raise ValueError("No headers found in Excel file")
 
-    # Validate required columns
-    required_columns = {"shipper", "consignee", "hts_code", "quantity", "value", "description"}
+    # Validate required columns (support both "quantity" and "quantity_kg", "value" and "value_usd")
+    required_base = {"shipper", "consignee", "hts_code", "description"}
     found_columns = set(headers)
 
-    missing = required_columns - found_columns
+    # Check for quantity column (accept either "quantity" or "quantity_kg" or variants)
+    quantity_col = next((h for h in headers if h.startswith("quantity")), None)
+    if not quantity_col:
+        raise ValueError("Missing required column: quantity")
+
+    # Check for value column (accept either "value" or "value_usd" or variants)
+    value_col = next((h for h in headers if h.startswith("value")), None)
+    if not value_col:
+        raise ValueError("Missing required column: value")
+
+    # Check for other required columns
+    missing = required_base - found_columns
     if missing:
         raise ValueError(f"Missing required columns: {', '.join(missing)}")
 
     # Map column indices
-    col_indices = {col: headers.index(col) for col in required_columns}
+    col_indices = {
+        "shipper": headers.index("shipper"),
+        "consignee": headers.index("consignee"),
+        "hts_code": headers.index("hts_code"),
+        "quantity": headers.index(quantity_col),
+        "value": headers.index(value_col),
+        "description": headers.index("description"),
+    }
 
     rows = []
     for row_idx in range(2, ws.max_row + 1):
