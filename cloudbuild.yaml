@@ -1,0 +1,70 @@
+steps:
+  # Step 1: Build Python API image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build-api
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/api:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/api:latest'
+      - './api'
+
+  # Step 2: Build React UI image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: build-ui
+    args:
+      - 'build'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/ui:$COMMIT_SHA'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/ui:latest'
+      - './ui'
+
+  # Step 3: Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push-api
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/api:$COMMIT_SHA'
+
+  # Step 4: Push UI image
+  - name: 'gcr.io/cloud-builders/docker'
+    id: push-ui
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/ui:$COMMIT_SHA'
+
+  # Step 5: Deploy API to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: deploy-api
+    args:
+      - run
+      - deploy
+      - sentry-api
+      - --region=us-central1
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/sentry/api:$COMMIT_SHA
+      - --platform=managed
+      - --allow-unauthenticated
+      - --set-env-vars=ENVIRONMENT=production,DEMO_MODE=false,GCP_PROJECT=$PROJECT_ID
+
+  # Step 6: Deploy UI to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    id: deploy-ui
+    args:
+      - run
+      - deploy
+      - sentry-ui
+      - --region=us-central1
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/sentry/ui:$COMMIT_SHA
+      - --platform=managed
+      - --allow-unauthenticated
+
+images:
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/api:$COMMIT_SHA'
+  - 'us-central1-docker.pkg.dev/$PROJECT_ID/sentry/ui:$COMMIT_SHA'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+
+timeout: '1800s'

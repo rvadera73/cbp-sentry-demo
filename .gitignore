@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Models (generated — run scripts/build_models.py)
+api/models/*.pkl
+api/models/*.txt
+
+# Senzing index (generated — run scripts/build_senzing_index.py)
+api/seed_data/G2C.db
+api/seed_data/G2C.db-shm
+api/seed_data/G2C.db-wal
+
+# Node / React
+ui/node_modules/
+ui/dist/
+ui/.env.local
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.env
+
+# Secrets (never commit)
+*credentials*.json
+*service-account*.json
+terraform/*.tfvars
+terraform/.terraform/
+terraform/terraform.tfstate*
+
+# Docker
+*.tar.gz
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Proposal doc — excluded from repo (sensitive)
+*.docx
+*:Zone.Identifier

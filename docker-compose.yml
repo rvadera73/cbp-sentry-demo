@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  sentry-api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: sentry-api
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEMO_MODE=true
+      - DATABASE_URL=firestore
+      - SENZING_SDK_INITIALIZED=true
+      - MANIFEST_PASSWORD=CBPDemo2026
+    volumes:
+      - ./api:/app
+      - ./api/fixtures:/app/fixtures:ro
+      - ./api/models:/app/models:ro
+      - ./api/seed_data:/app/seed_data:ro
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - sentry-ui
+    networks:
+      - sentry-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sentry-ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    container_name: sentry-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    volumes:
+      - ./ui/src:/app/src
+      - ./ui/public:/app/public
+    command: npm run dev
+    networks:
+      - sentry-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  sentry-net:
+    driver: bridge
