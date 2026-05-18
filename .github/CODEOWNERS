@@ -1,0 +1,34 @@
+# GitHub CODEOWNERS
+# Enforce mandatory code review for critical areas
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global owner (default fallback)
+* @rvadera73
+
+# API backend
+/api/ @rvadera73
+/api/services/referral/ @rvadera73
+/api/tests/ @rvadera73
+
+# UI frontend
+/ui/ @rvadera73
+/ui/src/models/ @rvadera73
+/ui/src/views/ @rvadera73
+/ui/tests/ @rvadera73
+
+# Database and infrastructure
+/terraform/ @rvadera73
+/deploy/ @rvadera73
+/.github/workflows/ @rvadera73
+
+# Documentation
+/docs/ @rvadera73
+/CLAUDE.md @rvadera73
+/ARCHITECTURE.md @rvadera73
+/README.md @rvadera73
+
+# CI/CD and configuration
+/.github/workflows/deploy*.yml @rvadera73
+/.github/workflows/test.yml @rvadera73
+/.github/workflows/a11y.yml @rvadera73
+/cloudbuild.yaml @rvadera73

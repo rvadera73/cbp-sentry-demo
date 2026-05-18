@@ -1,0 +1,74 @@
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: pip
+    directory: "/api"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - rvadera73
+    labels:
+      - "type: dependencies"
+      - "area: api"
+    commit-message:
+      prefix: "chore(api):"
+      include: "scope"
+    pull-request-branch-name:
+      separator: "/"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    ignore:
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "fastapi"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "neo4j"
+        update-types: ["version-update:semver-major"]
+
+  # Node/npm dependencies
+  - package-ecosystem: npm
+    directory: "/ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 5
+    reviewers:
+      - rvadera73
+    labels:
+      - "type: dependencies"
+      - "area: ui"
+    commit-message:
+      prefix: "chore(ui):"
+      include: "scope"
+    pull-request-branch-name:
+      separator: "/"
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    ignore:
+      # Ignore major version updates for critical dependencies
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+    open-pull-requests-limit: 3
+    reviewers:
+      - rvadera73
+    labels:
+      - "type: dependencies"
+      - "area: deployment"
+    commit-message:
+      prefix: "ci:"
+      include: "scope"

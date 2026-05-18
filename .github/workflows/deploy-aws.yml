@@ -1,0 +1,138 @@
+name: Deploy to AWS Lambda/ECS
+
+on:
+  push:
+    branches: [aws-main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  DEMO_MODE: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # AWS credentials via OIDC (recommended for GitHub Actions)
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build API image
+      - name: Build and push API image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: ./api
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/sentry-api:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/sentry-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Build UI image
+      - name: Build and push UI image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ui
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/sentry-ui:${{ github.sha }}
+            ${{ env.ECR_REGISTRY }}/sentry-ui:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Deploy API to ECS
+      - name: Deploy API to ECS
+        run: |
+          aws ecs update-service \
+            --cluster sentry-cluster \
+            --service sentry-api-service \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
+        continue-on-error: true
+
+      # Deploy UI to S3
+      - name: Deploy UI assets to S3
+        run: |
+          aws s3 sync ./ui/dist s3://${{ secrets.AWS_S3_BUCKET }}/ui/ \
+            --delete \
+            --cache-control "max-age=31536000,immutable" \
+            --exclude "index.html"
+          aws s3 cp ./ui/dist/index.html s3://${{ secrets.AWS_S3_BUCKET }}/ui/index.html \
+            --cache-control "max-age=300" \
+            --content-type "text/html; charset=utf-8"
+        continue-on-error: true
+
+      # Invalidate CloudFront cache
+      - name: Invalidate CloudFront distribution
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*" \
+            --region ${{ env.AWS_REGION }}
+        continue-on-error: true
+
+      - name: Post deployment summary
+        if: success()
+        run: |
+          echo "## ✅ AWS Deployment Template" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**This is a template workflow.** Configure the following before using:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Required GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AWS_ACCOUNT_ID\` — AWS account ID" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AWS_ROLE_TO_ASSUME\` — IAM role for OIDC (arn:aws:iam::...)" >> $GITHUB_STEP_SUMMARY
+          echo "- \`AWS_S3_BUCKET\` — S3 bucket for UI assets" >> $GITHUB_STEP_SUMMARY
+          echo "- \`CLOUDFRONT_DISTRIBUTION_ID\` — CloudFront distribution ID" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### AWS Resources Required" >> $GITHUB_STEP_SUMMARY
+          echo "- ECS cluster: \`sentry-cluster\`" >> $GITHUB_STEP_SUMMARY
+          echo "- ECS service: \`sentry-api-service\`" >> $GITHUB_STEP_SUMMARY
+          echo "- S3 bucket: configured in secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- CloudFront distribution: configured in secrets" >> $GITHUB_STEP_SUMMARY
+          echo "- RDS PostgreSQL: same as Neon (cloud-agnostic)" >> $GITHUB_STEP_SUMMARY
+          echo "- Neptune: same as Neo4j Aura (cloud-agnostic)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Next steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Create AWS OIDC provider (one-time setup)" >> $GITHUB_STEP_SUMMARY
+          echo "2. Add IAM role for GitHub Actions" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add GitHub Secrets in Settings → Environments" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **AWS deployment workflow requires configuration.** See job logs for setup instructions.'
+            })

@@ -1,51 +1,56 @@
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.venv/
-venv/
-*.egg-info/
-dist/
-.pytest_cache/
-
-# Models (generated — run scripts/build_models.py)
-api/models/*.pkl
-api/models/*.txt
-
-# Senzing index (generated — run scripts/build_senzing_index.py)
-api/seed_data/G2C.db
-api/seed_data/G2C.db-shm
-api/seed_data/G2C.db-wal
-
-# Node / React
-ui/node_modules/
-ui/dist/
-ui/.env.local
-
 # Environment
 .env
 .env.local
-.env.*.local
-*.env
+.env*.local
+.venv
+venv/
+env/
 
-# Secrets (never commit)
-*credentials*.json
-*service-account*.json
-terraform/*.tfvars
-terraform/.terraform/
-terraform/terraform.tfstate*
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+.next/
+.nuxt/
+coverage/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+
+# Local database
+*.db
+*.sqlite
+*.sqlite3
 
 # Docker
-*.tar.gz
+.dockerignore
 
-# OS
-.DS_Store
-Thumbs.db
-
-# IDE
-.vscode/settings.json
-.idea/
-
-# Proposal doc — excluded from repo (sensitive)
-*.docx
-*:Zone.Identifier
+# Temporary
+tmp/
+temp/
+*.tmp

@@ -1,0 +1,46 @@
+steps:
+  # Build API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/sentry-api:$SHORT_SHA', './api']
+    id: 'build-api'
+
+  # Build UI image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/sentry-ui:$SHORT_SHA', './ui']
+    id: 'build-ui'
+
+  # Push API image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/sentry-api:$SHORT_SHA']
+    id: 'push-api'
+
+  # Push UI image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/sentry-ui:$SHORT_SHA']
+    id: 'push-ui'
+
+  # Deploy API to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - run
+      - --filename=deploy/gcp/k8s/
+      - --image=gcr.io/$PROJECT_ID/sentry-api:$SHORT_SHA
+      - --location=us-central1-a
+      - --cluster=sentry-cluster
+
+  # Deploy UI to Cloud Run
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - run
+      - --filename=deploy/gcp/k8s/ui.yaml
+      - --image=gcr.io/$PROJECT_ID/sentry-ui:$SHORT_SHA
+      - --location=us-central1-a
+      - --cluster=sentry-cluster
+
+images:
+  - 'gcr.io/$PROJECT_ID/sentry-api:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/sentry-ui:$SHORT_SHA'
+
+options:
+  machineType: 'N1_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

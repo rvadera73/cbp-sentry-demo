@@ -1,56 +1,90 @@
 version: '3.8'
 
 services:
-  sentry-api:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentry-postgres
+    environment:
+      POSTGRES_USER: sentry_user
+      POSTGRES_PASSWORD: sentry_password
+      POSTGRES_DB: sentry_cbp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./api/seed_data:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentry_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: sentry-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_INITIAL_SERVER_MODE: SINGLE
+    ports:
+      - "7687:7687"
+      - "7474:7474"
+    volumes:
+      - neo4j_data:/var/lib/neo4j/data
+      - ./api/seed_data:/seed_data
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
     build:
       context: ./api
       dockerfile: Dockerfile
     container_name: sentry-api
+    environment:
+      DATABASE_URL: postgresql://sentry_user:sentry_password@postgres:5432/sentry_cbp
+      NEO4J_URI: neo4j://neo4j:7687
+      NEO4J_USERNAME: neo4j
+      NEO4J_PASSWORD: password
+      ENVIRONMENT: development
+      DEBUG: "true"
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      API_KEY: demo-key
+      DEMO_MODE: "true"
     ports:
       - "8000:8000"
-    environment:
-      - ENVIRONMENT=development
-      - DEMO_MODE=true
-      - DATABASE_URL=firestore
-      - SENZING_SDK_INITIALIZED=true
-      - MANIFEST_PASSWORD=CBPDemo2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
     volumes:
       - ./api:/app
-      - ./api/fixtures:/app/fixtures:ro
-      - ./api/models:/app/models:ro
-      - ./api/seed_data:/app/seed_data:ro
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    depends_on:
-      - sentry-ui
-    networks:
-      - sentry-net
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  sentry-ui:
+  ui:
     build:
       context: ./ui
       dockerfile: Dockerfile
     container_name: sentry-ui
     ports:
-      - "3000:3000"
+      - "3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
     environment:
-      - VITE_API_URL=http://localhost:8000
-    volumes:
-      - ./ui/src:/app/src
-      - ./ui/public:/app/public
-    command: npm run dev
-    networks:
-      - sentry-net
+      VITE_API_URL: http://localhost:8000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-networks:
-  sentry-net:
-    driver: bridge
+volumes:
+  postgres_data:
+  neo4j_data:

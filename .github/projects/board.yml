@@ -1,0 +1,163 @@
+# GitHub Projects Board Configuration
+# This file documents the GitHub Projects board structure
+# To use: create a GitHub Project in your repo and configure manually or via GitHub API
+
+name: "Sentry Development Board"
+description: "Feature development, bug fixes, and accessibility work"
+
+columns:
+  - name: "Backlog"
+    description: "New issues, not yet started"
+
+  - name: "Ready for Development"
+    description: "Refined, ready to be picked up (has acceptance criteria)"
+
+  - name: "In Progress"
+    description: "Currently being worked on (assigned to developer)"
+
+  - name: "In Review"
+    description: "PR submitted, awaiting review"
+
+  - name: "Done"
+    description: "Merged to main, deployed to staging or production"
+
+automation:
+  # Auto-populate from labels
+  backlog_label: "status/backlog"
+  ready_label: "status/ready"
+  in_progress_label: "status/in-progress"
+  in_review_label: "status/in-review"
+  done_label: "status/done"
+
+  # Auto-close on PR merge
+  auto_close_on_merge: true
+
+  # Auto-add related issues
+  auto_link_related: true
+
+# Label taxonomy (create these in your repo)
+labels:
+  # Status
+  - name: status/backlog
+    color: cccccc
+    description: Issue in backlog, not yet ready
+
+  - name: status/ready
+    color: 0366d6
+    description: Ready for development (refined)
+
+  - name: status/in-progress
+    color: fbca04
+    description: Currently being worked on
+
+  - name: status/in-review
+    color: a5a5a5
+    description: PR submitted, awaiting review
+
+  - name: status/done
+    color: 28a745
+    description: Merged and deployed
+
+  # Priority
+  - name: priority/critical
+    color: d73a49
+    description: Blocking issue, must fix ASAP
+
+  - name: priority/high
+    color: ff6b6b
+    description: High priority, address in sprint
+
+  - name: priority/medium
+    color: ffc640
+    description: Medium priority
+
+  - name: priority/low
+    color: 85e89d
+    description: Low priority, nice to have
+
+  # Type
+  - name: "type: feature"
+    color: 0075ca
+    description: New feature or enhancement
+
+  - name: "type: bug"
+    color: d73a49
+    description: Bug report or regression
+
+  - name: "type: accessibility"
+    color: ff6b6b
+    description: WCAG 2.0 AA compliance issue
+
+  - name: "type: refactor"
+    color: 9e6a03
+    description: Code cleanup or technical debt
+
+  - name: "type: docs"
+    color: 0366d6
+    description: Documentation, guides, examples
+
+  - name: "type: test"
+    color: 7dffff
+    description: Testing improvements
+
+  # Horizon (product roadmap)
+  - name: "horizon: H1"
+    color: 0366d6
+    description: Macro corridor analysis (weeks before)
+
+  - name: "horizon: H2"
+    color: 0366d6
+    description: Pre-manifest intelligence (14-22 days)
+
+  - name: "horizon: H3"
+    color: 0366d6
+    description: Full assessment + referral (72-hour)
+
+  # Area (codebase sections)
+  - name: "area: api"
+    color: 8250df
+    description: FastAPI backend (Python)
+
+  - name: "area: ui"
+    color: 8250df
+    description: React frontend (TypeScript)
+
+  - name: "area: database"
+    color: 8250df
+    description: PostgreSQL / Neo4j
+
+  - name: "area: deployment"
+    color: 8250df
+    description: GCP Cloud Run / AWS Lambda deployment
+
+  # Workflow
+  - name: "needs-review"
+    color: fbca04
+    description: Awaiting code review
+
+  - name: "blocked"
+    color: d73a49
+    description: Blocked on another issue
+
+  - name: "good-first-issue"
+    color: 7cb342
+    description: Good issue for contributors to start with
+
+  - name: "help-wanted"
+    color: 7cb342
+    description: We need help on this issue
+
+# Sample Kanban workflow
+workflow:
+  1. Create issue (auto-added to Backlog)
+  2. Label with: type (feature/bug/a11y), priority, area, horizon
+  3. Add to project (appears in Backlog column)
+  4. Refine acceptance criteria (community feedback)
+  5. Add "status/ready" label (moves to Ready for Development)
+  6. Assign to developer (moves to In Progress)
+  7. Create PR (add "needs-review" label, moves to In Review)
+  8. Merge PR (auto-closes issue and moves to Done)
+  9. Deploy to staging/production (final verification)
+
+# Integration with development workflow
+# See CLAUDE.md for full workflow: create issue → branch → test → commit → PR → merge → deploy

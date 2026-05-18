@@ -1,0 +1,114 @@
+SENTRY CBP PROJECT STRUCTURE COMPLETE
+
+✓ DIRECTORIES CREATED (20 total)
+├── api/
+│   ├── core/              [config, db, clients]
+│   ├── services/          [ingest, entity_resolution, scoring, referral, graph]
+│   ├── models/            [pydantic schemas]
+│   ├── tests/             [unit/integration tests]
+│   ├── fixtures/          [test data]
+│   └── seed_data/         [database initialization]
+├── ui/
+│   ├── src/
+│   │   ├── components/    [layout, feature components]
+│   │   ├── pages/         [ingest, ER, scoring, graph]
+│   │   ├── services/      [API client]
+│   │   └── types/         [TypeScript interfaces]
+│   └── tests/
+├── deploy/
+│   ├── gcp/               [Cloud Build, Cloud Run]
+│   └── aws/               [CodeBuild, ECS]
+└── scripts/               [setup, migration]
+
+✓ CONFIGURATION FILES CREATED (15 total)
+Python:
+  - api/requirements.txt         [FastAPI, pandas, networkx, etc.]
+  - api/main.py                  [FastAPI app with CORS, health check]
+  - api/core/config.py           [Pydantic settings]
+  - api/core/db.py               [Database initialization & schema]
+  - api/models/schemas.py        [Request/response schemas]
+  - api/tests/conftest.py        [Pytest fixtures]
+  - api/tests/test_main.py       [Basic health check tests]
+
+React/TypeScript:
+  - ui/package.json              [React 19, Vite, Tailwind, testing]
+  - ui/tsconfig.json             [TypeScript config]
+  - ui/vite.config.ts            [Vite + React plugin + proxy]
+  - ui/tailwind.config.ts        [USWDS color palette]
+  - ui/vitest.config.ts          [Vitest configuration]
+  - ui/postcss.config.js         [PostCSS with Tailwind]
+  - ui/index.html                [React entry]
+  - ui/src/main.tsx              [React DOM render]
+  - ui/src/App.tsx               [React Router setup]
+  - ui/src/types/sentry.ts       [TypeScript interfaces]
+  - ui/src/services/api.ts       [Axios API client]
+
+Styling:
+  - ui/src/index.css             [Tailwind directives + USWDS theme]
+  - ui/tailwind.config.ts        [Colors, fonts, shadows]
+
+Components (8 React files):
+  - ui/src/components/layout/Layout.tsx
+  - ui/src/components/layout/SentryHeader.tsx
+  - ui/src/components/layout/DemoStepper.tsx
+  - ui/src/pages/IngestPage.tsx
+  - ui/src/pages/EntityResolutionPage.tsx
+  - ui/src/pages/ScoringPage.tsx
+  - ui/src/pages/GraphPage.tsx
+  - ui/src/pages/NotFoundPage.tsx
+
+Docker & Deployment:
+  - api/Dockerfile               [Python 3.12 slim]
+  - ui/Dockerfile                [Node 20 alpine + nginx]
+  - ui/nginx.conf                [React SPA routing + API proxy]
+  - docker-compose.yml           [4 services: api, ui, postgres, neo4j]
+  - deploy/gcp/cloudbuild.yaml   [GCP Cloud Build pipeline]
+  - deploy/aws/buildspec.yml     [AWS CodeBuild pipeline]
+
+Configuration & Documentation:
+  - .env.example                 [All required environment variables]
+  - .gitignore                   [Node, Python, Docker, IDE ignores]
+  - README.md                    [Project overview, quick start]
+  - CLAUDE.md                    [Development guide for Claude Code]
+  - scripts/setup.sh             [Setup script]
+  - scripts/migrate.sh           [Database migration script]
+  - api/fixtures/sample_manifest.json [Demo data]
+
+✓ SERVICE STUBS (5 services)
+  - api/services/ingest/         [routes.py + __init__.py]
+  - api/services/entity_resolution/
+  - api/services/scoring/
+  - api/services/referral/
+  - api/services/graph/
+
+✓ TESTING STRUCTURE
+  - api/tests/conftest.py        [Pytest fixtures]
+  - api/tests/test_main.py       [Health check test]
+  - ui/vitest.config.ts          [Vitest setup]
+  - ui/.eslintrc.cjs             [ESLint config]
+
+QUICK START
+───────────
+1. docker-compose up
+2. Open http://localhost:3000
+3. API health: http://localhost:8000/health
+4. Postgres: localhost:5432 (sentry_user/sentry_password)
+5. Neo4j: http://localhost:7474 (neo4j/password)
+
+TECH STACK
+──────────
+Backend:   FastAPI, Python 3.12, Uvicorn
+Frontend:  React 19, TypeScript, Vite, Tailwind CSS
+Data:      PostgreSQL (Neon), Neo4j (Aura), SQLite (dev)
+ML/AI:     scikit-learn, LightGBM, pgmpy, networkx
+Deploy:    Docker, Docker Compose, GCP Cloud Build, AWS CodeBuild
+
+NEXT STEPS
+──────────
+1. Implement service routers (ingest, ER, scoring, referral, graph)
+2. Add entity resolution business logic
+3. Implement risk scoring models
+4. Build Neo4j graph construction
+5. Add comprehensive test coverage
+6. Configure GCP/AWS deployments
+7. Set up CI/CD pipelines

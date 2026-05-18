@@ -1,286 +1,196 @@
-# Sentry — CBP Illegal Transshipment Detection MVP
+# Sentry CBP — Customs and Border Protection Intelligence Engine
 
-A serverless AI-powered platform for detecting illegal transshipment of goods through false country-of-origin declarations. Built for CBP's CSOP-BP-GS-26-0001 Illegal Transshipment Pilot.
+A machine learning-powered pipeline for CBP manifest processing, entity resolution, risk scoring, and knowledge graph construction. Designed to support customs enforcement, illegal transshipment detection, and border security operations.
 
-## Quick Links
+## Architecture
 
-- **Architecture**: See [ARCHITECTURE.md](./ARCHITECTURE.md) — Three Horizon design, Firestore + Neo4j + Senzing + LLM
-- **Live Demo**: Will be deployed to Cloud Run (TBD)
-- **GitHub**: [rvadera73/cbp-sentry](https://github.com/rvadera73/cbp-sentry)
+```
+Manifest Ingest → Entity Resolution → Risk Scoring → Knowledge Graph
+    ↓                  ↓                   ↓               ↓
+  Excel/CSV      Deduplication &     ML Risk Models    Neo4j Network
+  FastAPI         Consolidation        (LightGBM)      Visualization
+```
 
-## What It Does
-
-Sentry detects illegal transshipment via **three sequential intelligence horizons**:
-
-1. **Horizon 1 — Structural Corridor Intelligence** (Daily, runs in background)
-   - Pre-classifies high-risk trade corridors using Comtrade/GACC/USITC data
-   - Example: "China→Vietnam→US aluminum extrusions" = CRITICAL STRUCTURAL RISK
-   - Intelligence exists before any shipment is booked
-
-2. **Horizon 2 — Pre-Manifest ISF & Maritime Intelligence** (14-22 days before arrival)
-   - Analyzes ISF Data Element 9 (container stuffing location) for origin fraud
-   - Processes AIS vessel tracking for routing anomalies
-   - Flags issues weeks before the manifest arrives
-
-3. **Horizon 3 — 72-Hour Manifest Trigger** (When manifest received)
-   - Full Senzing entity resolution across shipper/consignee networks
-   - 4-tier AI risk scoring (entity chains → anomaly detection → supervised classification → Bayesian reasoning)
-   - LLM-generated referral package with XAI transparency
-
-## Four-Part Live Demo
-
-1. **Manifest Ingestion** — Upload sample CBP manifest (Excel, password-protected)
-2. **Entity Resolution** — Senzing surfaces hidden ownership chains (e.g., Vietnam shipper → Chinese parent)
-3. **Risk Scoring** — Confidence-scored referral package (0-100 scale, 91/100 = HIGH)
-4. **Graph Explorer** — Interactive Neo4j visualization of entity relationships
-
-## Tech Stack
-
-### Backend (Cloud Run)
-- **FastAPI** (Python 3.12) + async handlers
-- **Senzing v4 SDK** — entity resolution (pre-loaded in container)
-- **Vertex AI Gemini 1.5 Pro** — HTS contextualization, XAI narration, manifest analysis
-- **scikit-learn** (Isolation Forest) — AIS anomaly detection
-- **LightGBM** — transshipment classification
-- **pgmpy** — Bayesian Belief Network
-- **networkx** — graph algorithms
-
-### Frontend (Cloud Run)
-- **React 19 + TypeScript 5.8 + Vite 6**
-- **Tailwind CSS v4** — styling
-- **Recharts** — score breakdown charts
-- **TBD: Graph viz** (react-force-graph or D3.js, pending Neo4j integration)
-
-### Databases (Serverless)
-- **Firestore** — manifests, shipment records, scores, referral packages
-- **Neo4j Aura Free (GCP)** — entity relationship graph (200K nodes / 400K relationships)
-- **Cloud Storage** — Excel uploads, generated referral PDFs
-
-### CI/CD
-- **GitHub** → **Cloud Build** → **Artifact Registry** → **Cloud Run**
-
-## Local Development Setup
+## Quick Start
 
 ### Prerequisites
-- Docker + Docker Compose v2.27+
-- Python 3.12 (for model building)
-- Node.js 22+ (for React UI)
-- GCP credentials (for Firestore/Vertex AI access)
-- Neo4j Aura connection string
+- Docker & Docker Compose
+- Python 3.12+ (for local dev)
+- Node 20+ (for UI)
 
-### 1. Clone & Install
+### Development
 
 ```bash
-git clone https://github.com/rvadera73/cbp-sentry.git
-cd cbp-sentry
+# Start all services
+docker-compose up
 
-# Backend dependencies
-cd api && pip install -r requirements.txt
-cd ..
-
-# Frontend dependencies
-cd ui && npm install
-cd ..
+# API will be available at http://localhost:8000
+# UI will be available at http://localhost:3000
+# Postgres will be available at localhost:5432
+# Neo4j will be available at http://localhost:7474
 ```
 
-### 2. Build ML Models & Senzing Index
+### Local Development (without Docker)
 
+**API:**
 ```bash
-# Generates Isolation Forest, LightGBM, BBN artifacts
-python api/scripts/build_models.py
-
-# Generates Senzing SQLite index (baked into container)
-python api/scripts/build_senzing_index.py
-
-# Generates all fixture JSON files (mocked external APIs)
-python api/scripts/generate_fixtures.py
+cd api
+python -m venv venv
+source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install -r requirements.txt
+python main.py
 ```
 
-### 3. Configure Environment
-
+**UI:**
 ```bash
-cp .env.example .env
-# Edit .env with:
-#   FIRESTORE_PROJECT=your-gcp-project
-#   SENZING_URL=http://localhost:8250  (for local Senzing container)
-#   NEO4J_URI=neo4j+s://your-aura-instance.neo4j.io
-#   GEMINI_PROJECT=your-gcp-project
+cd ui
+npm install
+npm run dev
 ```
-
-### 4. Run Locally (Docker Compose)
-
-```bash
-docker-compose up -d
-
-# Services:
-#   sentry-api     → http://localhost:8000
-#   sentry-ui      → http://localhost:3000
-#   senzing        → http://localhost:8250
-```
-
-### 5. Run Demo
-
-1. Navigate to `http://localhost:3000`
-2. Upload `api/seed_data/sample_manifest_greenfield.xlsx` (password: `CBPDemo2026`)
-3. Follow the 4-step demo flow (Ingest → ER → Score → Graph)
 
 ## Project Structure
 
 ```
-api/                          FastAPI backend (Cloud Run service)
-├── core/
-│   ├── config.py            Pydantic settings from env vars
-│   ├── firestore.py         Firestore async client
-│   ├── neo4j_client.py      Neo4j Aura connection
-│   ├── senzing_client.py    Senzing SDK wrapper
-│   └── gemini_client.py     Vertex AI Gemini client
-├── horizons/
-│   ├── h1_corridor.py       Horizon 1: corridor risk scoring
-│   ├── h2_isf_ais.py        Horizon 2: ISF + AIS pre-manifest analysis
-│   └── h3_manifest.py       Horizon 3: manifest trigger + full pipeline
-├── services/
-│   ├── ingest/              Manifest parsing, Excel → structured data
-│   ├── entity_resolution/   Senzing integration, Neo4j graph building
-│   ├── scoring/             4-tier ML pipeline + XAI assertions
-│   ├── referral/            Referral package builder (Tables 3-1 through 3-14)
-│   └── graph/               Neo4j queries for Graph Explorer
-├── fixtures/                Mocked external API responses (AIS, OpenCorporates, etc.)
-├── models/                  Pre-trained ML artifacts (pkl, txt files)
-├── seed_data/               Sample manifests, Senzing entity seed, pre-built indices
-├── scripts/
-│   ├── build_models.py      Trains Isolation Forest, LightGBM, BBN
-│   ├── build_senzing_index.py   Pre-loads Senzing entities into SQLite
-│   ├── generate_fixtures.py     Generates all mocked API response JSON files
-│   └── demo_reset.sh            Resets Firestore + Neo4j for repeat demo runs
-└── tests/                   Unit tests
-
-ui/                           React frontend (Cloud Run service)
-├── src/
-│   ├── pages/
-│   │   ├── IngestPage.tsx           Manifest upload + H1/H2 pre-intelligence display
-│   │   ├── EntityResolutionPage.tsx Senzing results + Neo4j integration
-│   │   ├── ScoringPage.tsx          4-tier score breakdown + AI transparency tab
-│   │   └── GraphPage.tsx            Neo4j Graph Explorer
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── SentryHeader.tsx
-│   │   │   └── HorizonTimeline.tsx   Visual H1/H2/H3 timeline strip
-│   │   ├── ingest/
-│   │   ├── entity-resolution/
-│   │   ├── scoring/
-│   │   │   ├── ScoreGauge.tsx       Radial gauge (SVG)
-│   │   │   ├── ScoreBreakdown.tsx   Bar chart (Recharts)
-│   │   │   ├── ReferralPackage.tsx  Formatted referral document
-│   │   │   └── AITransparencyPanel.tsx  Gemini conversational XAI
-│   │   └── graph/
-│   │       ├── GraphExplorer.tsx
-│   │       ├── NodeTooltip.tsx
-│   │       └── EntitySidebar.tsx
-│   ├── api/sentryClient.ts          Typed fetch wrappers for all API routes
-│   └── types/sentry.ts              Shared TypeScript interfaces
-└── public/                  Static assets
-
-terraform/                    Infrastructure as Code (GCP)
-├── main.tf                  Cloud Run services, Firestore, Neo4j
-├── variables.tf
-└── outputs.tf
-
-docker-compose.yml           Local dev orchestration
-cloudbuild.yaml             Cloud Build CI/CD config
-.env.example                Environment variable template
-.gitignore
-README.md
-ARCHITECTURE.md             Detailed technical architecture
+cbp-sentry/
+├── api/
+│   ├── core/              # Config, database, utilities
+│   ├── services/          # Business logic modules
+│   │   ├── ingest/        # Manifest ingestion
+│   │   ├── entity_resolution/
+│   │   ├── scoring/       # Risk scoring models
+│   │   ├── referral/      # Output formatting
+│   │   └── graph/         # Neo4j knowledge graph
+│   ├── models/            # Pydantic schemas
+│   ├── tests/             # Unit/integration tests
+│   ├── fixtures/          # Test data
+│   ├── seed_data/         # Database initialization
+│   ├── main.py            # FastAPI entry point
+│   ├── requirements.txt
+│   └── Dockerfile
+├── ui/
+│   ├── src/
+│   │   ├── components/    # React components
+│   │   ├── pages/         # Page components
+│   │   ├── services/      # API client
+│   │   ├── types/         # TypeScript types
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── Dockerfile
+├── deploy/
+│   ├── gcp/               # GCP Cloud Run / GKE
+│   └── aws/               # AWS ECS / CodeBuild
+├── scripts/               # Utility scripts
+├── docker-compose.yml     # Multi-service orchestration
+├── .env.example
+└── .gitignore
 ```
 
-## Deployment to Google Cloud Run
+## Environment Variables
 
-### 1. Authenticate with GCP
+Copy `.env.example` to `.env`:
 
 ```bash
-gcloud auth login
-gcloud config set project YOUR_GCP_PROJECT
+cp .env.example .env
 ```
 
-### 2. Deploy via Cloud Build
+Key variables:
+- `DATABASE_URL` — PostgreSQL connection (Neon schema)
+- `NEO4J_URI` — Neo4j database URI
+- `CORS_ORIGINS` — Allowed frontend origins
+- `API_KEY` — Demo API key
+- `DEMO_MODE` — Enable demo data loading
+
+## API Endpoints (TBD)
+
+### Manifest Ingest
+- `POST /api/ingest/manifest` — Upload manifest file
+- `GET /api/ingest/status/{manifest_id}` — Check ingest status
+
+### Entity Resolution
+- `POST /api/entity-resolution/load` — Run ER pipeline
+- `GET /api/entity-resolution/results/{manifest_id}` — Get results
+
+### Risk Scoring
+- `POST /api/scoring/score` — Score entities
+- `GET /api/scoring/why/{entity_id}` — Explain score factors
+- `POST /api/referral/package` — Generate referral package
+
+### Knowledge Graph
+- `POST /api/graph/build` — Build relationship network
+- `GET /api/graph/query` — Query graph
+
+### Health
+- `GET /health` — Service health check
+
+## Development Workflow
+
+### Testing
+```bash
+# Run API tests
+cd api
+pytest
+
+# Run UI tests
+cd ui
+npm test
+```
+
+### Building for Production
 
 ```bash
-git push origin main
+# Build images
+docker-compose build
 
-# Cloud Build automatically triggers on push to main
-# Builds docker images → pushes to Artifact Registry → deploys to Cloud Run
-
-# Monitor the build:
-gcloud builds log --stream
+# Run production compose (adjust as needed)
+docker-compose -f docker-compose.prod.yml up
 ```
 
-### 3. Verify Deployment
+## Deployment
 
+### GCP Cloud Run
 ```bash
-# Get Cloud Run service URLs
-gcloud run services describe sentry-api --region us-central1
-gcloud run services describe sentry-ui --region us-central1
+gcloud builds submit --config=deploy/gcp/cloudbuild.yaml
 ```
 
-## Sample Data
-
-Two complete demo cases included:
-
-1. **Greenfield Aluminum** (Primary)
-   - HTS 7604.10.1000 (aluminum extrusions)
-   - Vietnam shipper → Chinese parent (Senzing resolves)
-   - MV Pacific Horizon: 11.2-day Guangzhou dwell
-   - Final score: **91/100 HIGH**
-   - File: `api/seed_data/sample_manifest_greenfield.xlsx`
-
-2. **Solaria Solar** (Supporting)
-   - HTS 8541.40.6020 (solar modules)
-   - Malaysia → China parent
-   - **Same consignee as Greenfield** (demonstrates cross-case entity linking)
-   - File: `api/seed_data/sample_manifest_solaria.xlsx`
-
-All manifests password-protected: `CBPDemo2026`
-
-## Key Features
-
-✅ **Three-Horizon Intelligence** — H1/H2/H3 explicitly modeled as distinct pipeline stages  
-✅ **Senzing Entity Resolution** — Hidden ownership chains surfaced via probabilistic matching  
-✅ **4-Tier ML Pipeline** — Entity chains → anomaly detection → supervised classification → Bayesian reasoning  
-✅ **LLM-Powered XAI** — Vertex AI Gemini explains every score decision in plain English  
-✅ **Neo4j Graph Explorer** — Interactive entity relationship graph with "Why Connected" explanations  
-✅ **Referral Package** — Structured JSON matching proposal Tables 3-1 through 3-14  
-✅ **Serverless Architecture** — Cloud Run + Firestore + Neo4j Aura (no persistent infrastructure)  
-✅ **Offline Demo Mode** — All external APIs mocked; runs without internet
-
-## Roadmap
-
-- [ ] **Phase 1** (Days 1-2) — Infrastructure skeleton, Docker Compose, FastAPI health endpoint, React router
-- [ ] **Phase 2** (Days 3-4) — Manifest ingestion (Excel parsing, field normalization)
-- [ ] **Phase 3** (Days 5-7) — Senzing entity resolution, Neo4j graph building
-- [ ] **Phase 4** (Days 8-10) — 4-tier scoring pipeline, Bayesian Belief Network
-- [ ] **Phase 5** (Days 11-12) — Graph Explorer UI, "Why Connected" feature
-- [ ] **Phase 6** (Days 13-14) — AI Transparency panel, referral package builder, demo polish
-- [ ] **Deployment** — Cloud Build CI/CD, Cloud Run services live
-
-## Testing
-
+### AWS ECS
 ```bash
-# Unit tests
-pytest api/tests/
-
-# Integration tests (requires Firestore emulator + Neo4j sandbox)
-pytest api/tests/ --integration
-
-# Load test
-locust -f api/tests/load_test.py
+aws codebuild start-build-batch --project-name sentry-build
 ```
+
+## Configuration
+
+- **Python dependencies** — `api/requirements.txt`
+- **Node dependencies** — `ui/package.json`
+- **Tailwind CSS** — `ui/tailwind.config.ts` (USWDS color palette)
+- **Database schema** — `api/core/db.py` (auto-initializes)
+
+## Key Technologies
+
+| Layer | Tech Stack |
+|-------|-----------|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS |
+| Backend | FastAPI, Python 3.12, Uvicorn |
+| Data | PostgreSQL (Neon), Neo4j, pandas, SQLite (dev) |
+| ML/AI | scikit-learn, LightGBM, pgmpy (Bayesian networks) |
+| Orchestration | Docker, Docker Compose, GCP Cloud Build / AWS CodeBuild |
+
+## Future Enhancements
+
+- [ ] Advanced entity resolution with Senzing integration
+- [ ] Probabilistic graphical models (pgmpy)
+- [ ] Real-time streaming with Kafka
+- [ ] Multi-factor risk scoring with explainability
+- [ ] GraphQL API for knowledge graph queries
+- [ ] WebSocket support for live scoring updates
 
 ## License
 
-Internal use only — Precise Software Solutions, Inc.
+Internal Precise Software tool.
 
 ## Support
 
-- Architecture questions: See [ARCHITECTURE.md](./ARCHITECTURE.md)
-- Demo questions: See [DEMO.md](./DEMO.md) (TBD)
-- GCP setup: See [GCP_SETUP.md](./GCP_SETUP.md) (TBD)
+Contact: [TBD]

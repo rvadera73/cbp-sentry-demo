@@ -1,0 +1,36 @@
+{
+  "manifest_id": "DEMO-MANIFEST-001",
+  "timestamp": "2026-05-18T00:00:00Z",
+  "source": "CBP_PORT_OF_ENTRY",
+  "port_code": "PHLAD",
+  "records": [
+    {
+      "record_number": 1,
+      "declarant_name": "John Smith",
+      "passport_number": "A12345678",
+      "country_of_origin": "MX",
+      "items": [
+        {
+          "hs_code": "6204",
+          "description": "Womens clothing",
+          "quantity": 50,
+          "declared_value": 2500
+        }
+      ]
+    },
+    {
+      "record_number": 2,
+      "declarant_name": "Jane Doe",
+      "passport_number": "B87654321",
+      "country_of_origin": "CA",
+      "items": [
+        {
+          "hs_code": "8528",
+          "description": "Electronics",
+          "quantity": 10,
+          "declared_value": 5000
+        }
+      ]
+    }
+  ]
+}

@@ -1,48 +1,44 @@
-"""Configuration management using Pydantic Settings"""
-
+"""
+Configuration module — loads environment variables and provides settings
+"""
+from typing import List, Optional
 from pydantic_settings import BaseSettings
-from typing import Optional
+
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables"""
+    """Application settings from environment variables"""
 
     # Environment
     environment: str = "development"
     debug: bool = True
+
+    # Database
+    database_url: str = "sqlite:///./cbp_sentry.db"
+    neo4j_uri: str = "neo4j://localhost:7687"
+    neo4j_username: str = "neo4j"
+    neo4j_password: str = "password"
+
+    # API
+    api_key: str = "demo-key"
+    api_version: str = "0.1.0"
+
+    # CORS
+    cors_origins: Optional[List[str]] = ["http://localhost:3000"]
+
+    # Services
+    senzing_url: Optional[str] = "http://localhost:8250"
+    
+    # Cloud (cloud-neutral)
+    gcp_project: Optional[str] = None
+    aws_region: Optional[str] = "us-east-1"
+
+    # Demo mode
     demo_mode: bool = True
-
-    # Databases
-    database_url: str = "firestore"  # 'firestore' or 'sqlite://...'
-    firestore_project: str = "cbp-sentry-demo"
-    neo4j_uri: Optional[str] = None
-    neo4j_user: Optional[str] = None
-    neo4j_password: Optional[str] = None
-
-    # APIs
-    senzing_url: str = "http://localhost:8250"
-    gemini_project: str = "cbp-sentry-demo"
-    gemini_model: str = "gemini-1.5-pro"
-
-    # Security
-    manifest_password: str = "CBPDemo2026"  # Demo password — use secrets manager in prod
-    api_key: Optional[str] = None
-
-    # Senzing
-    senzing_sdk_initialized: bool = True
-    senzing_db_path: str = "./seed_data/G2C.db"
-
-    # UI
-    cors_origins: list = ["http://localhost:3000", "http://localhost:8000"]
-
-    # Paths
-    fixtures_path: str = "./fixtures"
-    models_path: str = "./models"
-    seed_data_path: str = "./seed_data"
+    demo_manifest_path: Optional[str] = None
 
     class Config:
         env_file = ".env"
-        env_file_encoding = "utf-8"
         case_sensitive = False
 
-# Global settings instance
+
 settings = Settings()

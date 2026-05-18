@@ -1,0 +1,97 @@
+# GitHub Repository Configuration
+# This file documents repository settings recommendations
+# Manual setup in Settings → (section) required
+
+repository:
+  name: cbp-sentry
+  description: "AI-powered illegal transshipment detection for CBP"
+
+  # Branch protection rules
+  branch_protection:
+    main:
+      require_pull_request_reviews: true
+      required_approving_review_count: 1
+      dismiss_stale_reviews: true
+      require_code_owner_reviews: true
+      require_status_checks_to_pass: true
+      required_status_checks:
+        - "Test / test"
+        - "Accessibility (WCAG 2.0 AA) / accessibility"
+      require_branches_to_be_up_to_date: true
+      allow_force_pushes: false
+      allow_deletions: false
+
+# Collaborator settings
+collaborators:
+  - login: rvadera73
+    permission: admin
+    role: "Project Lead — Architecture, Testing, Deployment"
+
+# GitHub Actions secrets (configure in Settings → Secrets)
+secrets:
+  # GCP
+  GCP_PROJECT_ID: "Set to your GCP project ID (e.g., cbp-sentry)"
+  WIF_PROVIDER: "Set to Workload Identity Federation provider (projects/ID/locations/global/workloadIdentityPools/github/providers/github)"
+  WIF_SERVICE_ACCOUNT: "Set to service account email (e.g., github-actions@cbp-sentry.iam.gserviceaccount.com)"
+
+  # AWS (if using AWS deployment)
+  AWS_ACCOUNT_ID: "Set to AWS account ID (12 digits)"
+  AWS_ROLE_TO_ASSUME: "Set to IAM role ARN (arn:aws:iam::ACCOUNT:role/github-actions-role)"
+  AWS_S3_BUCKET: "Set to S3 bucket for UI assets"
+  CLOUDFRONT_DISTRIBUTION_ID: "Set to CloudFront distribution ID"
+
+# GitHub Apps / Integrations
+integrations:
+  - name: "Dependabot"
+    enabled: true
+    description: "Automated dependency updates and security alerts"
+    settings:
+      auto_merge_minor_versions: true
+      schedule: "weekly"
+
+  - name: "Code scanning (CodeQL)"
+    enabled: true
+    description: "Security scanning for Python and JavaScript"
+
+  - name: "Dependabot alerts"
+    enabled: true
+    description: "Notify on vulnerable dependencies"
+
+# Notifications
+notifications:
+  branch_deployments:
+    - "Deployments to main trigger Cloud Run / AWS Lambda"
+    - "Slack webhook (optional, set in Deployments settings)"
+
+  pull_request_reviews:
+    - "Require at least 1 approval before merge"
+    - "Dismiss stale reviews when new commits pushed"
+
+  status_checks:
+    - "test.yml (pytest + vitest + type-check)"
+    - "a11y.yml (jest-axe WCAG 2.0 AA)"
+
+# Recommended GitHub Settings paths
+recommended_settings:
+  - "Settings → Branches → Branch protection rules → Add rule for 'main'"
+  - "Settings → Secrets and variables → Actions → Add GCP/AWS secrets above"
+  - "Settings → Code security and analysis → Enable CodeQL, Dependabot"
+  - "Settings → Actions → Allow GitHub Actions to create pull requests"
+  - "Settings → Pages → Deploy from: GitHub Actions (for UI docs if needed)"
+
+# Documentation
+documentation:
+  - path: "CLAUDE.md"
+    description: "Development workflow, TDD, WCAG requirements"
+
+  - path: "README.md"
+    description: "Quick start, local development, deployment"
+
+  - path: "ARCHITECTURE.md"
+    description: "System design, three-horizon pipeline"
+
+  - path: ".github/ISSUE_TEMPLATE/"
+    description: "Feature, bug, and accessibility issue templates"
+
+  - path: ".github/workflows/"
+    description: "CI/CD pipelines (test, a11y, deploy-gcp, deploy-aws)"

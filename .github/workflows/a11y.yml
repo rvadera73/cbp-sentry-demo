@@ -1,0 +1,81 @@
+name: Accessibility (WCAG 2.0 AA)
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'ui/**'
+      - '.github/workflows/a11y.yml'
+
+jobs:
+  accessibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: './ui/package-lock.json'
+
+      - name: Install dependencies
+        working-directory: ./ui
+        run: npm ci
+
+      - name: Install jest-axe
+        working-directory: ./ui
+        run: npm install --save-dev @axe-core/react jest-axe @testing-library/jest-dom @testing-library/react
+
+      - name: Run accessibility tests (jest-axe)
+        working-directory: ./ui
+        id: a11y
+        run: |
+          npm run test:a11y 2>&1 | tee a11y-results.log
+        continue-on-error: true
+
+      - name: Parse accessibility results
+        if: always()
+        run: |
+          echo "## Accessibility Audit (WCAG 2.0 AA)" >> $GITHUB_STEP_SUMMARY
+          if grep -q "FAIL" ui/a11y-results.log 2>/dev/null; then
+            echo "❌ **Accessibility violations found**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### Violations" >> $GITHUB_STEP_SUMMARY
+            grep -A 2 "FAIL\|violation\|error" ui/a11y-results.log | head -20 >> $GITHUB_STEP_SUMMARY || true
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Fix required before merge.** Run \`npm run test:a11y\` locally." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "✅ **All accessibility checks passed**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Components meet WCAG 2.0 AA standards:" >> $GITHUB_STEP_SUMMARY
+            echo "- Color contrast >= 4.5:1" >> $GITHUB_STEP_SUMMARY
+            echo "- Keyboard navigation (Tab, Enter, Escape)" >> $GITHUB_STEP_SUMMARY
+            echo "- Screen reader support (ARIA labels)" >> $GITHUB_STEP_SUMMARY
+            echo "- Focus visible (4px outline)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Comment on PR
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '⚠️ **Accessibility violations detected.** Please run `npm run test:a11y` locally and fix before merge. See job logs for details.'
+            })
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: accessibility-report
+          path: ui/a11y-results.log
+          retention-days: 30

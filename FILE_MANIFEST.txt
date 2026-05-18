@@ -1,0 +1,203 @@
+SENTRY CBP — COMPLETE FILE MANIFEST
+
+ROOT CONFIGURATION
+──────────────────
+.env.example                 Environment variables template
+.gitignore                   Git ignore rules
+docker-compose.yml          Local development orchestration
+README.md                   Project overview
+CLAUDE.md                   Claude Code development guide
+SETUP_COMPLETE.md           Setup verification checklist
+
+BACKEND — PYTHON / FASTAPI
+──────────────────────────
+
+Core Application:
+  api/main.py               FastAPI entry point with CORS, health check
+  api/requirements.txt      Python dependencies (FastAPI, pandas, etc.)
+  api/Dockerfile            Python 3.12-slim image
+
+Configuration & Database:
+  api/core/__init__.py
+  api/core/config.py        Pydantic settings (environment variables)
+  api/core/db.py            SQLite/PostgreSQL initialization & schema
+
+Data Models:
+  api/models/__init__.py
+  api/models/schemas.py     Pydantic request/response validation schemas
+
+Services (Placeholder Routers):
+  api/services/__init__.py
+  api/services/ingest/__init__.py
+  api/services/ingest/routes.py
+  api/services/entity_resolution/__init__.py
+  api/services/entity_resolution/routes.py
+  api/services/scoring/__init__.py
+  api/services/scoring/routes.py
+  api/services/referral/__init__.py
+  api/services/referral/routes.py
+  api/services/graph/__init__.py
+  api/services/graph/routes.py
+
+Testing:
+  api/tests/__init__.py
+  api/tests/conftest.py     Pytest fixtures
+  api/tests/test_main.py    Health check test
+
+Fixtures & Seed Data:
+  api/fixtures/sample_manifest.json    Demo CBP manifest
+
+FRONTEND — REACT / TYPESCRIPT
+─────────────────────────────
+
+Project Configuration:
+  ui/package.json            Dependencies & npm scripts
+  ui/tsconfig.json           TypeScript strict mode
+  ui/tsconfig.node.json      TypeScript for Vite config
+  ui/vite.config.ts          Vite config with React plugin + /api proxy
+  ui/tailwind.config.ts      Tailwind with USWDS color palette
+  ui/postcss.config.js       PostCSS with Tailwind
+  ui/.eslintrc.cjs           ESLint configuration
+  ui/vitest.config.ts        Vitest test runner configuration
+
+HTML & Entry:
+  ui/index.html              React application entry
+  ui/src/main.tsx            React 19 DOM render
+
+Application Root:
+  ui/src/App.tsx             React Router setup (4 routes)
+  ui/src/index.css           Tailwind directives + theme overrides
+
+Layout Components:
+  ui/src/components/layout/Layout.tsx           Main layout wrapper
+  ui/src/components/layout/SentryHeader.tsx     Header with logo
+  ui/src/components/layout/DemoStepper.tsx      4-step workflow stepper
+
+Page Components:
+  ui/src/pages/IngestPage.tsx                   Manifest upload form
+  ui/src/pages/EntityResolutionPage.tsx         ER processing interface
+  ui/src/pages/ScoringPage.tsx                  Risk scoring interface
+  ui/src/pages/GraphPage.tsx                    Knowledge graph viewer
+  ui/src/pages/NotFoundPage.tsx                 404 page
+
+Services & Types:
+  ui/src/services/api.ts     Axios API client with interceptors
+  ui/src/types/sentry.ts     TypeScript interfaces (manifest, ER, scoring)
+
+Docker:
+  ui/Dockerfile              Node 20 Alpine + Nginx builder
+  ui/nginx.conf              React SPA routing + API proxy configuration
+
+Testing:
+  ui/vitest.config.ts        Vitest configuration
+  ui/tests/                  (Test files directory)
+
+DEPLOYMENT
+──────────
+
+GCP Cloud Platform:
+  deploy/gcp/cloudbuild.yaml      Cloud Build pipeline (container build & deploy)
+
+AWS Elastic Container Service:
+  deploy/aws/buildspec.yml        CodeBuild pipeline (ECR + ECS deploy)
+
+SCRIPTS & UTILITIES
+───────────────────
+
+Scripts:
+  scripts/setup.sh           One-click local development setup
+  scripts/migrate.sh         Database migration runner
+
+DOCUMENTATION
+──────────────
+
+Project Overview:
+  README.md                  Quick start, architecture, endpoints
+  CLAUDE.md                  Development guide for Claude Code
+  SETUP_COMPLETE.md          Verification checklist & next steps
+
+PROJECT STRUCTURE SUMMARY
+─────────────────────────
+
+api/                        FastAPI backend
+  ├── core/                 Configuration & database
+  ├── services/             5 service modules (ingest, ER, scoring, etc.)
+  ├── models/               Pydantic schemas
+  ├── tests/                Unit/integration tests
+  ├── fixtures/             Test data
+  ├── seed_data/            Database initialization
+  ├── main.py               FastAPI entry
+  ├── requirements.txt      Dependencies
+  └── Dockerfile            Container image
+
+ui/                         React 19 frontend
+  ├── src/
+  │   ├── components/       Layout & feature components
+  │   ├── pages/            Page-level components
+  │   ├── services/         API client
+  │   ├── types/            TypeScript interfaces
+  │   ├── App.tsx           React Router
+  │   ├── main.tsx          React render
+  │   └── index.css         Tailwind theme
+  ├── tests/                Vitest files
+  ├── public/               Static assets
+  ├── package.json          Dependencies
+  ├── vite.config.ts        Build config
+  ├── tailwind.config.ts    Styling
+  ├── Dockerfile            Container image
+  ├── nginx.conf            Web server
+  └── index.html            HTML entry
+
+deploy/                     Cloud deployment configs
+  ├── gcp/                  Google Cloud (Cloud Build, Cloud Run)
+  └── aws/                  Amazon Web Services (CodeBuild, ECS)
+
+scripts/                    Utility scripts
+  ├── setup.sh              Initial setup
+  └── migrate.sh            Database migrations
+
+TOTAL: 60+ files across 20 directories
+
+QUICK FILE REFERENCE
+────────────────────
+
+To start development:
+  → Read: README.md or CLAUDE.md
+  → Run: docker-compose up
+  → Visit: http://localhost:3000 (UI)
+  → Visit: http://localhost:8000/health (API health)
+
+To implement a service:
+  → Edit: api/services/{service}/routes.py
+  → Create: api/services/{service}/logic.py (new)
+  → Test: api/tests/test_{service}.py
+
+To update styling:
+  → Edit: ui/tailwind.config.ts (colors, fonts)
+  → Edit: ui/src/index.css (global styles)
+
+To add a page:
+  → Create: ui/src/pages/YourPage.tsx
+  → Update: ui/src/App.tsx (add route)
+  → Update: ui/src/components/layout/DemoStepper.tsx (if workflow step)
+
+To deploy:
+  → GCP: gcloud builds submit --config=deploy/gcp/cloudbuild.yaml
+  → AWS: git push + CodePipeline (configured with buildspec.yml)
+
+KEY TECHNOLOGIES
+────────────────
+
+Backend:    FastAPI 0.115, Python 3.12, Uvicorn, Pydantic
+Frontend:   React 19, TypeScript 5.6, Vite 5.4, Tailwind CSS 3.4
+Data:       PostgreSQL 16, Neo4j 5.15, SQLite (dev), pandas 2.2
+ML/AI:      scikit-learn 1.5, LightGBM 4.3, pgmpy 0.1.31, networkx 3.3
+Docker:     Docker 27+, Docker Compose 2.20+
+CI/CD:      GitHub Actions (local), GCP Cloud Build, AWS CodeBuild
+
+═════════════════════════════════════════════════════════════════════════
+
+All files created: /home/rahulvadera/cbp-sentry/
+Ready for development with: docker-compose up
+
+═════════════════════════════════════════════════════════════════════════

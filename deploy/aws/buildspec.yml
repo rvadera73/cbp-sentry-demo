@@ -1,0 +1,34 @@
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/sentry
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - IMAGE_TAG=${COMMIT_HASH:=latest}
+
+  build:
+    commands:
+      - echo Build started on `date`
+      - echo Building API image...
+      - docker build -t $REPOSITORY_URI:api-$IMAGE_TAG ./api
+      - docker tag $REPOSITORY_URI:api-$IMAGE_TAG $REPOSITORY_URI:api-latest
+      - echo Building UI image...
+      - docker build -t $REPOSITORY_URI:ui-$IMAGE_TAG ./ui
+      - docker tag $REPOSITORY_URI:ui-$IMAGE_TAG $REPOSITORY_URI:ui-latest
+
+  post_build:
+    commands:
+      - echo Build completed on `date`
+      - echo Pushing Docker images...
+      - docker push $REPOSITORY_URI:api-$IMAGE_TAG
+      - docker push $REPOSITORY_URI:api-latest
+      - docker push $REPOSITORY_URI:ui-$IMAGE_TAG
+      - docker push $REPOSITORY_URI:ui-latest
+      - echo Writing image definitions file...
+      - printf '[{"name":"sentry-api","imageUri":"%s"},{"name":"sentry-ui","imageUri":"%s"}]' $REPOSITORY_URI:api-$IMAGE_TAG $REPOSITORY_URI:ui-$IMAGE_TAG > imagedefinitions.json
+
+artifacts:
+  files: imagedefinitions.json
