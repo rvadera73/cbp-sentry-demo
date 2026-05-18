@@ -42,9 +42,39 @@ async def create_schema():
     """Create database schema"""
     if not _db_connection:
         return
-    
+
     try:
         # Manifest table
+        await _db_connection.execute("""
+            CREATE TABLE IF NOT EXISTS manifests (
+                id TEXT PRIMARY KEY,
+                uploaded_at TIMESTAMP,
+                shipper TEXT,
+                consignee TEXT,
+                hts_code TEXT,
+                total_weight_kg REAL,
+                total_value_usd REAL,
+                row_count INTEGER,
+                flag_suspicious BOOLEAN
+            )
+        """)
+
+        # Manifest rows table
+        await _db_connection.execute("""
+            CREATE TABLE IF NOT EXISTS manifest_rows (
+                id TEXT PRIMARY KEY,
+                manifest_id TEXT REFERENCES manifests(id),
+                shipper TEXT,
+                consignee TEXT,
+                hts_code TEXT,
+                quantity_kg REAL,
+                value_usd REAL,
+                description TEXT,
+                flag_suspicious BOOLEAN
+            )
+        """)
+
+        # Legacy manifest_ingests table (for backward compatibility)
         await _db_connection.execute("""
             CREATE TABLE IF NOT EXISTS manifest_ingests (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
