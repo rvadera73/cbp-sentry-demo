@@ -58,16 +58,16 @@ async def health_check():
 
 from services.ingest.routes import router as ingest_router
 from services.scoring.routes import router as scoring_router
+from services.graph.routes import router as graph_router
 
 # from services.entity_resolution.routes import router as er_router
 # from services.referral.routes import router as referral_router
-# from services.graph.routes import router as graph_router
 
 app.include_router(ingest_router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(scoring_router, tags=["scoring"])
+app.include_router(graph_router, prefix="/api", tags=["graph"])
 # app.include_router(er_router, prefix="/api/entity-resolution", tags=["entity-resolution"])
 # app.include_router(referral_router, prefix="/api/referral", tags=["referral"])
-# app.include_router(graph_router, prefix="/api/graph", tags=["graph"])
 
 
 @app.exception_handler(Exception)
