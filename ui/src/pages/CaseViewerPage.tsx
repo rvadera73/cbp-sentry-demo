@@ -50,7 +50,11 @@ export default function CaseViewerPage() {
   const fetchShipment = async (id: string) => {
     try {
       // Fetch shipment data through API gateway
-      const response = await fetch(`/api/data/shipments/${id}`);
+      const apiBaseUrl = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) ||
+        (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+          ? 'http://localhost:8000/api'
+          : 'https://sentry-api-cbp-sentry.run.app/api');
+      const response = await fetch(`${apiBaseUrl}/data/shipments/${id}`);
       if (!response.ok) throw new Error('Failed to fetch shipment');
       const data = await response.json();
       setShipment(data);
