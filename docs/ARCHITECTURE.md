@@ -37,8 +37,9 @@ sentry-data:8005        → SQLite CRUD abstraction layer
 | **Senzing** | 8250 | Entity resolution | ✗ Not integrated |
 | **VesselAPI** | (external) | AIS vessel tracking | ✗ Not integrated |
 
-### 3.2 Data Flow
+### 3.2 Data Flow & Service Topology
 
+**ASCII Flow (simplified):**
 ```
 User → sentry-ui (3001)
   ↓ (HTTPS)
@@ -49,6 +50,41 @@ API Gateway (8000)
   └→ sentry-data (8005)
        ├→ SQLite database
        └→ External APIs (fixture mode)
+```
+
+**Mermaid Service Topology:**
+```mermaid
+graph TB
+    User["👤 CBP Officer Browser"]
+    
+    LB["🌐 Load Balancer<br/>SSL/TLS"]
+    
+    UI["🎨 sentry-ui:3001<br/>React + Nginx<br/>Case Viewer, Referral Package"]
+    API["⚙️ sentry-api:8000<br/>FastAPI Gateway<br/>H1/H2/H3 Scoring"]
+    DATA["💾 sentry-data:8005<br/>SQLite CRUD Layer<br/>Shipments, Manifests, Scores"]
+    ER["🔗 entity_resolution<br/>CORD RAG + Senzing<br/>Entity Matching"]
+    
+    OCorp["🏢 OpenCorporates<br/>Company Registries"]
+    AIS["🚢 VesselAPI / AIS<br/>Vessel Tracking"]
+    OFAC["⚠️ OFAC/SDN<br/>Sanction Lists"]
+    
+    DB["🗄️ SQLite File<br/>data/cbp_sentry.db<br/>1,191 shipments"]
+    CORDDB["🔍 CORD RAG DB<br/>cord_rag.db<br/>244K entities"]
+    
+    User -->|HTTP/HTTPS| LB
+    LB --> UI
+    LB --> API
+    LB --> DATA
+    
+    UI -->|/api/*| API
+    API -->|OIDC Token| DATA
+    API -->|HTTP| ER
+    API -->|Fixture/Live| OCorp
+    API -->|Fixture/Live| AIS
+    API -->|API Key| OFAC
+    
+    DATA -->|Read/Write| DB
+    ER -->|Read| CORDDB
 ```
 
 ---
@@ -62,6 +98,33 @@ API Gateway (8000)
 | **H1: Corridor Risk** | 40 | Origin/dest country, HS code, tariff rates, pricing | OpenCorporates, Comtrade, ITC |
 | **H2: Vessel Anomaly** | 35 | AIS dwell time, ISF Element 9 mismatch, port calls | VesselAPI, PortAuthority, ISF |
 | **H3: Intelligence** | 25 | Entity ownership depth, shipper age, OFAC match, watch list | Senzing, OFAC, Watchlists |
+
+**Mermaid Scoring Pipeline:**
+```mermaid
+graph LR
+    Manifest["📦 Shipment Manifest"]
+    
+    H1["<b>H1: Corridor Risk</b><br/>40 points<br/><br/>🌍 Origin/Dest Country<br/>📊 HS Code Tariff<br/>💰 AD/CVD Rates<br/>💵 Price Anomaly"]
+    H1Score["H1 Score<br/>0-40 pts"]
+    
+    H2["<b>H2: Vessel Anomaly</b><br/>35 points<br/><br/>⚓ AIS Dwell Time<br/>✈️ ISF Element 9<br/>🛢️ Port Sequence<br/>⏱️ Transit Delta"]
+    H2Score["H2 Score<br/>0-35 pts"]
+    
+    H3["<b>H3: Intelligence</b><br/>25 points<br/><br/>🏢 Entity Chain Depth<br/>📜 Shipper Age<br/>⚠️ OFAC Match<br/>👁️ Watch List Hit"]
+    H3Score["H3 Score<br/>0-25 pts"]
+    
+    Total["<b>Total Score</b><br/>0-100 points<br/><br/>🔴 RED ≥70<br/>🟡 YELLOW 40-69<br/>🟢 GREEN <40"]
+    
+    Manifest --> H1 --> H1Score
+    Manifest --> H2 --> H2Score
+    Manifest --> H3 --> H3Score
+    
+    H1Score --> Total
+    H2Score --> Total
+    H3Score --> Total
+    
+    Total --> |Risk Classification| Referral["📋 CBP Referral<br/>Package<br/>14 Tables"]
+```
 
 ### 4.2 Risk Classification
 
