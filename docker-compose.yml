@@ -20,11 +20,12 @@ services:
     image: sentry-data:latest
     container_name: sentry-data
     environment:
-      DATABASE_URL: sqlite:///./data/cbp_sentry.db
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///./data/cbp_sentry.db}
       PYTHONUNBUFFERED: "1"
-      ENVIRONMENT: production
+      ENVIRONMENT: ${DEPLOYMENT_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
-      - "8005:8005"
+      - "${DATA_PORT:-8005}:8005"
     volumes:
       # ONLY persist database, NOT source code
       - sentry_data_volume:/app/data
@@ -53,13 +54,16 @@ services:
     image: sentry-api:latest
     container_name: sentry-api
     environment:
-      DATA_SERVICE_URL: http://sentry-data:8005
-      SENZING_URL: http://senzing:8250
-      API_MODE: fixture
+      DATA_SERVICE_URL: ${DATA_SERVICE_URL:-http://sentry-data:8005}
+      SENZING_URL: ${SENZING_URL:-http://senzing:8250}
+      API_MODE: ${API_MODE:-fixture}
       PYTHONUNBUFFERED: "1"
-      ENVIRONMENT: production
+      ENVIRONMENT: ${DEPLOYMENT_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      VESSELAPI_KEY: ${VESSELAPI_KEY:-}
+      OFAC_API_KEY: ${OFAC_API_KEY:-}
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       sentry-data:
         condition: service_healthy
@@ -87,8 +91,11 @@ services:
         - sentry-ui:latest
     image: sentry-ui:latest
     container_name: sentry-ui
+    environment:
+      VITE_API_URL: ${API_URL:-http://localhost:8000}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
-      - "3001:80"
+      - "${UI_PORT:-3001}:80"
     depends_on:
       sentry-api:
         condition: service_healthy
