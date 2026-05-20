@@ -8,7 +8,33 @@
  * - POST /api/cord/download - Download CORD dataset
  */
 
-const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api';
+// Auto-detect API URL based on deployment environment
+const getAPIBaseURL = (): string => {
+  if (typeof window === 'undefined') return '/api'
+
+  const hostname = window.location.hostname
+
+  // Local development: Nginx proxy at /api routes to http://sentry-api:8000
+  if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+    return '/api'
+  }
+
+  // Cloud Run: sentry-ui-{HASH}.{REGION}.run.app
+  const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/)
+  if (cloudRunMatch) {
+    const [, hash, region] = cloudRunMatch
+    return `https://sentry-api-${hash}.${region}.run.app/api`
+  }
+
+  // Other environment
+  if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+    return `https://sentry-api-${hostname.split('-').slice(1).join('-')}`
+  }
+
+  return '/api'
+}
+
+const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || getAPIBaseURL();
 
 // Request/Response Models
 

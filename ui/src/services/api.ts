@@ -20,8 +20,9 @@ const getAPIBaseURL = (): string => {
   const hostname = window.location.hostname
 
   // Local development: localhost:3000 or localhost:3001
+  // Nginx proxy at /api routes to http://sentry-api:8000
   if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
-    return 'http://localhost:8000/api'
+    return '/api'
   }
 
   // Cloud Run: sentry-ui-{HASH}.{REGION}.run.app

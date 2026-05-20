@@ -38,6 +38,23 @@ interface ScoringOverride {
   notes: string | null;
 }
 
+// Detect API URL based on deployment environment
+const getAPIBaseURL = (): string => {
+  const hostname = window.location.hostname;
+  if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+    return '/api';
+  }
+  const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
+  if (cloudRunMatch) {
+    const [, hash, region] = cloudRunMatch;
+    return `https://sentry-api-${hash}.${region}.run.app/api`;
+  }
+  if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+    return `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
+  }
+  return '/api';
+};
+
 export default function ScoringCalibrationPage() {
   const { role } = useRole();
   const userEmail = localStorage.getItem('user_email') || 'analyst@cbp.dhs.gov'
@@ -65,7 +82,7 @@ export default function ScoringCalibrationPage() {
     try {
       // Load weight configuration
       const configResp = await fetch(
-        `http://localhost:8000/api/weight-configuration?corridor=${selectedCorridor || 'null'}`
+        `${getAPIBaseURL()}/weight-configuration?corridor=${selectedCorridor || 'null'}`
       );
       if (configResp.ok) {
         setWeights(await configResp.json());
@@ -73,7 +90,7 @@ export default function ScoringCalibrationPage() {
 
       // Load pending suggestions
       const suggestionsResp = await fetch(
-        `http://localhost:8000/api/weight-suggestions?status=pending&corridor=${selectedCorridor || 'null'}`
+        `${getAPIBaseURL()}/weight-suggestions?status=pending&corridor=${selectedCorridor || 'null'}`
       );
       if (suggestionsResp.ok) {
         const data = await suggestionsResp.json();
@@ -82,7 +99,7 @@ export default function ScoringCalibrationPage() {
 
       // Load override history
       const historyResp = await fetch(
-        `http://localhost:8000/api/feedback/overrides?limit=50`
+        `${getAPIBaseURL()}/feedback/overrides?limit=50`
       );
       if (historyResp.ok) {
         const data = await historyResp.json();
@@ -98,7 +115,7 @@ export default function ScoringCalibrationPage() {
   const handleApproveSuggestion = async (suggestion: WeightSuggestion) => {
     try {
       const response = await fetch(
-        `http://localhost:8000/api/weight-suggestions/${suggestion.id}/approve`,
+        `${getAPIBaseURL()}/weight-suggestions/${suggestion.id}/approve`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -123,7 +140,7 @@ export default function ScoringCalibrationPage() {
     const reason = prompt('Reason for rejection (optional):');
     try {
       const response = await fetch(
-        `http://localhost:8000/api/weight-suggestions/${suggestion.id}/reject`,
+        `${getAPIBaseURL()}/weight-suggestions/${suggestion.id}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

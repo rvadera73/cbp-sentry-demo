@@ -99,8 +99,20 @@ export default function ModernCaseInvestigationPage() {
 
       if (shipment) {
         try {
+          // Detect API URL based on deployment environment
+          const hostname = window.location.hostname;
+          let apiUrl = '/api';
+
+          const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
+          if (cloudRunMatch) {
+            const [, hash, region] = cloudRunMatch;
+            apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
+          } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+            apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
+          }
+
           const scoreResponse = await fetch(
-            `http://localhost:8000/api/score/three-level/${shipment.id}?` +
+            `${apiUrl}/score/three-level/${shipment.id}?` +
             `shipper_name=${encodeURIComponent(shipment.shipper_name)}&` +
             `shipper_country=${shipment.origin_country}&` +
             `consignee_name=${encodeURIComponent(shipment.consignee_name)}&` +
