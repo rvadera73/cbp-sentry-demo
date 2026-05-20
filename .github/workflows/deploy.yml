@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: false
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
