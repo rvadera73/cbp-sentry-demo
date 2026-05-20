@@ -89,7 +89,7 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-api:${{ github.sha }}"
-          docker build -t "$IMG" -f Dockerfile services/api/
+          docker build -t "$IMG" services/api/
           docker push "$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
 
@@ -110,7 +110,7 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-data:${{ github.sha }}"
-          docker build -t "$IMG" -f Dockerfile services/data/
+          docker build -t "$IMG" services/data/
           docker push "$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
 
@@ -131,7 +131,7 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
-          docker build -t "$IMG" -f Dockerfile ui/
+          docker build -t "$IMG" ui/
           docker push "$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
 
