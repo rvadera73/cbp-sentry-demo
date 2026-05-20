@@ -204,10 +204,16 @@ jobs:
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-ui:${{ github.sha }}"
           gcloud run deploy sentry-ui \
             --image="$IMAGE" \
-            --region=${{ env.REGION }} --platform=managed \
+            --region=${{ env.REGION }} \
+            --platform=managed \
             --allow-unauthenticated \
-            --memory=512Mi --cpu=1 --concurrency=80 --timeout=60 \
-            --min-instances=0 --max-instances=10
+            --port=80 \
+            --memory=512Mi \
+            --cpu=1 \
+            --concurrency=80 \
+            --timeout=60 \
+            --min-instances=0 \
+            --max-instances=10
 
   smoke-tests:
     name: Run Smoke Tests
