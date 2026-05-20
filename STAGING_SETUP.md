@@ -4,59 +4,49 @@
 
 Staging deployment shows **zero cases** because the database is empty. The sentry-data service auto-seeds from SQLite locally, but staging uses Neon PostgreSQL which requires explicit data import.
 
+**IMPORTANT**: Database seeding should happen **BEFORE** deployment starts (not during CI/CD), so the services start with data already loaded.
+
 ## Solution
 
-### Step 1: Generate SQL Export from Local Database
+### Step 1: Seed Neon Database (Before Deployment)
 
-Run the export script (already done):
+Use the Python seeding script:
+
 ```bash
+# Option 1: Pass connection string as argument
+python3 scripts/seed_neon.py postgresql://neondb_owner:PASSWORD@HOST/neondb?sslmode=require
+
+# Option 2: Use DATABASE_URL environment variable
+export DATABASE_URL="postgresql://neondb_owner:PASSWORD@HOST/neondb?sslmode=require"
+python3 scripts/seed_neon.py
+```
+
+**What it does:**
+- ✓ Reads local SQLite database (1,396 records)
+- ✓ Connects to Neon PostgreSQL
+- ✓ Creates shipments table (if needed)
+- ✓ Imports all records in batches
+- ✓ Verifies import succeeded
+- ✓ Shows risk distribution (high/medium/low)
+
+**Installation (if needed):**
+```bash
+pip install psycopg2-binary
+```
+
+### Alternate: SQL Export Method
+
+If psycopg2 not available:
+
+```bash
+# Generate SQL file
 ./scripts/export_for_neon.sh
-```
 
-Output file:
-```
-/home/rahulvadera/cbp-sentry/backups/cbp_sentry_neon_seed_YYYYMMDD_HHMMSS.sql
-```
-
-This contains:
-- 1,396 shipment records (full manifest data)
-- High-risk cases: Greenfield (91), Solaria (65)
-- Medium-risk cases: various origins/commodities
-- Low-risk decoy shipments: 18-29 scores
-- Complete INSERT statements ready for PostgreSQL
-
-### Step 2: Import into Neon Staging
-
-**Option A: Command-line (psql)**
-
-```bash
-# Export your Neon connection string
-export DATABASE_URL="postgresql://neondb_owner:...@ep-....c.us-east-1.aws.neon.tech/neondb?sslmode=require"
-
-# Import the SQL file
+# Import using psql
 psql $DATABASE_URL < ./backups/cbp_sentry_neon_seed_*.sql
-
-# Verify
-psql $DATABASE_URL -c "SELECT COUNT(*) as total, MAX(risk_score) as max_risk FROM shipments;"
 ```
 
-**Option B: Neon Console Web UI**
-
-1. Go to https://console.neon.tech
-2. Open your `cbp-sentry` project
-3. Click "SQL Editor"
-4. Paste the contents of `cbp_sentry_neon_seed_*.sql`
-5. Execute
-
-**Option C: GitHub Actions**
-
-The deployment script will automatically:
-1. Extract DATABASE_URL from Secret Manager
-2. Run the import script
-3. Verify data loaded
-4. Restart sentry-data service
-
-### Step 3: Verify Import
+### Step 2: Verify Import Succeeded
 
 Check sample high-risk cases:
 ```bash
@@ -159,12 +149,38 @@ psql $DATABASE_URL -c "SELECT version();"
 3. Check network connectivity
 4. Split import into multiple batches
 
-## Next Steps
+## Proper Deployment Flow
 
-1. **Immediate**: Run import to seed staging database
-2. **Verify**: Visit staging UI and check dashboard shows cases
-3. **Test**: Select a high-risk case (Greenfield, score 91) to verify detail view works
-4. **Enhance**: Update sentry-data to natively support PostgreSQL (no SQL workaround needed)
+**BEFORE Pushing Code:**
+1. ✓ Run seeding script: `python3 scripts/seed_neon.py`
+2. ✓ Verify import: Check record count, high-risk cases visible
+3. ✓ Commit code: `git add` and `git commit`
+
+**Then Deploy:**
+4. Push code: `git push origin main`
+5. GitHub Actions will:
+   - Build Docker images
+   - Push to Artifact Registry  
+   - Deploy to Cloud Run
+   - Run smoke tests
+6. Verify: Visit `https://sentry-ui-<HASH>.us-central1.run.app`
+7. Test: Dashboard should show 1,396 cases, select Greenfield (91) to verify detail
+
+**DO NOT:**
+- ❌ Seed database during GitHub Actions pipeline
+- ❌ Add seeding commands to .github/workflows/deploy.yml
+- ❌ Rely on auto-seeding in staging (only works in local SQLite)
+
+## Future Enhancement
+
+Update sentry-data/db.py to natively support PostgreSQL (no SQL workaround needed):
+```python
+import os
+db_url = os.getenv('DATABASE_URL')
+if 'postgresql' in db_url:
+    # Use PostgreSQL driver
+else:
+    # Use SQLite (local)
 
 ## Files
 
