@@ -149,8 +149,10 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
+          IMAGE="${{ needs.build-api.outputs.image }}"
+          [ -z "$IMAGE" ] && echo "ERROR: No image from build-api" && exit 1
           gcloud run deploy sentry-api \
-            --image=${{ needs.build-api.outputs.image }} \
+            --image="$IMAGE" \
             --region=${{ env.REGION }} \
             --platform=managed \
             --no-allow-unauthenticated \
@@ -180,8 +182,10 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
+          IMAGE="${{ needs.build-data.outputs.image }}"
+          [ -z "$IMAGE" ] && echo "ERROR: No image from build-data" && exit 1
           gcloud run deploy sentry-data \
-            --image=${{ needs.build-data.outputs.image }} \
+            --image="$IMAGE" \
             --region=${{ env.REGION }} \
             --platform=managed \
             --no-allow-unauthenticated \
@@ -208,8 +212,10 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
+          IMAGE="${{ needs.build-ui.outputs.image }}"
+          [ -z "$IMAGE" ] && echo "ERROR: No image from build-ui" && exit 1
           gcloud run deploy sentry-ui \
-            --image=${{ needs.build-ui.outputs.image }} \
+            --image="$IMAGE" \
             --region=${{ env.REGION }} --platform=managed \
             --allow-unauthenticated \
             --memory=512Mi --cpu=1 --concurrency=80 --timeout=60 \
