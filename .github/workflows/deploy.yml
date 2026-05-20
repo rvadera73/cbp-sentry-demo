@@ -155,7 +155,7 @@ jobs:
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
             --platform=managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port=8000 \
             --memory=2Gi \
             --cpu=2 \
@@ -188,7 +188,7 @@ jobs:
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
             --platform=managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port=8005 \
             --memory=1Gi \
             --cpu=1 \
