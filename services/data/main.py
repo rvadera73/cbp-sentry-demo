@@ -113,7 +113,6 @@ def seed_demo_data():
     logger.info(f"✅ Database initialized: {len(shipments)} shipments with SHP-* IDs")
     logger.info(f"   All shipments come from manifest JSON - single source of truth")
     conn.close()
-    logger.info(f"Seeded {len(demo_shipments)} demo shipments")
 
 
 @asynccontextmanager
