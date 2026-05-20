@@ -68,9 +68,9 @@ Go to: https://github.com/rahulvadera/cbp-sentry/settings/secrets/actions
 | Secret Name | Value | Source |
 |---|---|---|
 | `GCP_PROJECT_ID` | `cbp-sentry` | From script output |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/.../workloadIdentityPools/.../providers/github` | From script output |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | _(from script output: "projects/..." string)_ | From script output |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | `sentry-deploy@cbp-sentry.iam.gserviceaccount.com` | From script output |
-| `DATABASE_URL` | `postgresql://user:password@ep-xxxxx.us-east-2.aws.neon.tech/neondb?sslmode=require` | From Neon console |
+| `DATABASE_URL` | `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require` | Neon database |
 | `VESSELAPI_KEY` | `placeholder-key` | Can update later |
 | `OFAC_API_KEY` | `placeholder-key` | Can update later |
 

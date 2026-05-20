@@ -50,9 +50,9 @@ bash scripts/setup_gcp_staging.sh
 | Secret | Value |
 |--------|-------|
 | `GCP_PROJECT_ID` | `cbp-sentry` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | _(from Step 2 output)_ |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | _(from Step 2 script output - "projects/..." string)_ |
 | `GCP_SERVICE_ACCOUNT_EMAIL` | `sentry-deploy@cbp-sentry.iam.gserviceaccount.com` |
-| `DATABASE_URL` | _(from Step 1 - Neon connection string)_ |
+| `DATABASE_URL` | `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require` |
 | `VESSELAPI_KEY` | `placeholder-key` |
 | `OFAC_API_KEY` | `placeholder-key` |
 
