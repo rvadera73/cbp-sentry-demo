@@ -151,11 +151,20 @@ jobs:
         run: |
           gcloud run deploy sentry-api \
             --image=${{ needs.build-api.outputs.image }} \
-            --region=${{ env.REGION }} --platform=managed \
+            --region=${{ env.REGION }} \
+            --platform=managed \
             --no-allow-unauthenticated \
-            --memory=2Gi --cpu=2 --concurrency=40 --timeout=300 \
-            --min-instances=1 --max-instances=10 \
-            --set-env-vars=API_MODE=fixture,DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }},DATABASE_URL=${{ secrets.DATABASE_URL }},VESSELAPI_KEY=${{ secrets.VESSELAPI_KEY }},OFAC_API_KEY=${{ secrets.OFAC_API_KEY }}
+            --memory=2Gi \
+            --cpu=2 \
+            --concurrency=40 \
+            --timeout=300 \
+            --min-instances=1 \
+            --max-instances=10 \
+            --set-env-vars API_MODE=fixture \
+            --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
+            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --set-env-vars VESSELAPI_KEY="${{ secrets.VESSELAPI_KEY }}" \
+            --set-env-vars OFAC_API_KEY="${{ secrets.OFAC_API_KEY }}"
 
   deploy-data:
     name: Deploy sentry-data
@@ -173,11 +182,17 @@ jobs:
         run: |
           gcloud run deploy sentry-data \
             --image=${{ needs.build-data.outputs.image }} \
-            --region=${{ env.REGION }} --platform=managed \
+            --region=${{ env.REGION }} \
+            --platform=managed \
             --no-allow-unauthenticated \
-            --memory=1Gi --cpu=1 --concurrency=20 --timeout=300 \
-            --min-instances=1 --max-instances=5 \
-            --set-env-vars=DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }},DATABASE_URL=${{ secrets.DATABASE_URL }}
+            --memory=1Gi \
+            --cpu=1 \
+            --concurrency=20 \
+            --timeout=300 \
+            --min-instances=1 \
+            --max-instances=5 \
+            --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
+            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}"
 
   deploy-ui:
     name: Deploy sentry-ui
