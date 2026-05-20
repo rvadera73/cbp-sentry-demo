@@ -56,6 +56,8 @@ services:
     environment:
       DATA_SERVICE_URL: ${DATA_SERVICE_URL:-http://sentry-data:8005}
       SENZING_URL: ${SENZING_URL:-http://senzing:8250}
+      CORD_DATA_DIR: /app/cord-data
+      CORD_INDEX_PATH: /tmp/cord_index.db
       API_MODE: ${API_MODE:-fixture}
       PYTHONUNBUFFERED: "1"
       ENVIRONMENT: ${DEPLOYMENT_ENV:-local}
@@ -64,6 +66,9 @@ services:
       OFAC_API_KEY: ${OFAC_API_KEY:-}
     ports:
       - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./cord-data:/app/cord-data:ro
+      - sentry_api_data_volume:/app/cord-index
     depends_on:
       sentry-data:
         condition: service_healthy
@@ -149,6 +154,8 @@ services:
 # Only data persists, NOT source code
 volumes:
   sentry_data_volume:
+    driver: local
+  sentry_api_data_volume:
     driver: local
   senzing_data_volume:
     driver: local

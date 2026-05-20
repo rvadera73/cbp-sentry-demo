@@ -2,6 +2,7 @@
 Horizon 2 API Adapters — Pre-Intelligence Data (AIS/vessel tracking, Port authorities)
 """
 import logging
+import json
 from typing import Any, Dict
 from datetime import datetime, timedelta
 from .base_adapter import BaseAPIAdapter
@@ -14,15 +15,86 @@ class AISAdapter(BaseAPIAdapter):
 
     def __init__(self):
         super().__init__("ais")
+        import os
+        self.vesselfinder_api_key = os.getenv("VESSELAPI_KEY", "")
 
-    async def fetch_live(self, vessel_name: str = None, imo: str = None, mmsi: str = None) -> Dict[str, Any]:
-        """Fetch AIS data from MarineTraffic or AIS Hub"""
-        # MarineTraffic API: https://help.marinetraffic.com/hc/en-us/articles/203990828
-        # Free tier available but limited
-        # AIS Hub: https://www.aishub.net/ (free access)
+    async def fetch_live(self, vessel_name: str = None, imo: str = None, mmsi: str = None, manifest_fields: Dict = None) -> Dict[str, Any]:
+        """
+        Fetch AIS data with priority:
+        1. Use manifest-stored fields (PRIMARY - no API call needed)
+        2. Query VesselFinder API if imo provided and VESSELAPI_KEY set
+        3. Fall back to fixture data
+        """
+        # Step 1: Prefer manifest-stored fields (dwell_days, ais_stuffing_country, port_calls already in DB)
+        if manifest_fields and manifest_fields.get("dwell_days"):
+            logger.info(f"Using manifest AIS data: dwell_days={manifest_fields.get('dwell_days')} days, stuffing={manifest_fields.get('ais_stuffing_country')}")
+            return self._build_from_manifest(manifest_fields)
 
-        logger.warning("AIS live API requires paid subscription - using fixture mode")
+        # Step 2: Query VesselFinder API if key is configured and imo provided
+        if self.vesselfinder_api_key and imo:
+            logger.info(f"Querying VesselFinder API for IMO {imo}...")
+            try:
+                live_data = await self._fetch_vesselfinder(imo)
+                if live_data and live_data.get("found"):
+                    return self.add_data_source_metadata(live_data)
+            except Exception as e:
+                logger.warning(f"VesselFinder API failed: {e}, falling back to fixture")
+
+        # Step 3: Fall back to fixture
+        logger.info("Using fixture AIS data")
         return self.fetch_fixture(vessel_name=vessel_name, imo=imo, mmsi=mmsi)
+
+    async def _fetch_vesselfinder(self, imo: str) -> Dict[str, Any]:
+        """Query VesselFinder API for vessel information."""
+        import aiohttp
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                url = f"https://api.vesselfinder.com/api/public/v4/vessel/search"
+                params = {"imo": imo, "apikey": self.vesselfinder_api_key}
+                async with session.get(url, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        return {
+                            "found": True,
+                            "name": data.get("vessel", {}).get("shipname", ""),
+                            "imo": imo,
+                            "mmsi": data.get("vessel", {}).get("mmsi", ""),
+                            "current_port": data.get("position", {}).get("port", ""),
+                            "current_position": {
+                                "lat": data.get("position", {}).get("latitude"),
+                                "lon": data.get("position", {}).get("longitude")
+                            },
+                            "last_updated": data.get("position", {}).get("timestamp", ""),
+                            "source": "VesselFinder API"
+                        }
+                    else:
+                        logger.warning(f"VesselFinder returned {resp.status}")
+                        return {"found": False}
+        except Exception as e:
+            logger.warning(f"VesselFinder API error: {e}")
+            return {"found": False}
+
+    def _build_from_manifest(self, manifest_fields: Dict) -> Dict[str, Any]:
+        """Build AIS response from manifest-stored fields."""
+        port_calls = manifest_fields.get("port_calls", [])
+        if isinstance(port_calls, str):
+            try:
+                port_calls = json.loads(port_calls)
+            except:
+                port_calls = []
+
+        return self.add_data_source_metadata({
+            "found": True,
+            "source": "Manifest (ISF Element 9 + AIS archive)",
+            "name": manifest_fields.get("vessel_name", ""),
+            "imo": manifest_fields.get("vessel_imo", ""),
+            "dwell_days": manifest_fields.get("dwell_days", 0),
+            "ais_stuffing_country": manifest_fields.get("ais_stuffing_country", ""),
+            "port_calls": port_calls,
+            "baseline_dwell_days": 2.0,
+            "dwell_anomaly_percentile": self._calculate_dwell_percentile(manifest_fields.get("dwell_days", 0), 2.0)
+        })
 
     def fetch_fixture(self, vessel_name: str = None, imo: str = None, mmsi: str = None) -> Dict[str, Any]:
         """Return fixture AIS/vessel data with dwell anomalies"""
@@ -86,6 +158,14 @@ class AISAdapter(BaseAPIAdapter):
         if ratio > 2: return 80
         if ratio > 1.5: return 60
         return 40
+
+    @staticmethod
+    def _calculate_dwell_percentile(dwell_days: float, baseline_days: float) -> int:
+        """Calculate dwell percentile from actual vs baseline days."""
+        if baseline_days <= 0:
+            return 50
+        ratio = dwell_days / baseline_days
+        return AISAdapter._calculate_percentile(ratio)
 
 
 class PortAuthorityAdapter(BaseAPIAdapter):

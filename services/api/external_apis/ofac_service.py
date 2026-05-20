@@ -31,12 +31,17 @@ class OFACService:
     def __init__(self):
         self.base_url = "https://api.trade.gov"  # US Trade API endpoint
         self.timeout = 10
-        # Mock SDN entries for demo - in production this would be the real OFAC list
-        self.mock_sdn_entries = {
-            "zhang wei": {"name": "ZHANG, Wei", "type": "Individual", "programs": ["CAATSA"]},
-            "greenfield aluminum": {"name": "GREENFIELD ALUMINUM CORP", "type": "Entity", "programs": ["EO13959"]},
-            "solaria manufacturing": {"name": "SOLARIA MANUFACTURING", "type": "Entity", "programs": ["CMIC"]},
-        }
+        self.cord_engine = None
+        self._init_cord_engine()
+
+    def _init_cord_engine(self):
+        """Initialize CORD engine for OFAC lookups (lazy import to avoid circular deps)."""
+        try:
+            from cord_engine import get_cord_engine
+            self.cord_engine = get_cord_engine()
+            logger.info("OFAC service initialized with CORD engine")
+        except Exception as e:
+            logger.warning(f"CORD engine not available for OFAC checks: {e}")
 
     async def check_entity(self, entity_name: str) -> OFACMatch:
         """
@@ -50,26 +55,32 @@ class OFACService:
         """
         logger.info(f"Checking entity '{entity_name}' against OFAC SDN list")
 
-        # First try mock data (for demo)
-        entity_lower = entity_name.lower()
-        for mock_key, mock_data in self.mock_sdn_entries.items():
-            if mock_key in entity_lower:
-                return OFACMatch(
-                    matched=True,
-                    entity_name=entity_name,
-                    sdn_name=mock_data["name"],
-                    entity_type=mock_data["type"],
-                    programs=mock_data["programs"],
-                    confidence_pct=95.0,
-                    last_updated=datetime.utcnow().isoformat()
-                )
+        # Step 1: Try CORD OFAC database (1,996 real SDN entries)
+        if self.cord_engine:
+            try:
+                cord_match = self.cord_engine.get_ofac_status(entity_name)
+                if cord_match and cord_match.get("matched"):
+                    raw_record = cord_match.get("raw", {})
+                    programs = [cord_match.get("program")] if cord_match.get("program") else []
+                    return OFACMatch(
+                        matched=True,
+                        entity_name=entity_name,
+                        sdn_name=cord_match.get("sdn_name", ""),
+                        entity_type=cord_match.get("entity_type", ""),
+                        programs=programs,
+                        confidence_pct=98.0,
+                        source="CORD OFAC SDN List",
+                        last_updated=datetime.utcnow().isoformat()
+                    )
+            except Exception as e:
+                logger.debug(f"CORD OFAC check failed: {e}")
 
-        # Try real API if available
+        # Step 2: Try real OFAC API if available
         try:
             result = await self._check_real_ofac(entity_name)
             return result
         except Exception as e:
-            logger.warning(f"Real OFAC check failed, using fallback: {e}")
+            logger.warning(f"Real OFAC check failed: {e}")
             return OFACMatch(
                 matched=False,
                 entity_name=entity_name,

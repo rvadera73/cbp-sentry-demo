@@ -68,6 +68,10 @@ def seed_demo_data():
     # Convert manifest to shipment records (preserve all IDs from manifest)
     shipments = []
     for m in manifest_records:
+        # Parse element_9 sub-object if present
+        element_9 = m.get("element_9", {})
+        port_calls = m.get("port_calls", [])
+
         shipments.append({
             "id": m.get("id", ""),
             "manifest_id": m.get("manifest_id", ""),
@@ -79,11 +83,25 @@ def seed_demo_data():
             "declared_value_usd": m.get("declared_value_usd", 0),
             "declared_weight_kg": m.get("declared_weight_kg", 0),
             "vessel_name": m.get("vessel_name", ""),
+            "vessel_imo": m.get("vessel_imo"),
+            "vessel_flag": m.get("vessel_flag"),
             "status": m.get("status", "filed"),
             "risk_score": m.get("risk_score", 50),
-            "element_9": m.get("element_9", m.get("origin_country", "")),
-            "ais_stuffing_country": m.get("ais_stuffing_country", m.get("origin_country", "")),
-            "dwell_days": m.get("dwell_days", 0)
+            "shipper_country": m.get("shipper_country") or m.get("origin_country", ""),
+            "consignee_country": m.get("consignee_country") or m.get("destination_country", ""),
+            "shipper_age_months": m.get("shipper_age_months"),
+            "dwell_days": m.get("dwell_days"),
+            "ais_stuffing_country": m.get("ais_stuffing_country"),
+            "port_calls": json.dumps(port_calls) if port_calls else None,
+            "element9_is_mismatch": 1 if element_9.get("is_mismatch") else 0,
+            "element9_confidence": element_9.get("confidence"),
+            "element9_declared_country": element_9.get("declared_country"),
+            "element9_actual_country": element_9.get("actual_stuffing_country"),
+            "ad_cvd_rate": m.get("ad_cvd_rate"),
+            "ad_cvd_applicable": 1 if m.get("ad_cvd_applicable") else 0,
+            "h1_score": m.get("h1_score"),
+            "h2_score": m.get("h2_score"),
+            "h3_score": m.get("h3_score"),
         })
 
     # Insert into database
@@ -92,8 +110,12 @@ def seed_demo_data():
             INSERT OR IGNORE INTO shipments (
                 id, manifest_id, shipper_name, consignee_name, origin_country,
                 destination_country, hs_code, declared_value_usd, declared_weight_kg,
-                vessel_name, status, risk_score, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                vessel_name, vessel_imo, vessel_flag, status, risk_score,
+                shipper_country, consignee_country, shipper_age_months,
+                dwell_days, ais_stuffing_country, port_calls,
+                element9_is_mismatch, element9_confidence, element9_declared_country, element9_actual_country,
+                ad_cvd_rate, ad_cvd_applicable, h1_score, h2_score, h3_score, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         """, (
             shipment["id"],
             shipment["manifest_id"],
@@ -105,8 +127,25 @@ def seed_demo_data():
             shipment["declared_value_usd"],
             shipment["declared_weight_kg"],
             shipment["vessel_name"],
+            shipment["vessel_imo"],
+            shipment["vessel_flag"],
             shipment["status"],
-            shipment["risk_score"]
+            shipment["risk_score"],
+            shipment["shipper_country"],
+            shipment["consignee_country"],
+            shipment["shipper_age_months"],
+            shipment["dwell_days"],
+            shipment["ais_stuffing_country"],
+            shipment["port_calls"],
+            shipment["element9_is_mismatch"],
+            shipment["element9_confidence"],
+            shipment["element9_declared_country"],
+            shipment["element9_actual_country"],
+            shipment["ad_cvd_rate"],
+            shipment["ad_cvd_applicable"],
+            shipment["h1_score"],
+            shipment["h2_score"],
+            shipment["h3_score"]
         ))
 
     conn.commit()

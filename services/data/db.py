@@ -27,11 +27,26 @@ def init_db(db_path: str = "/app/data/cbp_sentry.db") -> None:
             declared_weight_kg REAL,
             description TEXT,
             vessel_name TEXT,
+            vessel_imo TEXT,
+            vessel_flag TEXT,
+            dwell_days REAL,
+            ais_stuffing_country TEXT,
+            port_calls TEXT,
+            element9_is_mismatch INTEGER DEFAULT 0,
+            element9_confidence REAL,
+            element9_declared_country TEXT,
+            element9_actual_country TEXT,
+            shipper_age_months INTEGER,
+            shipper_country TEXT,
+            consignee_country TEXT,
+            ad_cvd_rate REAL,
+            ad_cvd_applicable INTEGER DEFAULT 0,
             status TEXT DEFAULT 'received',
             risk_score REAL,
             risk_delta REAL DEFAULT 0,
             h1_score REAL,
             h2_score REAL,
+            h3_score REAL,
             h1_h2_score REAL,
             last_polled_at TIMESTAMP,
             ofac_screened_at TIMESTAMP,
@@ -135,6 +150,37 @@ def init_db(db_path: str = "/app/data/cbp_sentry.db") -> None:
             rationale TEXT NOT NULL
         )
     """)
+
+    # Idempotent migrations: add new columns if they don't exist
+    # This allows running init_db on an existing database without errors
+    migrations = [
+        "ALTER TABLE shipments ADD COLUMN vessel_imo TEXT",
+        "ALTER TABLE shipments ADD COLUMN vessel_flag TEXT",
+        "ALTER TABLE shipments ADD COLUMN dwell_days REAL",
+        "ALTER TABLE shipments ADD COLUMN ais_stuffing_country TEXT",
+        "ALTER TABLE shipments ADD COLUMN port_calls TEXT",
+        "ALTER TABLE shipments ADD COLUMN element9_is_mismatch INTEGER DEFAULT 0",
+        "ALTER TABLE shipments ADD COLUMN element9_confidence REAL",
+        "ALTER TABLE shipments ADD COLUMN element9_declared_country TEXT",
+        "ALTER TABLE shipments ADD COLUMN element9_actual_country TEXT",
+        "ALTER TABLE shipments ADD COLUMN shipper_age_months INTEGER",
+        "ALTER TABLE shipments ADD COLUMN shipper_country TEXT",
+        "ALTER TABLE shipments ADD COLUMN consignee_country TEXT",
+        "ALTER TABLE shipments ADD COLUMN ad_cvd_rate REAL",
+        "ALTER TABLE shipments ADD COLUMN ad_cvd_applicable INTEGER DEFAULT 0",
+        "ALTER TABLE shipments ADD COLUMN h3_score REAL",
+    ]
+
+    for migration in migrations:
+        try:
+            cursor.execute(migration)
+            logger.info(f"Migration executed: {migration}")
+        except sqlite3.OperationalError as e:
+            if "duplicate column name" in str(e):
+                logger.debug(f"Column already exists, skipping: {migration}")
+            else:
+                logger.error(f"Migration failed: {migration} — {e}")
+                raise
 
     conn.commit()
     conn.close()
