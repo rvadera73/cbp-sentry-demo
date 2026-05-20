@@ -131,7 +131,7 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
-          docker build -t "$IMG" -f Dockerfile services/ui/
+          docker build -t "$IMG" -f Dockerfile ui/
           docker push "$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
 
