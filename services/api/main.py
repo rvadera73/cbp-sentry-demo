@@ -117,7 +117,7 @@ app = FastAPI(title="Sentry CBP API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,  # Using OIDC tokens, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
 )
