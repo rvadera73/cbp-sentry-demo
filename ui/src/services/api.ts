@@ -13,9 +13,30 @@ import type {
   H2Response,
 } from '../types/sentry'
 
-// Use relative paths - nginx proxies /api/* to sentry-api
-// Works in both local Docker and Cloud Run deployments
-const API_BASE_URL = '/api'
+// Auto-detect API URL based on deployment environment
+const getAPIBaseURL = (): string => {
+  if (typeof window === 'undefined') return '/api'
+
+  const hostname = window.location.hostname
+
+  // Local development: localhost:3000 or localhost:3001
+  if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+    return 'http://localhost:8000/api'
+  }
+
+  // Cloud Run: sentry-ui-{HASH}.{REGION}.run.app
+  // Extract hash and construct sentry-api URL with same hash
+  const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/)
+  if (cloudRunMatch) {
+    const [, hash, region] = cloudRunMatch
+    return `https://sentry-api-${hash}.${region}.run.app/api`
+  }
+
+  // Fallback to relative paths (works with nginx proxy)
+  return '/api'
+}
+
+const API_BASE_URL = getAPIBaseURL()
 
 class SentryAPI {
   private client: AxiosInstance

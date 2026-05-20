@@ -49,8 +49,22 @@ export default function CaseViewerPage() {
 
   const fetchShipment = async (id: string) => {
     try {
-      // Fetch shipment data through nginx proxy to sentry-api
-      const response = await fetch(`/api/data/shipments/${id}`);
+      // Auto-detect API URL based on deployment environment
+      const hostname = window.location.hostname
+      let apiUrl = '/api'
+
+      // Cloud Run: extract hash from sentry-ui-{HASH}.run.app and use for sentry-api
+      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/)
+      if (cloudRunMatch) {
+        const [, hash, region] = cloudRunMatch
+        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`
+      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+        // For other non-localhost environments, try to construct the API URL
+        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`
+      }
+
+      // Fetch shipment data
+      const response = await fetch(`${apiUrl}/data/shipments/${id}`);
       if (!response.ok) throw new Error('Failed to fetch shipment');
       const data = await response.json();
       setShipment(data);
