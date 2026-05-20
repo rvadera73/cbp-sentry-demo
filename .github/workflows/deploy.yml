@@ -172,6 +172,13 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
+          # Set authentication policy based on service
+          if [[ "${{ matrix.service }}" == "ui" ]]; then
+            AUTH_FLAG="--allow-unauthenticated"
+          else
+            AUTH_FLAG="--no-allow-unauthenticated"
+          fi
+
           gcloud run deploy sentry-${{ matrix.service }} \
             --image "${{ env.ARTIFACT_REGISTRY }}/${{ env.IMAGE_REGISTRY }}/sentry-${{ matrix.service }}:${{ github.sha }}" \
             --region ${{ env.GCP_REGION }} \
@@ -182,8 +189,9 @@ jobs:
             --port ${{ matrix.service.port }} \
             --min-instances 1 \
             --max-instances 100 \
-            --allow-unauthenticated \
-            --set-env-vars "API_MODE=live,PORT=${{ matrix.service.port }}" \
+            $AUTH_FLAG \
+            --set-env-vars "API_MODE=live,PORT=${{ matrix.service.port }},DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }}" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,VESSELAPI_KEY=VESSELAPI_KEY:latest,OFAC_API_KEY=OFAC_API_KEY:latest" \
             --service-account "sentry-${{ matrix.service }}@${{ env.PROJECT_ID }}.iam.gserviceaccount.com" \
             --labels "branch=${{ needs.setup.outputs.branch }},commit=${{ github.sha }}"
 
