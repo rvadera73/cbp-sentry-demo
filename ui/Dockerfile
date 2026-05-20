@@ -21,13 +21,16 @@ COPY --from=builder /build/dist /usr/share/nginx/html
 # Copy optimized nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 # Create cache and temp directories with proper permissions
 RUN mkdir -p /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp && \
     chmod -R 755 /var/cache/nginx && \
     chown -R nginx:nginx /var/cache/nginx /usr/share/nginx/html
 
 # Create healthcheck script
-RUN printf '#!/bin/sh\ntest -f /usr/share/nginx/html/index.html && curl -f http://localhost/ > /dev/null 2>&1 || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh
+RUN printf '#!/bin/sh\ntest -f /usr/share/nginx/html/index.html && curl -sf http://localhost/ > /dev/null || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh
 
 # Health check
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
