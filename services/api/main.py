@@ -21,6 +21,76 @@ logger = logging.getLogger(__name__)
 # Config
 DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://localhost:8005")
 API_MODE = os.getenv("API_MODE", "fixture")
+DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENV", "local")
+
+# OIDC token cache for Cloud Run inter-service auth
+_oidc_token_cache = {}
+_oidc_token_expiry = {}
+
+
+async def get_oidc_token(target_service_url: str) -> Optional[str]:
+    """Get OIDC token for Cloud Run inter-service authentication.
+
+    In production (Cloud Run), this fetches a token from the GCP metadata server
+    to authenticate requests to other Cloud Run services.
+
+    In local/fixture mode, returns None (no auth needed in Docker bridge network).
+    """
+    if DEPLOYMENT_ENV == "local" or API_MODE == "fixture":
+        return None  # No token needed for local development
+
+    import time
+    now = time.time()
+
+    # Check cache validity (tokens valid for ~1 hour, cache for 30 min)
+    cache_key = target_service_url
+    if cache_key in _oidc_token_cache and _oidc_token_expiry.get(cache_key, 0) > now:
+        return _oidc_token_cache[cache_key]
+
+    try:
+        # Get token from GCP metadata server (Cloud Run standard)
+        async with httpx.AsyncClient() as client:
+            headers = {
+                "Metadata-Flavor": "Google"
+            }
+            # Service account token endpoint
+            metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+            params = {"audience": target_service_url, "format": "full"}
+
+            response = await client.get(
+                metadata_url,
+                headers=headers,
+                params=params,
+                timeout=2.0
+            )
+
+            if response.status_code == 200:
+                token = response.text
+                _oidc_token_cache[cache_key] = token
+                _oidc_token_expiry[cache_key] = now + 1800  # Cache for 30 minutes
+                logger.debug(f"Fetched OIDC token for {target_service_url}")
+                return token
+    except Exception as e:
+        logger.warning(f"Failed to get OIDC token: {e}")
+
+    return None
+
+
+async def get_data_service_client() -> httpx.AsyncClient:
+    """Create authenticated HTTP client for data service.
+
+    Automatically adds OIDC Bearer token in production Cloud Run.
+    Uses plain HTTP in local development (Docker bridge network).
+    """
+    headers = {}
+
+    # Add OIDC token for Cloud Run inter-service auth
+    token = await get_oidc_token(DATA_SERVICE_URL)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    return httpx.AsyncClient(base_url=DATA_SERVICE_URL, headers=headers, timeout=10.0)
+
 
 # Initialize adapters
 oc_adapter = OpenCorporatesAdapter()
@@ -63,19 +133,19 @@ async def health():
 @app.get("/api/data/shipments")
 async def list_shipments(limit: int = 50, offset: int = 0, status: Optional[str] = None):
     """List all shipments"""
-    async with httpx.AsyncClient() as client:
+    async with await get_data_service_client() as client:
         params = {"limit": limit, "offset": offset}
         if status:
             params["status"] = status
-        resp = await client.get(f"{DATA_SERVICE_URL}/shipments", params=params)
+        resp = await client.get("/shipments", params=params)
         return resp.json()
 
 
 @app.get("/api/data/shipments/{shipment_id}")
 async def get_shipment(shipment_id: str):
     """Get single shipment"""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{DATA_SERVICE_URL}/shipments/{shipment_id}")
+    async with await get_data_service_client() as client:
+        resp = await client.get(f"/shipments/{shipment_id}")
         if resp.status_code == 404:
             raise HTTPException(status_code=404, detail="Shipment not found")
         return resp.json()
@@ -84,8 +154,8 @@ async def get_shipment(shipment_id: str):
 @app.get("/api/data/stats")
 async def get_stats():
     """Get dashboard statistics"""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{DATA_SERVICE_URL}/stats")
+    async with await get_data_service_client() as client:
+        resp = await client.get("/stats")
         return resp.json()
 
 
@@ -113,14 +183,14 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
         # Create manifest in data service
         manifest_id = str(uuid.uuid4())
 
-        async with httpx.AsyncClient() as client:
+        async with await get_data_service_client() as client:
             # Create manifest record
             manifest_payload = {
                 "filename": file.filename,
                 "row_count": len(rows),
                 "extracted_at": datetime.utcnow().isoformat()
             }
-            resp = await client.post(f"{DATA_SERVICE_URL}/manifests", json=manifest_payload)
+            resp = await client.post("/manifests", json=manifest_payload)
             if resp.status_code != 200:
                 logger.error(f"Failed to create manifest in data service: {resp.text}")
 
@@ -139,7 +209,7 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
                     "description": row.get('description', ''),
                     "vessel_name": row.get('vessel_name'),
                 }
-                resp = await client.post(f"{DATA_SERVICE_URL}/shipments", json=shipment_payload)
+                resp = await client.post("/shipments", json=shipment_payload)
                 if resp.status_code == 200:
                     shipment_data = resp.json()
                     shipment_ids.append(shipment_data.get('id'))
@@ -409,8 +479,8 @@ async def calculate_score_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
             raise HTTPException(status_code=400, detail="shipment_id required")
 
         # Fetch shipment from data service
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{DATA_SERVICE_URL}/shipments/{shipment_id}")
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"/shipments/{shipment_id}")
             if resp.status_code != 200:
                 raise HTTPException(status_code=404, detail="Shipment not found")
             shipment = resp.json()
@@ -475,8 +545,8 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
     """Return stored shipment score with breakdown"""
     try:
         # Fetch shipment from data service
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{DATA_SERVICE_URL}/shipments/{shipment_id}")
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"/shipments/{shipment_id}")
             if resp.status_code != 200:
                 raise HTTPException(status_code=404, detail="Shipment not found")
             shipment = resp.json()
@@ -564,9 +634,9 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
             xai_assertions.append("Declared value significantly below market benchmark")
 
         # Write scores back to database
-        async with httpx.AsyncClient() as client:
+        async with await get_data_service_client() as client:
             await client.patch(
-                f"{DATA_SERVICE_URL}/shipments/{shipment_id}",
+                f"/shipments/{shipment_id}",
                 json={
                     "risk_score": total_score,
                     "h1_score": h1_score,
@@ -596,9 +666,9 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
 async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
     """Build referral package for a specific shipment"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with await get_data_service_client() as client:
             # Fetch shipment from data service
-            resp = await client.get(f"{DATA_SERVICE_URL}/shipments/{shipment_id}")
+            resp = await client.get(f"/shipments/{shipment_id}")
             if resp.status_code != 200:
                 return {"error": "Shipment not found", "status": "failed"}
 
@@ -796,10 +866,10 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
 async def list_shipments_detailed(limit: int = 500, offset: int = 0) -> Dict[str, Any]:
     """Get list of all shipments with pagination"""
     try:
-        async with httpx.AsyncClient() as client:
+        async with await get_data_service_client() as client:
             # Data service has max limit of 100, so fetch in chunks
             fetch_limit = min(limit, 100)
-            resp = await client.get(f"{DATA_SERVICE_URL}/shipments", params={"limit": fetch_limit, "offset": offset})
+            resp = await client.get("/shipments", params={"limit": fetch_limit, "offset": offset})
             if resp.status_code != 200:
                 logger.warning(f"Non-200 response from data service: {resp.status_code}")
                 return {"shipments": []}
@@ -921,8 +991,8 @@ async def list_shipments_detailed(limit: int = 500, offset: int = 0) -> Dict[str
 async def get_shipment_detail(shipment_id: str) -> Dict[str, Any]:
     """Get detailed shipment information with coordinates and risk assessment"""
     # Fetch from data service
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(f"{DATA_SERVICE_URL}/shipments/{shipment_id}")
+    async with await get_data_service_client() as client:
+        resp = await client.get(f"/shipments/{shipment_id}")
         if resp.status_code != 200:
             raise HTTPException(status_code=404, detail="Shipment not found")
         shipment = resp.json()
@@ -1041,9 +1111,9 @@ async def score_shipment_three_level(
         )
 
         # Update shipment record with new score
-        async with httpx.AsyncClient() as client:
+        async with await get_data_service_client() as client:
             await client.patch(
-                f"{DATA_SERVICE_URL}/shipments/{shipment_id}",
+                f"/shipments/{shipment_id}",
                 json={
                     "risk_score": result["total_score"],
                     "h1_score": result["corridor_score"],
