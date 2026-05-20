@@ -31,8 +31,11 @@ def seed_demo_data():
     demo_shipments = []
     manifest_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
 
+    logger.info(f"Checking for seed file at: {manifest_file}")
+    logger.info(f"File exists: {manifest_file.exists()}")
+
     if manifest_file.exists():
-        logger.info(f"Loading manifest data from {manifest_file}")
+        logger.info(f"✅ LOADING manifest data from {manifest_file}")
         try:
             with open(manifest_file) as f:
                 manifest_records = json.load(f)
@@ -61,6 +64,8 @@ def seed_demo_data():
 
     # Fallback to hardcoded demo data if manifest file not found
     if not demo_shipments:
+        logger.error(f"❌ USING FALLBACK: Manifest file not found at {manifest_file}")
+        logger.error("   This means dashboard will show SHP-* IDs but DB only has shipment-* hardcoded IDs")
         logger.warning("Manifest file not found, using fallback demo data")
         demo_shipments = [
         {
