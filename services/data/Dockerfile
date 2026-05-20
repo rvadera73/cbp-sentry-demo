@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Step 2: Copy application code
 COPY . .
 
+# Create required directories
+RUN mkdir -p /app/data
+
 # Create health check script
 RUN printf '#!/bin/sh\ncurl -f http://localhost:8005/health || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh
 
