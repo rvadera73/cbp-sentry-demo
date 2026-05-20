@@ -89,9 +89,13 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-api:${{ github.sha }}"
-          docker build -t "$IMG" services/api/
-          docker push "$IMG"
+          echo "Building image: $IMG"
+          docker build -t "$IMG" services/api/ || { echo "Build failed"; exit 1; }
+          echo "Pushing image..."
+          docker push "$IMG" || { echo "Push failed"; exit 1; }
+          echo "Setting output: image=$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
 
   build-data:
     name: Build sentry-data
@@ -110,9 +114,13 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-data:${{ github.sha }}"
-          docker build -t "$IMG" services/data/
-          docker push "$IMG"
+          echo "Building image: $IMG"
+          docker build -t "$IMG" services/data/ || { echo "Build failed"; exit 1; }
+          echo "Pushing image..."
+          docker push "$IMG" || { echo "Push failed"; exit 1; }
+          echo "Setting output: image=$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
 
   build-ui:
     name: Build sentry-ui
@@ -131,9 +139,13 @@ jobs:
       - id: build
         run: |
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
-          docker build -t "$IMG" ui/
-          docker push "$IMG"
+          echo "Building image: $IMG"
+          docker build -t "$IMG" ui/ || { echo "Build failed"; exit 1; }
+          echo "Pushing image..."
+          docker push "$IMG" || { echo "Push failed"; exit 1; }
+          echo "Setting output: image=$IMG"
           echo "image=$IMG" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
 
   deploy-api:
     name: Deploy sentry-api
