@@ -14,6 +14,7 @@ from external_apis.h2_adapters import AISAdapter, PortAuthorityAdapter
 from ml_scorers import H1CorridorRiskScorer, H2AnomalyScorer
 from h3_scorer import H3IntelligenceScorer
 from ingest_parser import parse_excel_manifest
+from senzing_client import get_senzing_client
 
 logger = logging.getLogger(__name__)
 
@@ -1352,6 +1353,75 @@ async def verify_with_altana(
             "error": str(e),
             "recommendation": "MANUAL_REVIEW"
         }
+
+
+@app.post("/api/entities/resolve")
+async def resolve_entities(
+    manifest_id: str = Query(...),
+    shipper_name: Optional[str] = Query(None),
+    consignee_name: Optional[str] = Query(None)
+) -> Dict[str, Any]:
+    """Resolve shipper/consignee entities using Senzing entity resolution.
+
+    Returns entity objects with ownership chains and confidence scores.
+    Supports both live Senzing and fixture mode for offline demo.
+    """
+    try:
+        client = get_senzing_client()
+        result = await client.resolve_entities(
+            manifest_id=manifest_id,
+            shipper_name=shipper_name,
+            consignee_name=consignee_name
+        )
+        return {
+            "manifest_id": manifest_id,
+            "entities": result.get("entities", []),
+            "graph_edges": result.get("graph_edges", []),
+            "total_confidence": result.get("total_confidence", 0.0),
+            "source": result.get("source", "unknown")
+        }
+    except Exception as e:
+        logger.error(f"Entity resolution error for {manifest_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/entities/why/{entity_id_a}/{entity_id_b}")
+async def get_why_connected(entity_id_a: str, entity_id_b: str) -> Dict[str, Any]:
+    """Get explanation of why two entities are connected.
+
+    Returns evidence linking the entities (shared directors, freight forwarder, etc.)
+    This is critical for transparency in investigative workflows.
+    """
+    try:
+        client = get_senzing_client()
+        result = await client.get_why_connected(entity_id_a, entity_id_b)
+        return result
+    except Exception as e:
+        logger.error(f"Why-connected query error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/entities/{entity_id}")
+async def get_entity_details(entity_id: str) -> Dict[str, Any]:
+    """Get detailed entity information.
+
+    Returns entity profile including registration details, relationships, and risk flags.
+    """
+    try:
+        client = get_senzing_client()
+        # For now, return fixture data for demo
+        # In live mode, would query Senzing for full entity details
+        fixtures = client.fixtures
+
+        # Search for matching entity
+        for key, entity in fixtures.items():
+            if entity.get("entity_id") == entity_id or key in entity_id.lower():
+                return entity
+
+        raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
+    except Exception as e:
+        logger.error(f"Entity detail error for {entity_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
