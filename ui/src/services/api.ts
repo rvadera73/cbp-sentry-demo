@@ -13,7 +13,11 @@ import type {
   H2Response,
 } from '../types/sentry'
 
-const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || 'http://localhost:8000/api'
+// For Cloud Run, use public service URL; for local dev, use localhost
+const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) ||
+  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:8000/api'
+    : 'https://sentry-api-cbp-sentry.run.app/api')
 
 class SentryAPI {
   private client: AxiosInstance
