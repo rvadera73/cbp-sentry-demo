@@ -77,8 +77,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [setup, test]
     if: github.event_name == 'push'
-    outputs:
-      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -86,21 +84,17 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-      - id: build
-        run: |
+      - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-api:${{ github.sha }}"
           docker build -t "$IMG" services/api/
           docker push "$IMG"
-          echo "image=${IMG}" >> $GITHUB_OUTPUT
 
   build-data:
     name: Build sentry-data
     runs-on: ubuntu-latest
     needs: [setup, test]
     if: github.event_name == 'push'
-    outputs:
-      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -108,21 +102,17 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-      - id: build
-        run: |
+      - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-data:${{ github.sha }}"
           docker build -t "$IMG" services/data/
           docker push "$IMG"
-          echo "image=${IMG}" >> $GITHUB_OUTPUT
 
   build-ui:
     name: Build sentry-ui
     runs-on: ubuntu-latest
     needs: [setup, test]
     if: github.event_name == 'push'
-    outputs:
-      image: ${{ steps.build.outputs.image }}
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -130,13 +120,11 @@ jobs:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
       - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-      - id: build
-        run: |
+      - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
           docker build -t "$IMG" ui/
           docker push "$IMG"
-          echo "image=${IMG}" >> $GITHUB_OUTPUT
 
   deploy-api:
     name: Deploy sentry-api
@@ -152,8 +140,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ needs.build-api.outputs.image }}"
-          [ -z "$IMAGE" ] && echo "ERROR: No image from build-api" && exit 1
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-api:${{ github.sha }}"
           gcloud run deploy sentry-api \
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
@@ -185,8 +172,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ needs.build-data.outputs.image }}"
-          [ -z "$IMAGE" ] && echo "ERROR: No image from build-data" && exit 1
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-data:${{ github.sha }}"
           gcloud run deploy sentry-data \
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
@@ -215,8 +201,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ needs.build-ui.outputs.image }}"
-          [ -z "$IMAGE" ] && echo "ERROR: No image from build-ui" && exit 1
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-ui:${{ github.sha }}"
           gcloud run deploy sentry-ui \
             --image="$IMAGE" \
             --region=${{ env.REGION }} --platform=managed \
