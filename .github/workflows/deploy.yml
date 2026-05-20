@@ -140,7 +140,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-api:${{ github.sha }}"
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-api:${{ github.sha }}"
           gcloud run deploy sentry-api \
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
@@ -172,7 +172,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-data:${{ github.sha }}"
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-data:${{ github.sha }}"
           gcloud run deploy sentry-data \
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
@@ -201,7 +201,7 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cbp-sentry/sentry-ui:${{ github.sha }}"
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-ui:${{ github.sha }}"
           gcloud run deploy sentry-ui \
             --image="$IMAGE" \
             --region=${{ env.REGION }} --platform=managed \
