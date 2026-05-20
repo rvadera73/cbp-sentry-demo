@@ -1,87 +1,152 @@
 version: '3.8'
 
+# ARCHITECTURE:
+# - UI (React Vite) → Nginx on port 3000
+# - API Gateway (FastAPI) → port 8000
+# - Data Service (FastAPI) → port 8005
+# - All services communicate via sentry-network bridge
+#
+# NO volume mounts for built code (conflicts with Docker image)
+# Only data volumes persist across restarts
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: sentry-postgres
-    environment:
-      POSTGRES_USER: sentry_user
-      POSTGRES_PASSWORD: sentry_password
-      POSTGRES_DB: sentry_cbp
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./api/seed_data:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sentry_user"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  neo4j:
-    image: neo4j:5.15-community
-    container_name: sentry-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/password
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-    volumes:
-      - neo4j_data:/var/lib/neo4j/data
-      - ./api/seed_data:/seed_data
-    healthcheck:
-      test: ["CMD", "neo4j", "status"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  api:
+  # === DATA LAYER ===
+  sentry-data:
     build:
-      context: ./api
+      context: ./services/data
       dockerfile: Dockerfile
+      cache_from:
+        - sentry-data:latest
+    image: sentry-data:latest
+    container_name: sentry-data
+    environment:
+      DATABASE_URL: sqlite:///./data/cbp_sentry.db
+      PYTHONUNBUFFERED: "1"
+      ENVIRONMENT: production
+    ports:
+      - "8005:8005"
+    volumes:
+      # ONLY persist database, NOT source code
+      - sentry_data_volume:/app/data
+    healthcheck:
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # === API LAYER ===
+  sentry-api:
+    build:
+      context: ./services/api
+      dockerfile: Dockerfile
+      cache_from:
+        - sentry-api:latest
+    image: sentry-api:latest
     container_name: sentry-api
     environment:
-      DATABASE_URL: sqlite:///./cbp_sentry.db
-      NEO4J_URI: neo4j://neo4j:7687
-      NEO4J_USERNAME: neo4j
-      NEO4J_PASSWORD: password
-      ENVIRONMENT: development
-      DEBUG: "true"
-      CORS_ORIGINS: '["http://localhost:3000"]'
-      API_KEY: demo-key
-      DEMO_MODE: "true"
+      DATA_SERVICE_URL: http://sentry-data:8005
+      SENZING_URL: http://senzing:8250
+      API_MODE: fixture
+      PYTHONUNBUFFERED: "1"
+      ENVIRONMENT: production
     ports:
       - "8000:8000"
     depends_on:
-      neo4j:
+      sentry-data:
         condition: service_healthy
-    volumes:
-      - ./api:/app
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "/healthcheck.sh"]
       interval: 10s
       timeout: 5s
+      start_period: 10s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  ui:
+  # === UI LAYER ===
+  sentry-ui:
     build:
       context: ./ui
       dockerfile: Dockerfile
+      cache_from:
+        - sentry-ui:latest
+    image: sentry-ui:latest
     container_name: sentry-ui
     ports:
-      - "3000:80"
+      - "3001:80"
     depends_on:
-      api:
+      sentry-api:
         condition: service_healthy
-    environment:
-      VITE_API_URL: http://localhost:8000
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "/healthcheck.sh"]
       interval: 10s
       timeout: 5s
+      start_period: 10s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # === OPTIONAL: Senzing Entity Resolution ===
+  senzing:
+    image: senzing/senzing-api-server:3.5.2
+    container_name: sentry-senzing
+    environment:
+      SENZING_ENGINE_CONFIGURATION_JSON: |
+        {
+          "PIPELINE": {
+            "SUPPORTPATH": "/var/opt/senzing"
+          },
+          "SQL": {
+            "CONNECTION": "sqlite:////var/opt/senzing/senzing.db"
+          }
+        }
+    ports:
+      - "8250:8250"
+    volumes:
+      - senzing_data_volume:/var/opt/senzing
+      - ./senzing/senzing.license:/etc/opt/senzing/senzing.license:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8250/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    profiles:
+      - senzing
+
+# === VOLUMES ===
+# Only data persists, NOT source code
 volumes:
-  postgres_data:
-  neo4j_data:
+  sentry_data_volume:
+    driver: local
+  senzing_data_volume:
+    driver: local
+
+# === NETWORKS ===
+networks:
+  sentry-network:
+    driver: bridge
