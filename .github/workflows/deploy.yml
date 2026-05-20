@@ -146,6 +146,7 @@ jobs:
             --region=${{ env.REGION }} \
             --platform=managed \
             --no-allow-unauthenticated \
+            --port=8000 \
             --memory=2Gi \
             --cpu=2 \
             --concurrency=40 \
@@ -178,6 +179,7 @@ jobs:
             --region=${{ env.REGION }} \
             --platform=managed \
             --no-allow-unauthenticated \
+            --port=8005 \
             --memory=1Gi \
             --cpu=1 \
             --concurrency=20 \
