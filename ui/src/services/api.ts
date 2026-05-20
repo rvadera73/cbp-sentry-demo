@@ -13,11 +13,9 @@ import type {
   H2Response,
 } from '../types/sentry'
 
-// For Cloud Run, use public service URL; for local dev, use localhost
-const API_BASE_URL = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) ||
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:8000/api'
-    : 'https://sentry-api-cbp-sentry.run.app/api')
+// Use relative paths - nginx proxies /api/* to sentry-api
+// Works in both local Docker and Cloud Run deployments
+const API_BASE_URL = '/api'
 
 class SentryAPI {
   private client: AxiosInstance
