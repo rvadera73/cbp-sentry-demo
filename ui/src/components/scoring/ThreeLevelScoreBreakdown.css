@@ -1,0 +1,277 @@
+.three-level-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.three-level-loading,
+.three-level-empty {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-style: italic;
+}
+
+/* Overall Score */
+.overall-score {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  background: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.score-circle {
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  border: 6px solid;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f9f9f9, #ffffff);
+  flex-shrink: 0;
+}
+
+.score-value {
+  font-size: 3rem;
+  font-weight: 700;
+  color: #003366;
+  line-height: 1;
+}
+
+.score-unit {
+  font-size: 0.875rem;
+  color: #666;
+  margin-top: 0.25rem;
+}
+
+.score-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.risk-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  color: white;
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  width: fit-content;
+}
+
+.altana-flag {
+  background: #fdb913;
+  color: #1a1a1a;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-left: 3px solid #f5a623;
+}
+
+/* Three-Level Cards */
+.levels-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.level-card {
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  background: white;
+  overflow: hidden;
+}
+
+.level-card.level-1 {
+  border-top: 4px solid #003366;
+}
+
+.level-card.level-2 {
+  border-top: 4px solid #0066cc;
+}
+
+.level-card.level-3 {
+  border-top: 4px solid #00a4ef;
+}
+
+.level-header {
+  padding: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9f9f9;
+  transition: background-color 0.2s ease;
+  gap: 1rem;
+}
+
+.level-header:hover {
+  background-color: #f0f7ff;
+}
+
+.level-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  font-weight: 600;
+  color: #003366;
+}
+
+.level-icon {
+  font-size: 1.5rem;
+}
+
+.level-score {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #003366;
+  white-space: nowrap;
+}
+
+.level-weight {
+  font-size: 0.75rem;
+  color: #666;
+  background: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.level-details {
+  padding: 1rem;
+  border-top: 1px solid #e5e5e5;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  font-size: 0.875rem;
+  color: #1a1a1a;
+}
+
+.detail-row span:first-child {
+  font-weight: 600;
+  color: #666;
+}
+
+.detail-row span:last-child {
+  font-weight: 700;
+  color: #003366;
+}
+
+.detail-bar {
+  margin-top: 1rem;
+  height: 6px;
+  background-color: #e6e6e6;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.detail-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+/* XAI Factors */
+.xai-factors {
+  background: #f0f7ff;
+  border: 1px solid #0066cc;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.xai-factors h4 {
+  margin: 0 0 0.75rem 0;
+  color: #003366;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.xai-factors ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.xai-factors li {
+  margin: 0.5rem 0;
+  color: #1a1a1a;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+/* Weight Info */
+.weight-info {
+  background: #fffbf0;
+  border: 1px solid #f5a623;
+  border-radius: 6px;
+  padding: 1rem;
+  text-align: center;
+}
+
+.info-text {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .overall-score {
+    flex-direction: column;
+    text-align: center;
+    gap: 1rem;
+  }
+
+  .score-circle {
+    width: 120px;
+    height: 120px;
+  }
+
+  .score-value {
+    font-size: 2.5rem;
+  }
+
+  .score-info {
+    align-items: center;
+  }
+
+  .levels-container {
+    grid-template-columns: 1fr;
+  }
+
+  .level-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .level-score,
+  .level-weight {
+    align-self: flex-start;
+  }
+}

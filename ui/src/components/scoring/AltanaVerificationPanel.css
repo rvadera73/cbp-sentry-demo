@@ -1,0 +1,27 @@
+.altana-verification {
+  padding: 1.5rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border-left: 4px solid #2563eb;
+}
+
+.altana-verification h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.verification-result {
+  padding: 1rem;
+  margin: 1rem 0;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e5e5e5;
+}
+
+.verification-result p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #666;
+}

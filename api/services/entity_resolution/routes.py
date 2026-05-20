@@ -40,7 +40,7 @@ def init_service(senzing_client: Optional[SenzingClient] = None):
 @router.post("/load")
 async def load_entities(request: ERLoadRequest) -> ERLoadResponse:
     """
-    Load entities from manifest into Senzing.
+    Load entities from manifest into Senzing and resolve against CORD data.
 
     Args:
         request: ERLoadRequest with manifest_id
@@ -49,30 +49,51 @@ async def load_entities(request: ERLoadRequest) -> ERLoadResponse:
         ERLoadResponse with entities_loaded, resolutions, relationships
     """
     try:
-        # TODO: Fetch manifest from database using manifest_id
-        # For now, use mock manifest
-        manifest_data = {
+        # Fetch manifest from database
+        from core.shipments_db import get_shipment_by_manifest_id
+        manifest_data = get_shipment_by_manifest_id(request.manifest_id)
+
+        if not manifest_data:
+            raise HTTPException(status_code=404, detail=f"Manifest not found: {request.manifest_id}")
+
+        # Load manifest entities into Senzing
+        from .loader import load_manifest_entities
+        record_ids = load_manifest_entities(manifest_data, senzing_client=_senzing_client)
+
+        # Search Senzing for matches against CORD data
+        resolutions = []
+        if _senzing_client:
+            # Search for shipper matches in CORD
+            shipper_matches = _search_entity_matches(
+                f"{manifest_data.get('shipper_name', '')}",
+                entity_type="SHIPPER",
+                country=manifest_data.get('shipper_country')
+            )
+
+            # Search for consignee matches
+            consignee_matches = _search_entity_matches(
+                f"{manifest_data.get('consignee_name', '')}",
+                entity_type="CONSIGNEE",
+                country=manifest_data.get('consignee_country')
+            )
+
+            resolutions = shipper_matches + consignee_matches
+
+        # Detect relationships from matches
+        relationships = _detect_cord_relationships(resolutions)
+
+        summary = {
             "manifest_id": request.manifest_id,
-            "shipper": "Greenfield Industrial Trading Co., Ltd.",
-            "shipper_country": "VN",
-            "consignee": "TBD Importer LLC",
-            "consignee_country": "US",
-            "isf_stuffing_country": "CN",
-            "vessel_name": "MV Pacific Horizon"
+            "entities_matched": len(resolutions),
+            "relationships_detected": len(relationships),
+            "cord_data_used": True
         }
 
-        # TODO: Fetch entities from database
-        # For now, use mock entities
-        entities = _get_mock_entities()
-
-        # Run resolution
-        result = _er_service.resolve_entities(manifest_data, entities)
-
         return ERLoadResponse(
-            entities_loaded=len(result["resolutions"]),
-            resolutions=result["resolutions"],
-            relationships=result["relationships"],
-            summary=result["summary"]
+            entities_loaded=len(record_ids),
+            resolutions=resolutions,
+            relationships=relationships,
+            summary=summary
         )
 
     except Exception as e:

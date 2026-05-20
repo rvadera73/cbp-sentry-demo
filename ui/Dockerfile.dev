@@ -1,0 +1,24 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json package-lock.json ./
+RUN npm ci --prefer-offline --no-audit
+
+# Copy source
+COPY src ./src
+COPY public ./public
+COPY tsconfig.json tsconfig.node.json vite.config.ts index.html ./
+
+# Create healthcheck script
+RUN printf '#!/bin/sh\ncurl -f http://localhost:5173 > /dev/null 2>&1 || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh
+
+# Health check
+HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
+  CMD /healthcheck.sh
+
+EXPOSE 5173
+
+# Run Vite dev server (accessible from host)
+CMD ["npm", "run", "dev", "--", "--host"]

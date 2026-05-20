@@ -1,0 +1,223 @@
+/* KPI Section */
+.kpi-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.kpi-card {
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.kpi-card.alert-red {
+  border-left: 4px solid #d62828;
+  background-color: #fff0f0;
+}
+
+.kpi-card.alert-yellow {
+  border-left: 4px solid #f5a623;
+  background-color: #fffbf0;
+}
+
+.kpi-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #666;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kpi-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #003366;
+}
+
+.kpi-card .usa-button {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Filter Section */
+.filter-section {
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.filter-section label {
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.filter-section .usa-select {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Data Table */
+.data-table-wrapper {
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table thead {
+  background-color: #f5f5f5;
+  border-bottom: 2px solid #d0d0d0;
+}
+
+.data-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 700;
+  color: #003366;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.data-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e5e5;
+  color: #1a1a1a;
+}
+
+.data-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.risk-col {
+  text-align: center;
+}
+
+.risk-badge {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+
+.risk-badge small {
+  display: block;
+  font-weight: 600;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.risk-high {
+  background-color: #ffcccc;
+  color: #9b2c2c;
+  border: 1px solid #d62828;
+}
+
+.risk-medium {
+  background-color: #fff4cc;
+  color: #8b5a00;
+  border: 1px solid #f5a623;
+}
+
+.risk-low {
+  background-color: #d4f4dd;
+  color: #004d00;
+  border: 1px solid #00a91c;
+}
+
+code {
+  background-color: #f5f5f5;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+}
+
+.shipment-row {
+  transition: background-color 0.2s;
+}
+
+.shipment-row:hover {
+  background-color: #f0f7ff;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #666;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 1.125rem;
+}
+
+.empty-state button {
+  margin-left: 0.5rem;
+}
+
+/* Loading */
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .kpi-section {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filter-section {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-section .usa-select {
+    min-width: auto;
+  }
+
+  .data-table {
+    font-size: 0.875rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 0.5rem;
+  }
+
+  .data-table tbody tr {
+    display: flex;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    border-bottom: 2px solid #d0d0d0;
+  }
+
+  .data-table tbody td {
+    border: none;
+    padding: 0.5rem;
+    flex: 1 1 50%;
+  }
+}

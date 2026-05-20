@@ -1,0 +1,70 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Risk variants */
+.badge-high {
+  background-color: var(--color-risk-high-light);
+  color: var(--color-risk-high);
+  border: 1px solid var(--color-risk-high);
+}
+
+.badge-medium {
+  background-color: var(--color-risk-medium-light);
+  color: var(--color-risk-medium);
+  border: 1px solid var(--color-risk-medium);
+}
+
+.badge-low {
+  background-color: var(--color-risk-low-light);
+  color: var(--color-risk-low);
+  border: 1px solid var(--color-risk-low);
+}
+
+.badge-neutral {
+  background-color: var(--color-bg-light);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+}
+
+/* Status variants */
+.badge-info {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: var(--color-info);
+  border: 1px solid var(--color-info);
+}
+
+.badge-success {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
+}
+
+.badge-warning {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
+}
+
+.badge-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+}

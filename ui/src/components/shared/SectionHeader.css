@@ -1,0 +1,97 @@
+.section-header-container {
+  margin-bottom: var(--space-lg);
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--space-md) var(--space-lg);
+  background-color: var(--color-bg-light);
+  border: 1px solid var(--color-border);
+  border-bottom: 2px solid var(--color-primary-teal);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  gap: var(--space-lg);
+}
+
+.section-header-content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  flex-grow: 1;
+}
+
+.section-toggle {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-primary-teal);
+  cursor: pointer;
+  transition: transform var(--transition-base);
+  border-radius: var(--radius-md);
+}
+
+.section-toggle:hover {
+  background-color: rgba(26, 95, 122, 0.1);
+}
+
+.section-toggle svg {
+  transition: transform var(--transition-base);
+}
+
+.section-toggle.open svg {
+  transform: rotate(180deg);
+}
+
+.section-title-block {
+  flex-grow: 1;
+}
+
+.section-title {
+  margin: 0;
+  color: var(--color-primary-navy);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.section-subtitle {
+  margin: var(--space-xs) 0 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+}
+
+.section-action {
+  display: flex;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.section-body {
+  padding: var(--space-lg);
+  background-color: var(--color-bg-white);
+  border: 1px solid var(--color-border);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  animation: slideDown var(--transition-base) ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 2000px;
+  }
+}

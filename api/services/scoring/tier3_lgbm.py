@@ -10,6 +10,7 @@ Logic:
 
 from typing import Dict, Any, Optional
 from datetime import datetime
+from pathlib import Path
 
 
 class Tier3Scorer:
@@ -146,9 +147,77 @@ class Tier3Scorer:
         """
         Calculate Commodity Sensitivity + Historical Pattern (0-30 pts total).
 
+        Uses trained LightGBM model if available, otherwise falls back
+        to deterministic scoring for testing.
+
         Returns:
             tuple: (commodity_score, historical_score) where each is 0-15
         """
+        # If real model is loaded, use it for pattern detection
+        if self.model is not None:
+            try:
+                # Prepare feature vector matching training:
+                # [hts_6digit, country_origin_encoded, shipper_age_months, ad_duty_rate,
+                #  er_confidence, ais_anomaly_score, isf_stuffing_country, price_market_ratio]
+
+                hts_code = manifest.get("hts_code", "")
+                hts_6digit = int(hts_code[:6].replace(".", "")) if hts_code else 0
+
+                country_map = {
+                    "VN": 5, "TH": 6, "MY": 1, "CN": 2, "KH": 3, "IN": 4
+                }
+                country_of_origin = manifest.get("country_of_origin", "")
+                country_encoded = country_map.get(country_of_origin, 0)
+
+                shipper_date = manifest.get("shipper_incorporation_date", "")
+                try:
+                    incorp_date = datetime.fromisoformat(shipper_date.replace('Z', '+00:00'))
+                    shipper_age_months = (datetime.utcnow() - incorp_date).days / 30
+                except Exception:
+                    shipper_age_months = 24
+
+                ad_duty_rate = manifest.get("hts_duty_rate_pct", 0)
+                er_confidence = manifest.get("er_shipper_confidence", 0.85)
+                ais_anomaly_score = manifest.get("ais_anomaly_score", 0.0)
+                isf_stuffing = 0 if manifest.get("isf_stuffing_country") == country_of_origin else 1
+                price_declared = manifest.get("price_declared_per_unit", 1.0)
+                market_price = manifest.get("market_price_per_unit", 1.0)
+                price_market_ratio = price_declared / market_price if market_price > 0 else 1.0
+
+                import numpy as np
+                features = np.array([[
+                    hts_6digit,
+                    country_encoded,
+                    shipper_age_months,
+                    ad_duty_rate,
+                    er_confidence,
+                    ais_anomaly_score,
+                    isf_stuffing,
+                    price_market_ratio
+                ]])
+
+                # Get prediction probability
+                pred_proba = self.model.predict(features)[0]
+
+                # pred_proba is the probability of transshipment (0-1)
+                # Use it to score both commodity and pattern dimensions
+                # Commodity driven by duty rate, pattern driven by LightGBM transshipment score
+
+                # Commodity: use duty rate + AD/CVD status
+                commodity_score = self.score_commodity_sensitivity(manifest)
+
+                # Pattern: use LightGBM prediction + origin shift
+                historical_base = self.score_historical_pattern(manifest)
+                # Blend with LightGBM score (increase pattern score if model detects transshipment)
+                pattern_lgbm_boost = pred_proba * 10  # 0-10 point boost
+                pattern_score = min(15, historical_base + pattern_lgbm_boost)
+
+                return round(commodity_score, 1), round(pattern_score, 1)
+            except Exception:
+                # Fall back to deterministic scoring if model inference fails
+                pass
+
+        # Fallback: deterministic scoring (for testing without trained model)
         commodity_score = self.score_commodity_sensitivity(manifest)
         historical_score = self.score_historical_pattern(manifest)
         return commodity_score, historical_score

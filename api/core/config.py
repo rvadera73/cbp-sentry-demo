@@ -27,7 +27,8 @@ class Settings(BaseSettings):
 
     # Services
     senzing_url: Optional[str] = "http://localhost:8250"
-    
+    use_mock_senzing: bool = False  # Set to True if Senzing license unavailable
+
     # Cloud (cloud-neutral)
     gcp_project: Optional[str] = None
     aws_region: Optional[str] = "us-east-1"

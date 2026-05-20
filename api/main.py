@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 
 from core.config import settings
 from core.db import init_db
+from core.senzing_client import init_senzing, is_using_mock
+from core.shipments_db import init_shipments_db
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +26,14 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     logger.info("Starting Sentry CBP API")
     await init_db()
+    init_shipments_db()
+    await init_senzing()
+    if is_using_mock():
+        logger.warning("⚠️  Using MOCK Senzing client — entity resolution uses fixture responses")
+        logger.warning("    To enable real Senzing: obtain license from https://senzing.com/get-started")
+        logger.warning("    and place at ./senzing/senzing.license, then restart with: docker-compose --profile with_senzing up")
+    else:
+        logger.info("✓ Real Senzing client initialized — entity resolution is live")
     yield
     logger.info("Shutting down Sentry CBP API")
 
@@ -59,15 +69,22 @@ async def health_check():
 from services.ingest.routes import router as ingest_router
 from services.scoring.routes import router as scoring_router
 from services.graph.routes import router as graph_router
-
-# from services.entity_resolution.routes import router as er_router
-# from services.referral.routes import router as referral_router
+from services.entity_resolution.routes import router as er_router
+from services.referral.routes import router as referral_router
+from services.horizons.routes import router as horizons_router
+from services.shipments.routes import router as shipments_router
+from services.cord_rag.routes import router as cord_router
+from services.isf.routes import router as isf_router
 
 app.include_router(ingest_router, prefix="/api/ingest", tags=["ingest"])
-app.include_router(scoring_router, tags=["scoring"])
+app.include_router(scoring_router, prefix="/api/scoring", tags=["scoring"])
 app.include_router(graph_router, prefix="/api", tags=["graph"])
-# app.include_router(er_router, prefix="/api/entity-resolution", tags=["entity-resolution"])
-# app.include_router(referral_router, prefix="/api/referral", tags=["referral"])
+app.include_router(er_router, prefix="/api/er", tags=["entity-resolution"])
+app.include_router(referral_router, prefix="/api/referral", tags=["referral"])
+app.include_router(horizons_router, prefix="/api/horizons", tags=["horizons"])
+app.include_router(shipments_router, tags=["shipments"])
+app.include_router(cord_router, prefix="/api/cord", tags=["cord-rag"])
+app.include_router(isf_router)
 
 
 @app.exception_handler(Exception)

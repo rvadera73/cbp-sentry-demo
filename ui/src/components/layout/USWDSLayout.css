@@ -1,0 +1,106 @@
+.uswds-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.usa-header {
+  background-color: #003366;
+  border-bottom: 4px solid #00a4ef;
+  padding: 1rem 0;
+}
+
+.usa-header .usa-logo__text a {
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.usa-header .usa-logo__text a:hover {
+  text-decoration: underline;
+}
+
+.usa-navbar {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  align-items: center;
+}
+
+.usa-nav {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  gap: 2rem;
+  background-color: #003366;
+}
+
+.usa-nav__primary {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  gap: 2rem;
+}
+
+.usa-nav__link {
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  display: block;
+  border-bottom: 3px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.usa-nav__link:hover {
+  border-bottom-color: #00a4ef;
+}
+
+.page-title-section {
+  background-color: white;
+  border-bottom: 2px solid #e5e5e5;
+  padding: 2rem 0;
+}
+
+.page-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: #003366;
+}
+
+.page-subtitle {
+  font-size: 1.125rem;
+  color: #666;
+  margin: 0.5rem 0 0 0;
+}
+
+.main-content {
+  flex: 1;
+  padding: 2rem;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.usa-footer {
+  background-color: #222;
+  color: white;
+  margin-top: auto;
+  padding: 2rem 0;
+  text-align: center;
+}
+
+.usa-footer a {
+  color: #00a4ef;
+  text-decoration: none;
+}
+
+.usa-footer a:hover {
+  text-decoration: underline;
+}

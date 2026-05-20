@@ -1,0 +1,147 @@
+.ai-insight {
+  padding: 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  border-left: 4px solid;
+  background-color: white;
+  animation: insightSlideIn 0.3s ease;
+}
+
+@keyframes insightSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(0);
+  }
+}
+
+.ai-insight-critical {
+  border-left-color: #d62828;
+  background-color: #fff0f0;
+}
+
+.ai-insight-warning {
+  border-left-color: #f5a623;
+  background-color: #fffbf0;
+}
+
+.ai-insight-success {
+  border-left-color: #00a91c;
+  background-color: #f0f8f0;
+}
+
+.ai-insight-info {
+  border-left-color: #0066cc;
+  background-color: #f0f7ff;
+}
+
+.insight-header {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  align-items: flex-start;
+}
+
+.insight-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.ai-insight-critical .insight-icon {
+  color: #d62828;
+}
+
+.ai-insight-warning .insight-icon {
+  color: #f5a623;
+}
+
+.ai-insight-success .insight-icon {
+  color: #00a91c;
+}
+
+.ai-insight-info .insight-icon {
+  color: #0066cc;
+}
+
+.insight-title-section {
+  flex: 1;
+}
+
+.insight-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.confidence-meter {
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 20px;
+}
+
+.confidence-bar {
+  height: 4px;
+  background: linear-gradient(to right, #0066cc, #00a4ef);
+  border-radius: 2px;
+  min-width: 100px;
+  flex: 1;
+}
+
+.confidence-label {
+  font-size: 0.75rem;
+  color: #666;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.insight-message {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
+.insight-detail {
+  font-size: 0.875rem;
+  color: #666;
+  line-height: 1.4;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 3px;
+}
+
+.insight-evidence {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.insight-evidence strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: #1a1a1a;
+  font-weight: 700;
+}
+
+.insight-evidence ul {
+  margin: 0;
+  padding-left: 1.5rem;
+  list-style: disc;
+}
+
+.insight-evidence li {
+  margin-bottom: 0.25rem;
+}
+
+.insight-evidence li:last-child {
+  margin-bottom: 0;
+}

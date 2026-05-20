@@ -1,0 +1,164 @@
+Thoughts about what to present :
+ADDITION if people read before I resent email – Jordan’s idea – open referral package as the CBP officer would…then trace backwards.  Shows the referral package and how it fits into the workflow (lands in an inbox and triggers existing enforcement authority with no new systems added).   So start like the CBP officer early day…. The opening five minutes should run something like: "It's 6am in a CBP trade enforcement office. This email just arrived." Show a formatted referral package. Walk the room through it as an officer would with the confidence score, plain-language risk narrative, entity ownership chain, revenue impact estimate, recommended action. Then say: "Everything in this package was produced overnight by Sentry, operating on data available before this shipment arrives. Nothing here requires CBP to build a case from scratch. The case is already built." Then the rest of the demo is the story of how each element of that package got produced.  Every technical component should connect back to the output referral package
+
+ 
+
+Build one slide that shows the CBP workflow as a simple linear diagram. On the left: CBP sends Sentry the manifest feed (encrypted Excel, 72 hours before arrival). In the middle: Sentry processes overnight. On the right: CBP officer receives referral package in inbox. Below the right side, show the existing CBP enforcement mechanisms that activate: EAPA initiation, hold order, secondary examination request, port director notification. Sentry does not create a new workflow — it fills an existing queue with pre-built, enforcement-ready inputs that previously required months of manual investigation to produce.
+
+Then address the feedback loop explicitly, because Sentry functions strictly as a human-in-the-loop decision support system. CBP retains full discretion over all investigation and enforcement decisions. A continuous feedback loop draws on rolling CBP investigation outcomes to refine and recalibrate models across each 60-day performance gate, ensuring that accuracy and referral quality improve progressively through the base period and into the option periods. Show this as a loop on the slide: CBP investigates → confirms or denies → outcome feeds back into Sentry → Gate 2 models improve. This directly answers how the workflow integration works over time, not just on Day 1.
+
+ 
+
+Item 1:  Referral Packet (12 min) - Walk through the Greenfield Industrial Trading Co. referral package from the proposal as a structured narrated case. Do not regenerate it live through an automated pipeline as we don’t currently have one nor do we have time to build. Instead, open each section and show the underlying data source behind each risk factor.
+
+ 
+
+For Horizon 1, pull the UN Comtrade data on China-Vietnam aluminum billet exports live; the 6.7× increase correlated with AD/CVD order expansion is a real, queryable dataset. Show it.
+For Horizon 2, show the ISF data element 9 discrepancy (stuffing location Foshan vs. declared Vietnamese origin) and the AIS vessel dwell time at Nansha. Both of these are from real commercial APIs.
+For Horizon 3, walk through how each risk factor in the referral package maps to an independent data source. 
+ 
+
+For the ROI/value proposition, the numbers are already in our brief: the platform targets 5+ daily referral packages at ~90% positive predictive value at full operational scale, and if referrals convert at sector median recovery rates, Sentry potentially enables over $50 million in annual revenue protection while materially reducing investigative burden and accelerating enforcement timelines. Have a single slide that anchors this to the option period pricing ceiling of $1.25M and the ROI case should write itself.
+
+ 
+
+Item 2: COTS Product Tailoring (~6 minutes)
+
+What CBP wants: Detail how your COTS product is specifically tailored to CBP's illegal transshipment trade enforcement mission set, providing concrete examples of features, functionalities, or adaptations that directly address the unique challenge.
+
+What to show: This should be our cleanest segment. We have three COTS components with clear tailoring stories:  senzing.com Senzing is a proven commercial entity resolution platform we are applying specifically to the transshipment domain by pre-loading it with trade-specific data (i.e.  corporate registry data from 190+ jurisdictions, commercial bill of lading databases, EAPA enforcement history.) Show the Senzing SDK running against the Greenfield entity scenario and explain the configuration choices you made for the transshipment context (threshold tuning, commodity-specific calibration). This is real and demonstrable. Note that I will have a call with senzing sometime tomorrow or Wednesday to see if they will help.
+
+ 
+
+Confirm that the Sentry solution is an innovative commercial item as defined in the solicitation — a new application of existing commercial technologies (Sentry AI platform + Senzing entity resolution) to CBP's illegal transshipment mission, developed entirely under Precise's own R&D investment. The solution combines real-time manifest ingestion, AI-driven entity resolution across global trade participants, supply chain network graph construction, and confidence-scored referral package generation, representing a novel and innovative new application of these existing commercial technologies operating entirely without exposure to CBP's law enforcement sensitive algorithms or targeting models.
+
+ 
+
+Item 3: Data Sources and Integration (~5 minutes)
+
+What CBP wants: Elaborate on all data sources, CBP-provided, commercial, open-source, proprietary, that factor into referral package generation, describing their relevance and timeliness.
+
+What to show: Walk through Table 1 from the proposal, the data source table is comprehensive and maps each source to its application and access mechanism. For the live portion, demonstrate at least two or three API calls in real time: pull a UN Comtrade query, show an Altana Atlas ISF record (or a cached representative example), and show an AIS vessel track. This proves the integrations are real. The system architecture is cloud-native, deployable in AWS GovCloud or Google Government Cloud (FedRAMP High), with FIPS 140-2/140-3 validated cryptography for all CUI. AI model operations run on Google Cloud Vertex AI for managed machine learning pipeline infrastructure. Have one slide on the data architecture showing the flow from source ingestion to referral package output.
+
+ 
+
+Item 4: Scalability and Quantifiable Metrics (~5 minutes)
+
+What CBP wants: Specific, quantifiable metrics for your solution's scalability and infrastructure requirements needed to achieve full operational scale beyond the pilot.
+
+What to show: The proposal has the specific numbers. At full operational scale (Option Period 2), Sentry processes CBP's complete inbound ocean manifest stream (30,000+ entries daily), applying Horizon 1 corridor pre-weighting and Horizon 2 ISF analysis prior to the 72-hour trigger, generating 5+ daily referral packages at ~90% positive predictive value, focused on high-risk corridors including aluminum extrusions, solar modules, steel, and apparel.
+
+Map these numbers directly to the SOW performance gates on a single slide: Gate 1 is 2 referral packages per week at 10% accuracy; Gate 2 is 1 per day at 30%; Gate 3 is 2 per day at 50%; Option Period 2 is 5 per day at 90%. Show the progression clearly and explain that the scalability path is incremental and each gate feeds the next through CBP's own feedback data.
+
+ 
+
+Item 5: AI Methodology, Accuracy, Explainability, and Transparency (~10 minutes)
+
+What CBP wants: Clear explanations of AI techniques, methodologies and algorithms; how we ensure unbiased, explainable, and transparent systems; precisely how we measure and validate AI accuracy; how end users can understand the AI's reasoning; and how our solution will meet or exceed the SOW's specific accuracy definitions.
+
+ 
+
+This is OUR highest-risk segment because CBP is asking to see the AI working.
+
+Lead with Senzing explainability as it’s demonstrable. Explainability is embedded directly in the scoring pipeline through Sentry's explainable AI Risk Attribution Engine. Senzing provides full technical explainability through dedicated APIs, including why_entities, why_record_in_entity, and how_entity_by_entity_id, which expose match rationale and entity assembly history in auditable detail. Human-readable MATCH_KEY outputs identify precisely which data elements drove each entity linkage. Run these APIs live on the Greenfield scenario. This is real and directly responsive to what CBP is asking.
+
+Then walk through the four-tier model architecture as a methodology explanation, not as a live demo. Show Table 2 from your solution brief. Explain that Tiers 1 and 2 (Senzing entity resolution and AIS anomaly detection) are operational now. Sentry's AIS behavioral model achieves 0.91 precision and 0.75 AUC on vessel behavioral anomaly detection across dwell time outliers, disabled AIS transmitter events, and vessel gatherings consistent with ship-to-ship cargo transfers.
+
+For Tiers 3 and 4 (LightGBM and BBN), be truthful and strategic: frame it as the cold-start mitigation already written into the proposal. During Days 0–60, the entity graph and ML models will have limited CBP-specific training data. Precise mitigates this by pre-loading Senzing's entity graph with commercial trade flow data, known transshipment hub intelligence, and publicly available EAPA enforcement history before the base period begins. High-precision deterministic signals like ISF container stuffing conflicts, OpenSanctions screening, and entity registration timeline flags ensure operationally grounded referral generation from day one, without waiting for model training. The supervised model trains on CBP investigation outcomes as they come in and we cannot train it before we have those outcomes. This is not a gap; it is an architecturally sound position.
+
+For accuracy measurement, show Table 3 from the proposal/the gate progression. Explain that the accuracy methodology is validated through analogous work: Precise's analogous import risk ML models for FDA demonstrate the maturity of this methodology: AUC-based evaluation, ensemble modeling across X number (100?) models to quantify uncertainty, and approaches specifically designed for imbalanced data. These are the same characteristics present in transshipment detection. Accuracy progression is not a projection, but a tested methodology applied to a new domain.
+
+ 
+
+Item 6: Relevant Experience and Operational Fit (~5 minutes)
+
+What CBP wants: Explain how your company's experience directly relates to the requirements of this solicitation to identify illegal transshipment in the supply chain.
+
+What to show: Lead with the three FDA analogues from our proposal; they are strong and directly on point. At FDA Office of Inspections and Investigations, Precise built and currently operates an ML-based analytics system that prioritizes evaluations of import entry filers and customs brokers by detecting behavioral anomalies and inconsistencies across submission patterns. FDA's challenge is structurally identical to CBP's;  both require risk scoring across a large population of import entities using behavioral signals, document patterns, and historical anomalies, where confirmed violations are rare relative to compliant submissions. The same entity-level risk scoring engine, imbalanced-class ML methodology, and human-in-the-loop governance framework from that program are proposed for the CBP pilot. Close with the FISMA High ATO and the 2021 Government Innovation Award as proof of operational credibility.
+
+ 
+
+Timing Summary
+
+
+
+Segment
+
+Time
+
+Opening: Three-Horizon Framework overview + Day 1 framing
+
+3 min
+
+Referral Packet walkthrough (live data sources behind each risk factor)
+
+12 min
+
+COTS tailoring + Senzing live demo
+
+8 min
+
+Data sources (2–3 live API demonstrations)
+
+5 min
+
+Scalability / gate progression
+
+4 min
+
+AI methodology, Senzing explainability APIs live, model architecture
+
+10 min
+
+Experience / FDA analogues
+
+3 min
+
+Total
+
+45 min
+
+The demo stays fully within what we can credibly show, is mapped precisely to CBP's stated requests, and every framing choice is anchored in language submitted in the proposal.
+
+ 
+
+So with ALL THAT above in the demo/oral pitch, what actually needs to be built?
+ 
+
+Component 1: Senzing instance with loaded scenario data — 3–4 days, 1 developer
+
+This is the highest-value, most achievable build item and should be the centerpiece of the demo. Senzing is a real commercial SDK with a developer sandbox. The task is to install it, load a representative entity dataset covering the Greenfield-style scenario (Vietnamese trading company, Hong Kong intermediate holding, Chinese manufacturing parent, shared freight forwarder, overlapping director identities), and verify that the entity resolution APIs — why_entities, why_record_in_entity, how_entity_by_entity_id — return the relationship chain described in the referral package. The data loaded can be synthetic but realistic corporate registry records drawn from the structure already described in the proposal Tables 3-5. The output will be real Senzing output, which is impressive on its own and why we included them in the solution. This is the anchor demo element.
+
+ 
+
+Component 2: Manifest Ingestion Module — 1–2 days, 1 developer
+
+We committed to developing this during the base period, so it doesn't need to be complete BUT it needs to be real enough to show. Not sure what we’re doing for PRIME (work for FDA) but a Python script that reads a password-protected Excel file in the format CBP would send (Port of Unlading, Port of Lading, Arrival Date, Bill Number, HTS Code, Shipper, Consignee, Cargo Description, Declared Country of Origin — the exact fields listed in the SOW), parses it into structured records, and flags anomalous or incomplete fields is all we need. Add one rule: if the declared country of origin is Vietnam and the HTS code falls in the 7604 range, elevate to watchlist.
+
+ 
+
+Component 3: Live public API pulls — 1 day, 1 developer
+
+Several of our described data sources are free public APIs that can be demonstrated:
+
+UN Comtrade is queryable at no cost and will return the China-Vietnam aluminum billet export data cited in Horizon 1 in real time. The 6.7× increase from $180M to $1.2B is a real, queryable data point. USITC HTS data and AD/CVD proceedings from Commerce ACCESS are also public. The OFAC SDN list is free and we can show a live entity screening call against it. These three live API demonstrations, run during the session, prove data integration capability without requiring paid subscriptions we don’t yet have (see comment 5 for Altana atlas api).
+
+ 
+
+Component 4: Rules-based confidence scoring layer — 1–2 days
+
+This is the honest substitute for the ML pipeline that doesn't yet exist. Build a simple scoring function that takes the outputs of the deterministic signals — ISF stuffing location conflict (weight: high), AIS dwell time anomaly (weight: high), Senzing entity linkage to known Chinese manufacturer (weight: high), origin-shifting pattern in prior shipments (weight: medium), value-add price anomaly (weight: medium) — and combine them into a 0–100 confidence score. For the Greenfield scenario, it should output approximately 87/100, matching what you submitted. This is explicitly what our proposal described as Gate 1: high-precision deterministic signals that ensure operationally grounded referral generation from day one, without waiting for model training. Do not call it "LightGBM." Call it what it is: deterministic signal scoring operating prior to the supervised model training phase that begins with CBP feedback data.
+
+ 
+
+Component 5: Referral package output template — 0.5 days
+
+Build a script that takes the outputs of Components 2–4 and populates the referral package tables you already designed in Section 3 of your brief. The output should be a formatted PDF or Word document that looks like a professional referral package with real field values drawn from the entity data loaded into Senzing and the manifest input. This is what CBP will look at and say "yes, this is what we would receive from you."
+
+ 
+
+This demo strategy is defensible and honest: specific trained models tiers activate after Gate 1 produces CBP investigation outcomes to train on. You have no CBP investigation outcomes yet because the pilot has not started.
+
+ 
+
+The Altana Atlas API for ISF data and Spire/MarineTraffic for AIS are paid subscriptions. Rahul thinks we need to pear for the Atlas API, I’m not sure.  Instead, perhaps we could use cached representative data — a CSV file with AIS port call history in the format those APIs return — and be transparent that this is representative data from the vendor's data format and not claim it as live Not sure how much it is so a decision point.

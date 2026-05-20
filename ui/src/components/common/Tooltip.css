@@ -1,0 +1,105 @@
+.tooltip-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip-trigger {
+  cursor: help;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.tooltip-trigger:hover .tooltip-icon,
+.tooltip-trigger:focus .tooltip-icon {
+  color: #0066cc;
+  opacity: 1;
+}
+
+.tooltip-icon {
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.tooltip-content {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 0.5rem;
+  background-color: #1a1a1a;
+  color: white;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  max-width: 250px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  animation: tooltipFadeIn 0.2s ease;
+}
+
+.tooltip-content::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 4px solid #1a1a1a;
+}
+
+.tooltip-title {
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+  color: #00a4ef;
+}
+
+.tooltip-definition {
+  margin-bottom: 0.5rem;
+}
+
+.tooltip-example {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 0.8rem;
+  font-style: italic;
+  color: #e0e0e0;
+}
+
+@keyframes tooltipFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .tooltip-content {
+    position: fixed;
+    bottom: auto;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 280px;
+  }
+
+  .tooltip-content::after {
+    display: none;
+  }
+}

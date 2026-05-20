@@ -1,0 +1,126 @@
+.collapsible-card {
+  background: white;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s ease;
+}
+
+.collapsible-card:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 1rem;
+  background: linear-gradient(to right, #f9f9f9, #ffffff);
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+  transition: background-color 0.2s ease;
+}
+
+.collapsible-header:hover {
+  background: linear-gradient(to right, #f0f0f0, #f5f5f5);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.header-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #0066cc;
+  font-size: 1.25rem;
+}
+
+.header-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #003366;
+  transition: color 0.2s ease;
+}
+
+.collapsible-header:hover .header-title {
+  color: #0066cc;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  margin-left: 0.5rem;
+}
+
+.badge-red {
+  background-color: #ffcccc;
+  color: #9b2c2c;
+}
+
+.badge-yellow {
+  background-color: #fff4cc;
+  color: #8b5a00;
+}
+
+.badge-green {
+  background-color: #d4f4dd;
+  color: #004d00;
+}
+
+.badge-blue {
+  background-color: #e7f4ff;
+  color: #003d82;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: #666;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  padding: 1.5rem;
+  border-top: 1px solid #e5e5e5;
+  animation: contentSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes contentSlideIn {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 2000px;
+  }
+}
+
+.collapsible-content > *:first-child {
+  margin-top: 0;
+}
+
+.collapsible-content > *:last-child {
+  margin-bottom: 0;
+}

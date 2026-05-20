@@ -1,9 +1,10 @@
-"""Senzing entity resolution client"""
+"""Senzing entity resolution client with mock fallback"""
 
 import httpx
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 from core.config import settings
+from core.mock_senzing_client import MockSenzingClient
 
 logger = logging.getLogger(__name__)
 
@@ -85,22 +86,47 @@ class SenzingClient:
         """Close the HTTP client"""
         await self.client.aclose()
 
-# Global client instance
-_senzing_client: Optional[SenzingClient] = None
+# Global client instance (can be SenzingClient or MockSenzingClient)
+_senzing_client: Optional[Union[SenzingClient, MockSenzingClient]] = None
+_use_mock: bool = False
+
 
 async def init_senzing():
-    """Initialize Senzing client"""
-    global _senzing_client
+    """Initialize Senzing client with automatic fallback to mock"""
+    global _senzing_client, _use_mock
+
+    # Check if mock mode is explicitly requested
+    if settings.use_mock_senzing:
+        logger.info("Using MOCK Senzing client (license unavailable or disabled)")
+        _senzing_client = MockSenzingClient()
+        _use_mock = True
+        return _senzing_client
+
+    # Try real Senzing first
     _senzing_client = SenzingClient()
     health = await _senzing_client.health()
-    if not health:
-        logger.warning("Senzing service not available — using mock responses")
+
+    if health:
+        logger.info("Senzing service is healthy — using real client")
+        _use_mock = False
+        return _senzing_client
+
+    # Fall back to mock
+    logger.warning("Senzing service unavailable — falling back to MOCK client")
+    logger.warning("To use real Senzing: place license at ./senzing/senzing.license and run: docker-compose up")
+    _senzing_client = MockSenzingClient()
+    _use_mock = True
     return _senzing_client
 
-def get_senzing_client() -> SenzingClient:
+
+def get_senzing_client() -> Union[SenzingClient, MockSenzingClient]:
     """Get the Senzing client instance"""
     global _senzing_client
     if _senzing_client is None:
-        # Initialize synchronously if needed
-        raise RuntimeError("Senzing client not initialized")
+        raise RuntimeError("Senzing client not initialized — call init_senzing() first")
     return _senzing_client
+
+
+def is_using_mock() -> bool:
+    """Check if using mock client"""
+    return _use_mock

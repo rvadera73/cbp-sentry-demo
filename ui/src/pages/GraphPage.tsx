@@ -1,47 +1,59 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useWorkflow } from '../context/WorkflowContext'
+import { api } from '../services/api'
+import type { GraphNode, GraphLink } from '../types/sentry'
 
-interface GraphNode {
-  id: string
-  label: string
-  type: string
-  jurisdiction?: string
-  risk_score: number
-  imo?: string
-  metadata?: Record<string, any>
-  position?: { x: number; y: number }
-}
-
-interface GraphEdge {
-  source: string
-  target: string
-  label: string
-  confidence: number
-}
-
-interface GraphData {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-  metadata?: Record<string, any>
-}
-
-interface GraphPageProps {
-  graph?: GraphData
-}
-
-const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
+const GraphPage: React.FC = () => {
+  const navigate = useNavigate()
+  const { state } = useWorkflow()
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [graphNodes, setGraphNodes] = useState<GraphNode[]>([])
+  const [graphLinks, setGraphLinks] = useState<GraphLink[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const ariaLiveRef = useRef<HTMLDivElement>(null)
+
+  // Load graph on mount
+  useEffect(() => {
+    loadGraph()
+  }, [state.manifestId])
+
+  const loadGraph = async () => {
+    if (!state.manifestId) {
+      setError('No manifest ID available')
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await api.getShipmentGraph(state.manifestId)
+      if (response) {
+        setGraphNodes(response.nodes)
+        setGraphLinks(response.links)
+      } else {
+        setError('Failed to load graph')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // Handle node click
   const handleNodeClick = (node: GraphNode) => {
     if (selectedNode?.id === node.id) {
-      // Deselect on second click
       setSelectedNode(null)
       announceToScreenReader(`Deselected ${node.label}`)
     } else {
-      // Select node
       setSelectedNode(node)
-      announceToScreenReader(`Selected ${node.label}, Type: ${node.type}, Risk Score: ${node.risk_score}`)
+      announceToScreenReader(
+        `Selected ${node.label}, Type: ${node.type}, Risk Score: ${node.risk_score || 'N/A'}`
+      )
     }
   }
 
@@ -53,30 +65,34 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
   }
 
   // Get connected entities for sidebar
-  const getConnectedEntities = (): Array<{ node: GraphNode; relationship: string; confidence: number }> => {
-    if (!selectedNode || !graph) return []
+  const getConnectedEntities = (): Array<{ node: GraphNode; relationship: string; confidence?: number }> => {
+    if (!selectedNode) return []
 
-    return graph.edges
-      .filter(
-        (edge) =>
-          edge.source === selectedNode.id || edge.target === selectedNode.id
-      )
-      .map((edge) => {
-        const targetId = edge.source === selectedNode.id ? edge.target : edge.source
-        const targetNode = graph.nodes.find((n) => n.id === targetId)
+    return graphLinks
+      .filter((link) => link.source === selectedNode.id || link.target === selectedNode.id)
+      .map((link) => {
+        const targetId = link.source === selectedNode.id ? link.target : link.source
+        const targetNode = graphNodes.find((n) => n.id === targetId)
         return {
           node: targetNode!,
-          relationship: edge.label,
-          confidence: edge.confidence,
+          relationship: link.relationship,
+          confidence: link.confidence,
         }
       })
   }
 
-  // Handle empty graph gracefully
-  if (!graph) {
+  if (loading) {
     return (
       <div className="p-6">
         <p className="text-sentry-slate">Loading graph...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800">
+        {error}
       </div>
     )
   }
@@ -105,13 +121,13 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
               Entity Graph Explorer
             </h1>
             <p className="text-sm text-sentry-slate mt-1">
-              {graph?.nodes?.length || 0} entities, {graph?.edges?.length || 0} relationships
+              {graphNodes.length} entities, {graphLinks.length} relationships
             </p>
           </div>
 
           {/* Node List */}
           <div className="p-6 space-y-3 overflow-y-auto h-[calc(100%-80px)]">
-            {graph?.nodes?.map((node) => (
+            {graphNodes.map((node) => (
               <div
                 key={node.id}
                 className={`node p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -134,8 +150,8 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
                 <div className="font-semibold text-gray-900">{node.label}</div>
                 <div className="text-sm text-sentry-slate mt-1">
                   Type: {node.type}
-                  {node.jurisdiction && ` • ${node.jurisdiction}`}
-                  {node.risk_score > 0 && ` • Risk: ${node.risk_score}/100`}
+                  {node.country && ` • ${node.country}`}
+                  {node.risk_score && node.risk_score > 0 && ` • Risk: ${node.risk_score}/100`}
                 </div>
               </div>
             ))}
@@ -168,18 +184,18 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
                 <p className="text-gray-900 mt-1">{selectedNode.type}</p>
               </div>
 
-              {/* Jurisdiction */}
-              {selectedNode.jurisdiction && (
+              {/* Country */}
+              {selectedNode.country && (
                 <div>
                   <label className="text-sm font-semibold text-gray-600">
-                    Jurisdiction
+                    Country
                   </label>
-                  <p className="text-gray-900 mt-1">{selectedNode.jurisdiction}</p>
+                  <p className="text-gray-900 mt-1">{selectedNode.country}</p>
                 </div>
               )}
 
               {/* Risk Score */}
-              {typeof selectedNode.risk_score === 'number' && selectedNode.risk_score >= 0 && (
+              {selectedNode.risk_score && selectedNode.risk_score >= 0 && (
                 <div>
                   <label className="text-sm font-semibold text-gray-600">
                     Risk Score
@@ -207,7 +223,7 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
                         </div>
                         <div className="text-gray-600">{conn.node.label}</div>
                         <div className="text-xs text-gray-500">
-                          Confidence: {(conn.confidence * 100).toFixed(0)}%
+                          Confidence: {conn.confidence ? (conn.confidence * 100).toFixed(0) : 'N/A'}%
                         </div>
                       </li>
                     ))}
@@ -217,7 +233,7 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
 
               {/* Why Connected Button */}
               <button
-                onClick={() => {}}
+                onClick={() => navigate('/entity-resolution')}
                 className="w-full mt-4 px-4 py-2 bg-sentry-teal text-white rounded font-medium hover:bg-sentry-dark-teal transition-colors"
               >
                 Why Connected?
@@ -230,6 +246,16 @@ const GraphPage: React.FC<GraphPageProps> = ({ graph }) => {
           )}
         </div>
       </aside>
+
+      {/* Footer Navigation */}
+      <div className="fixed bottom-4 right-4 flex gap-3">
+        <button
+          onClick={() => navigate('/referral/:manifestId')}
+          className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50"
+        >
+          ← Back to Referral
+        </button>
+      </div>
     </div>
   )
 }

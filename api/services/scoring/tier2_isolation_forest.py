@@ -12,6 +12,7 @@ Logic:
 
 from typing import Dict, Any, Optional
 import numpy as np
+from pathlib import Path
 
 
 class Tier2Scorer:
@@ -26,24 +27,36 @@ class Tier2Scorer:
         """
         self.model_path = model_path
         self.model = None
+        self.scaler = None
         self._load_model()
 
     def _load_model(self):
-        """Load pre-trained Isolation Forest model"""
+        """Load pre-trained Isolation Forest model and scaler"""
         if self.model_path:
             try:
                 import pickle
                 with open(self.model_path, 'rb') as f:
                     self.model = pickle.load(f)
+                # Also load scaler from same directory
+                model_dir = Path(self.model_path).parent
+                scaler_path = model_dir / "scaler.pkl"
+                if scaler_path.exists():
+                    with open(scaler_path, 'rb') as f:
+                        self.scaler = pickle.load(f)
             except Exception:
                 # Model not available, use synthetic scoring for testing
                 self.model = None
+                self.scaler = None
         else:
             self.model = None
+            self.scaler = None
 
     def score(self, manifest: Dict[str, Any]) -> float:
         """
         Calculate Routing Consistency score (0-15 points).
+
+        Uses trained Isolation Forest model if available, otherwise falls back
+        to deterministic scoring for testing.
 
         Args:
             manifest: Dict with AIS data (ais_dwell_days, ais_dwell_baseline, etc.)
@@ -56,12 +69,44 @@ class Tier2Scorer:
 
         dwell_days = manifest.get("ais_dwell_days", 0)
         baseline_dwell = manifest.get("ais_dwell_baseline", 2.1)
-        port_of_lading = manifest.get("port_of_lading", "")
 
         # If no dwell data, return low score
         if dwell_days == 0:
             return 0.0
 
+        # If real model is loaded, use it
+        if self.model is not None and self.scaler is not None:
+            try:
+                # Prepare feature vector [dwell_days, transit_days, cost_delta, rerouting_count]
+                transit_days = manifest.get("ais_transit_days", 20)
+                cost_delta = manifest.get("ais_cost_delta", 0)
+                rerouting_count = manifest.get("ais_rerouting_count", 0)
+
+                features = np.array([[
+                    dwell_days,
+                    transit_days,
+                    cost_delta,
+                    rerouting_count
+                ]])
+
+                # Scale and get anomaly score
+                features_scaled = self.scaler.transform(features)
+                anomaly_score = self.model.decision_function(features_scaled)[0]
+
+                # Anomaly scores from IF range from -1 to +1
+                # Normalize to 0-1 where 1 is most anomalous
+                normalized_score = (anomaly_score + 1) / 2
+                normalized_score = max(0, min(1, normalized_score))
+
+                # Scale to 0-15 point range
+                score = normalized_score * 15
+
+                return round(score, 1)
+            except Exception:
+                # Fall back to deterministic scoring if model inference fails
+                pass
+
+        # Fallback: deterministic scoring (for testing without trained model)
         # Calculate anomaly ratio
         anomaly_ratio = dwell_days / baseline_dwell if baseline_dwell > 0 else 1.0
 
