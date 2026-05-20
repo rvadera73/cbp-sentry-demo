@@ -29,12 +29,27 @@ export default function CBPOfficerDashboard() {
 
   const fetchShipments = async () => {
     try {
-      const response = await fetch('http://localhost:8005/shipments?limit=100');
-      if (!response.ok) throw new Error('Failed to fetch');
+      // Detect API URL based on deployment environment
+      const hostname = window.location.hostname;
+      let apiUrl = '/api';
+
+      // Cloud Run: extract hash from sentry-ui-{HASH}.run.app
+      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
+      if (cloudRunMatch) {
+        const [, hash, region] = cloudRunMatch;
+        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
+      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+        // For other environments, try to construct API URL
+        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
+      }
+
+      // Call sentry-api (NOT sentry-data directly)
+      const response = await fetch(`${apiUrl}/shipments?limit=100`);
+      if (!response.ok) throw new Error('Failed to fetch shipments');
       const data = await response.json();
-      setShipments(data.data || []);
+      setShipments(data.shipments || []);
     } catch (error) {
-      console.error('Fetch error:', error);
+      console.error('Fetch shipments error:', error);
     } finally {
       setLoading(false);
     }

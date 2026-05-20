@@ -31,9 +31,20 @@ export default function DashboardPageUSWDS() {
 
   const fetchShipments = async () => {
     try {
-      const response = await fetch('http://localhost:8005/shipments');
+      const hostname = window.location.hostname;
+      let apiUrl = '/api';
+
+      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
+      if (cloudRunMatch) {
+        const [, hash, region] = cloudRunMatch;
+        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
+      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
+      }
+
+      const response = await fetch(`${apiUrl}/shipments`);
       const data = await response.json();
-      setShipments(data.data || []);
+      setShipments(data.shipments || []);
     } catch (error) {
       console.error('Failed to fetch shipments:', error);
     } finally {

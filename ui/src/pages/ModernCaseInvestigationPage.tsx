@@ -68,20 +68,31 @@ export default function ModernCaseInvestigationPage() {
     try {
       let shipment: Case | null = null;
 
+      const hostname = window.location.hostname;
+      let apiUrl = '/api';
+
+      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
+      if (cloudRunMatch) {
+        const [, hash, region] = cloudRunMatch;
+        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
+      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
+        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
+      }
+
       if (shipmentId) {
-        const response = await fetch(`http://localhost:8005/shipments`);
+        const response = await fetch(`${apiUrl}/shipments`);
         const data = await response.json();
-        if (data.data) {
-          shipment = data.data.find((s: Case) => s.id === shipmentId) || null;
+        if (data.shipments) {
+          shipment = data.shipments.find((s: Case) => s.id === shipmentId) || null;
           if (shipment) {
             setCaseData(shipment);
           }
         }
       } else {
-        const response = await fetch('http://localhost:8005/shipments?limit=1');
+        const response = await fetch(`${apiUrl}/shipments?limit=1`);
         const data = await response.json();
-        if (data.data && data.data.length > 0) {
-          shipment = data.data[0];
+        if (data.shipments && data.shipments.length > 0) {
+          shipment = data.shipments[0];
           setCaseData(shipment);
         }
       }
