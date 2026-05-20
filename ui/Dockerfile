@@ -33,7 +33,7 @@ RUN mkdir -p /var/cache/nginx/client_temp /var/cache/nginx/proxy_temp && \
 RUN printf '#!/bin/sh\ntest -f /usr/share/nginx/html/index.html && curl -sf http://localhost/ > /dev/null || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh
 
 # Health check
-HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
   CMD /healthcheck.sh
 
 EXPOSE 80
