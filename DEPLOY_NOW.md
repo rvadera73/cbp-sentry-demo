@@ -23,38 +23,85 @@
 
 ---
 
-### Step 2: Run GCP Bootstrap (15 min)
+### Step 2: Create GCP Service Account & Get JSON Key (10 min)
 
-```bash
-cd ~/cbp-sentry
+Go to **Google Cloud Console**: https://console.cloud.google.com
 
-# Set your GCP project
-export GCP_PROJECT_ID=cbp-sentry
+Select project: **cbp-sentry**
 
-# Run bootstrap (automated setup)
-bash scripts/setup_gcp_staging.sh
-```
+#### 2.1 Create Service Account
 
-**Watch for the output at the end** — you'll see 6 GitHub Secrets values.
+1. **IAM & Admin** → **Service Accounts** → **Create Service Account**
+   - Name: `sentry-deploy`
+   - Click "Create and Continue"
 
-**SAVE THE OUTPUT** — you'll copy these in Step 3.
+2. Grant roles:
+   - `Cloud Run Admin`
+   - `Artifact Registry Admin`
+   - `Service Account User`
+   - Click "Continue" then "Done"
+
+#### 2.2 Create and Download JSON Key
+
+1. In **Service Accounts**, click `sentry-deploy` (the one you just created)
+2. Click **Keys** tab → **Add Key** → **Create new key**
+3. Select **JSON** format → **Create**
+4. Browser auto-downloads `sentry-deploy-xxxxx.json`
+   - **SAVE THIS FILE** — you'll paste its contents into GitHub
+
+#### 2.3 Create Artifact Registry
+
+1. Go to **Artifact Registry** → **Repositories** → **Create Repository**
+   - Name: `cbp-sentry`
+   - Format: `Docker`
+   - Region: `us-central1`
+   - Click "Create"
+
+#### 2.4 Enable Required APIs
+
+1. **APIs & Services** → **Enable APIs and Services**
+2. Enable:
+   - ✅ Cloud Run Admin API
+   - ✅ Artifact Registry API
+   - ✅ Service Account User API
+
+**You now have:**
+- ✅ Service account created
+- ✅ JSON key downloaded
+- ✅ Artifact Registry ready
+- ✅ Database URL (from Neon)
 
 ---
 
 ### Step 3: Add GitHub Secrets (5 min)
 
-1. Go to: https://github.com/rahulvadera/cbp-sentry/settings/secrets/actions
-2. Click "New repository secret" × 6 times
-3. Add these secrets:
+Go to: **https://github.com/rahulvadera/cbp-sentry/settings/secrets/actions**
 
-| Secret | Value |
-|--------|-------|
-| `GCP_PROJECT_ID` | `cbp-sentry` |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | _(from Step 2 script output - "projects/..." string)_ |
-| `GCP_SERVICE_ACCOUNT_EMAIL` | `sentry-deploy@cbp-sentry.iam.gserviceaccount.com` |
-| `DATABASE_URL` | `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require` |
-| `VESSELAPI_KEY` | `placeholder-key` |
-| `OFAC_API_KEY` | `placeholder-key` |
+Click **"New repository secret"** and add **4 secrets**:
+
+#### Secret 1: GCP_PROJECT_ID
+- **Name**: `GCP_PROJECT_ID`
+- **Value**: `cbp-sentry`
+
+#### Secret 2: GCP_SA_KEY
+- **Name**: `GCP_SA_KEY`
+- **Value**: Copy the entire contents of the JSON key file you downloaded in Step 2.2
+  - Open `sentry-deploy-xxxxx.json` in a text editor
+  - Copy ALL the text (it's a JSON object)
+  - Paste into the Secret field
+
+#### Secret 3: DATABASE_URL
+- **Name**: `DATABASE_URL`
+- **Value**: `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+
+#### Secret 4: VESSELAPI_KEY & OFAC_API_KEY (optional placeholders)
+- **Name**: `VESSELAPI_KEY`
+- **Value**: `placeholder-key`
+
+- **Name**: `OFAC_API_KEY`
+- **Value**: `placeholder-key`
+
+**Total: 4 required + 2 optional = 6 secrets**
 
 ---
 

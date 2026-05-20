@@ -43,19 +43,38 @@ If you want a dedicated database:
 
 ---
 
-## GCP Bootstrap (15 minutes)
+## GCP Setup via Google Console (15 minutes)
 
-Run the bootstrap script with your GCP project:
+If you have browser access to Google Console (no gcloud CLI):
 
-```bash
-cd ~/cbp-sentry
-export GCP_PROJECT_ID=cbp-sentry
-bash scripts/setup_gcp_staging.sh
-```
+1. Go to **https://console.cloud.google.com**
+2. Select project: **cbp-sentry**
+3. Create service account (IAM & Admin → Service Accounts):
+   - Name: `sentry-deploy`
+   - Roles: Cloud Run Admin, Artifact Registry Admin, Service Account User
+   - **Copy the email address** (format: `sentry-deploy@cbp-sentry.iam.gserviceaccount.com`)
 
-**Output**: Prints GitHub Secrets values
+4. Create Artifact Registry (Artifact Registry → Create Repository):
+   - Name: `cbp-sentry`
+   - Format: Docker
+   - Region: `us-central1`
 
-**Keep the printed output visible** — you'll need to copy 6 secrets to GitHub.
+5. Create Workload Identity Federation (IAM & Admin → Workload Identity Federation):
+   - Pool name: `github-actions`
+   - Provider type: OpenID Connect (OIDC)
+   - Provider ID: `github`
+   - Issuer URL: `https://token.actions.githubusercontent.com`
+   - Attribute mapping:
+     ```
+     google.subject=assertion.sub
+     attribute.repository=assertion.repository
+     attribute.environment=assertion.environment
+     ```
+   - **Copy the provider resource name** (format: `projects/XXX/locations/us-central1/workloadIdentityPools/github-actions/providers/github`)
+
+6. Enable APIs: Cloud Run, Artifact Registry, Cloud SQL Admin, IAM, Service Usage
+
+**Keep these values handy** — you'll need them for GitHub Secrets in the next step.
 
 ---
 
@@ -67,12 +86,12 @@ Go to: https://github.com/rahulvadera/cbp-sentry/settings/secrets/actions
 
 | Secret Name | Value | Source |
 |---|---|---|
-| `GCP_PROJECT_ID` | `cbp-sentry` | From script output |
-| `GCP_WORKLOAD_IDENTITY_PROVIDER` | _(from script output: "projects/..." string)_ | From script output |
-| `GCP_SERVICE_ACCOUNT_EMAIL` | `sentry-deploy@cbp-sentry.iam.gserviceaccount.com` | From script output |
-| `DATABASE_URL` | `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require` | Neon database |
-| `VESSELAPI_KEY` | `placeholder-key` | Can update later |
-| `OFAC_API_KEY` | `placeholder-key` | Can update later |
+| `GCP_PROJECT_ID` | `cbp-sentry` | GCP project ID |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/XXX/locations/us-central1/workloadIdentityPools/github-actions/providers/github` | From GCP Console (Step 2.3) |
+| `GCP_SERVICE_ACCOUNT_EMAIL` | `sentry-deploy@cbp-sentry.iam.gserviceaccount.com` | From GCP Console (Step 2.1) |
+| `DATABASE_URL` | `postgresql://neondb_owner:npg_MsWUixB5V0yS@ep-square-art-apa1gid4-pooler.c-7.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require` | Neon database (already have) |
+| `VESSELAPI_KEY` | `placeholder-key` | Update with real key later |
+| `OFAC_API_KEY` | `placeholder-key` | Update with real key later |
 
 **Steps to add each**:
 1. Click "New repository secret"
