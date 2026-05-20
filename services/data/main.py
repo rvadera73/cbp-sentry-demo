@@ -15,134 +15,81 @@ logger = logging.getLogger(__name__)
 
 
 def seed_demo_data():
-    """Seed database with manifest data from JSON file"""
+    """
+    SINGLE SOURCE OF TRUTH: Load manifest JSON into database
+
+    The manifest JSON is the authoritative data source.
+    All shipment IDs come from manifest (SHP-000001, etc.)
+    Database is populated ONCE from manifest JSON on first startup.
+    No hardcoded fallback data — manifests file is REQUIRED.
+    """
     conn = sqlite3.connect("/app/data/cbp_sentry.db")
     cursor = conn.cursor()
 
-    # Check if demo data already exists
+    # Check if data already exists
     cursor.execute("SELECT COUNT(*) FROM shipments")
     count = cursor.fetchone()[0]
     if count > 0:
-        logger.info(f"Data already exists ({count} records), skipping seed")
+        logger.info(f"✅ Database already seeded ({count} records), skipping")
         conn.close()
         return
 
-    # Try to load from manifest JSON file
-    demo_shipments = []
+    # REQUIRED: Load manifest JSON (no fallback, no demo data, no shortcuts)
     manifest_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
 
-    logger.info(f"Checking for seed file at: {manifest_file}")
-    logger.info(f"File exists: {manifest_file.exists()}")
+    logger.info(f"📦 INITIALIZING DATABASE from manifest JSON")
+    logger.info(f"   Looking for: {manifest_file}")
 
-    if manifest_file.exists():
-        logger.info(f"✅ LOADING manifest data from {manifest_file}")
-        try:
-            with open(manifest_file) as f:
-                manifest_records = json.load(f)
+    if not manifest_file.exists():
+        error_msg = (
+            f"\n\n❌ CRITICAL: Manifest file not found at {manifest_file}\n"
+            f"   This file MUST exist to populate the database.\n"
+            f"   All shipments in the system come from this manifest.\n\n"
+            f"   Fix:\n"
+            f"   1. Ensure services/data/seed_data/manifest_feb_march_2026_with_isf.json exists locally\n"
+            f"   2. Run: docker-compose down -v && docker-compose up\n"
+            f"   3. OR: bash scripts/unified-setup.sh local\n\n"
+        )
+        logger.error(error_msg)
+        conn.close()
+        raise FileNotFoundError(error_msg)
 
-            # Convert manifest records to shipment format
-            for m in manifest_records:
-                demo_shipments.append({
-                    "id": m.get("id", ""),
-                    "manifest_id": m.get("manifest_id", ""),
-                    "shipper_name": m.get("shipper_name", ""),
-                    "consignee_name": m.get("consignee_name", ""),
-                    "origin_country": m.get("origin_country", ""),
-                    "destination_country": m.get("destination_country", ""),
-                    "hs_code": m.get("hs_code", ""),
-                    "declared_value_usd": m.get("declared_value_usd", 0),
-                    "declared_weight_kg": m.get("declared_weight_kg", 0),
-                    "vessel_name": m.get("vessel_name", ""),
-                    "status": "filed",
-                    "risk_score": m.get("risk_score", 50)
-                })
+    # Load and parse manifest
+    try:
+        with open(manifest_file) as f:
+            manifest_records = json.load(f)
+        logger.info(f"✅ Loaded {len(manifest_records)} records from manifest")
+    except Exception as e:
+        error_msg = f"\n❌ Failed to parse manifest JSON: {e}\n"
+        logger.error(error_msg)
+        conn.close()
+        raise ValueError(error_msg)
 
-            logger.info(f"Loaded {len(demo_shipments)} records from manifest file")
-        except Exception as e:
-            logger.error(f"Failed to load manifest file: {e}")
-            demo_shipments = []
+    # Convert manifest to shipment records (preserve all IDs from manifest)
+    shipments = []
+    for m in manifest_records:
+        shipments.append({
+            "id": m.get("id", ""),
+            "manifest_id": m.get("manifest_id", ""),
+            "shipper_name": m.get("shipper_name", ""),
+            "consignee_name": m.get("consignee_name", ""),
+            "origin_country": m.get("origin_country", ""),
+            "destination_country": m.get("destination_country", ""),
+            "hs_code": m.get("hs_code", ""),
+            "declared_value_usd": m.get("declared_value_usd", 0),
+            "declared_weight_kg": m.get("declared_weight_kg", 0),
+            "vessel_name": m.get("vessel_name", ""),
+            "status": m.get("status", "filed"),
+            "risk_score": m.get("risk_score", 50),
+            "element_9": m.get("element_9", m.get("origin_country", "")),
+            "ais_stuffing_country": m.get("ais_stuffing_country", m.get("origin_country", "")),
+            "dwell_days": m.get("dwell_days", 0)
+        })
 
-    # Fallback to hardcoded demo data if manifest file not found
-    if not demo_shipments:
-        logger.error(f"❌ USING FALLBACK: Manifest file not found at {manifest_file}")
-        logger.error("   This means dashboard will show SHP-* IDs but DB only has shipment-* hardcoded IDs")
-        logger.warning("Manifest file not found, using fallback demo data")
-        demo_shipments = [
-        {
-            "id": "shipment-greenfield-001",
-            "manifest_id": "manifest-001",
-            "shipper_name": "Greenfield Industrial Trading Co.",
-            "consignee_name": "SunPath Energy Distributors LLC",
-            "origin_country": "VN",
-            "destination_country": "US",
-            "hs_code": "7604.29",
-            "declared_value_usd": 50000,
-            "declared_weight_kg": 5000,
-            "vessel_name": "MV Pacific Horizon",
-            "status": "received",
-            "risk_score": 91
-        },
-        {
-            "id": "shipment-solaria-001",
-            "manifest_id": "manifest-001",
-            "shipper_name": "Solaria Manufacturing Sdn. Bhd.",
-            "consignee_name": "SunPath Energy Distributors LLC",
-            "origin_country": "MY",
-            "destination_country": "US",
-            "hs_code": "8541.40",
-            "declared_value_usd": 75000,
-            "declared_weight_kg": 2000,
-            "vessel_name": "MV Solar Express",
-            "status": "received",
-            "risk_score": 65
-        },
-        {
-            "id": "shipment-vietnam-aluminum-001",
-            "manifest_id": "manifest-002",
-            "shipper_name": "Vietnam Aluminum Corp",
-            "consignee_name": "Newark Metals Inc",
-            "origin_country": "VN",
-            "destination_country": "US",
-            "hs_code": "7610",
-            "declared_value_usd": 45000,
-            "declared_weight_kg": 4500,
-            "vessel_name": "MV Hanoi Star",
-            "status": "received",
-            "risk_score": 18
-        },
-        {
-            "id": "shipment-bangkok-metals-001",
-            "manifest_id": "manifest-002",
-            "shipper_name": "Bangkok Metals International",
-            "consignee_name": "American Industrial Supply",
-            "origin_country": "TH",
-            "destination_country": "US",
-            "hs_code": "7611",
-            "declared_value_usd": 65000,
-            "declared_weight_kg": 3500,
-            "vessel_name": "MV Bangkok Pride",
-            "status": "received",
-            "risk_score": 22
-        },
-        {
-            "id": "shipment-techexport-001",
-            "manifest_id": "manifest-003",
-            "shipper_name": "TechExport Ltd",
-            "consignee_name": "GlobalTech Inc",
-            "origin_country": "SG",
-            "destination_country": "CA",
-            "hs_code": "8517.62",
-            "declared_value_usd": 30000,
-            "declared_weight_kg": 1500,
-            "vessel_name": "MV Singapore Link",
-            "status": "received",
-            "risk_score": 29
-        }
-    ]
-
-    for shipment in demo_shipments:
+    # Insert into database
+    for shipment in shipments:
         cursor.execute("""
-            INSERT INTO shipments (
+            INSERT OR IGNORE INTO shipments (
                 id, manifest_id, shipper_name, consignee_name, origin_country,
                 destination_country, hs_code, declared_value_usd, declared_weight_kg,
                 vessel_name, status, risk_score, created_at
@@ -163,6 +110,8 @@ def seed_demo_data():
         ))
 
     conn.commit()
+    logger.info(f"✅ Database initialized: {len(shipments)} shipments with SHP-* IDs")
+    logger.info(f"   All shipments come from manifest JSON - single source of truth")
     conn.close()
     logger.info(f"Seeded {len(demo_shipments)} demo shipments")
 
