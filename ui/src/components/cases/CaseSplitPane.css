@@ -1,0 +1,343 @@
+/* CaseSplitPane Component Styles
+   Split-screen investigator view with independent scrolling
+*/
+
+.case-split-pane {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  height: 100%;
+  flex: 1;
+  overflow: hidden;
+  background-color: var(--neutral-border-light);
+}
+
+/* ============================================================================
+   LEFT PANEL: Case List
+   ============================================================================ */
+
+.split-pane__left {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--neutral-light-bg);
+  border-right: 1px solid var(--neutral-border-light);
+}
+
+.case-list-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+}
+
+/* List item in split view */
+.case-list-wrapper > [role='listitem'] {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Scrollbar styling */
+.case-list-wrapper::-webkit-scrollbar {
+  width: 8px;
+}
+
+.case-list-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.case-list-wrapper::-webkit-scrollbar-thumb {
+  background: var(--neutral-border);
+  border-radius: 4px;
+}
+
+.case-list-wrapper::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-text-tertiary);
+}
+
+/* ============================================================================
+   RIGHT PANEL: Case Detail
+   ============================================================================ */
+
+.split-pane__right {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--neutral-white);
+}
+
+.case-detail-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-lg);
+}
+
+/* Case Header */
+.case-detail__header {
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--neutral-border-light);
+}
+
+.case-detail__title {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--federal-navy);
+  margin-bottom: var(--space-sm);
+}
+
+.case-detail__subtitle {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--neutral-text-secondary);
+}
+
+/* Quick Stats */
+.case-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+  padding: var(--space-md);
+  background-color: var(--neutral-light-bg);
+  border-radius: var(--radius-lg);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--neutral-text-secondary);
+}
+
+.stat-value {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--federal-navy);
+}
+
+/* Sections */
+.case-detail__section {
+  margin-bottom: var(--space-lg);
+}
+
+.section-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--federal-navy);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--neutral-border-light);
+}
+
+.detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.detail-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.detail-row--full {
+  grid-template-columns: 1fr;
+}
+
+.detail-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-text-secondary);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.detail-value {
+  color: var(--neutral-text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  word-break: break-word;
+}
+
+.detail-code {
+  font-family: var(--font-family-mono);
+  font-weight: var(--font-weight-semibold);
+  background-color: var(--neutral-light-card);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+/* Action Buttons */
+.case-detail__actions {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: auto;
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--neutral-border-light);
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: var(--space-sm) var(--space-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  flex: 1;
+  min-width: 120px;
+}
+
+.action-btn--primary {
+  background-color: var(--federal-navy);
+  color: var(--neutral-white);
+}
+
+.action-btn--primary:hover {
+  background-color: var(--federal-focus);
+  box-shadow: var(--shadow-md);
+}
+
+.action-btn--primary:active {
+  transform: scale(0.98);
+}
+
+.action-btn--secondary {
+  background-color: var(--neutral-light-bg);
+  color: var(--federal-navy);
+  border: 1px solid var(--neutral-border);
+}
+
+.action-btn--secondary:hover {
+  background-color: var(--neutral-border-light);
+  border-color: var(--federal-navy);
+}
+
+.action-btn--secondary:active {
+  transform: scale(0.98);
+}
+
+.action-btn:focus-visible {
+  outline: 2px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* Empty State */
+.case-detail__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--neutral-text-secondary);
+  font-size: var(--font-size-base);
+}
+
+/* Right panel scrollbar */
+.case-detail-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.case-detail-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.case-detail-container::-webkit-scrollbar-thumb {
+  background: var(--neutral-border);
+  border-radius: 4px;
+}
+
+.case-detail-container::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-text-tertiary);
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 1024px) {
+  .case-split-pane {
+    grid-template-columns: 45% 55%;
+  }
+
+  .detail-row {
+    grid-template-columns: 120px 1fr;
+    gap: var(--space-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .case-split-pane {
+    grid-template-columns: 1fr;
+  }
+
+  .split-pane__right {
+    display: none;
+  }
+
+  .split-pane__left {
+    border-right: none;
+  }
+}
+
+/* Tablet: Stack vertically but show both */
+@media (max-width: 1024px) and (orientation: portrait) {
+  .case-split-pane {
+    grid-template-rows: 1fr 1fr;
+    grid-template-columns: 1fr;
+    gap: 1px;
+  }
+
+  .split-pane__left,
+  .split-pane__right {
+    min-height: 400px;
+  }
+
+  .split-pane__left {
+    border-right: none;
+    border-bottom: 1px solid var(--neutral-border-light);
+  }
+
+  .case-list-wrapper {
+    padding: var(--space-md);
+  }
+
+  .case-detail-container {
+    padding: var(--space-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .case-detail__stats {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  .case-detail__actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    width: 100%;
+  }
+}

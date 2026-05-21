@@ -3,6 +3,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import Design Tokens */
+@import './styles/design-tokens.css';
+
 /* SENTRY CBP Design System — Tokens & Global Styles */
 
 :root {

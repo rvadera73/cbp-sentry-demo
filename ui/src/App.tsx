@@ -4,6 +4,7 @@ import { WorkflowProvider } from './context/WorkflowContext'
 import Header from './components/layout/Header'
 import LoginPage from './pages/LoginPage'
 import ManifestRiskQueuePage from './pages/ManifestRiskQueuePage'
+import CaseManagerLayout from './components/cases/CaseManagerLayout'
 import CaseViewerPage from './pages/CaseViewerPage'
 import ScoringCalibrationPage from './pages/ScoringCalibrationPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -65,7 +66,7 @@ function App() {
           {/* Protected Routes - Role-Based Dashboards */}
           <Route
             path="/dashboard"
-            element={<ManifestRiskQueuePage />}
+            element={<CaseManagerLayout />}
           />
 
           <Route
