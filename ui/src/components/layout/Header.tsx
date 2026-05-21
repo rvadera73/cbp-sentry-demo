@@ -1,13 +1,20 @@
 import { useRole } from '../../context/RoleContext';
-import { LogOut, Menu } from 'lucide-react';
+import { LogOut, Menu, Shield, Upload } from 'lucide-react';
 import '../../styles/Header.css';
 
 interface HeaderProps {
   title?: string;
   showNav?: boolean;
+  showUploadButton?: boolean;
+  onUploadClick?: () => void;
 }
 
-export default function Header({ title = 'SENTRY CBP', showNav = true }: HeaderProps) {
+export default function Header({
+  title = 'Sentry Intelligence Platform',
+  showNav = true,
+  showUploadButton = false,
+  onUploadClick
+}: HeaderProps) {
   const { role, setRole } = useRole();
   const userEmail = localStorage.getItem('user_email') || 'user@cbp.dhs.gov';
 
@@ -34,11 +41,20 @@ export default function Header({ title = 'SENTRY CBP', showNav = true }: HeaderP
   return (
     <header className="sentry-header">
       <div className="header-content">
+        {/* Logo & Branding */}
         <div className="header-left">
-          <h1 className="header-title">{title}</h1>
-          <p className="header-subtitle">Intelligence Platform</p>
+          <div className="header-logo">
+            <div className="logo-shield">
+              <Shield size={24} />
+            </div>
+            <div>
+              <h1 className="header-title">Sentry</h1>
+              <p className="header-subtitle">Intelligence Platform</p>
+            </div>
+          </div>
         </div>
 
+        {/* Navigation */}
         {showNav && (
           <nav className="header-nav">
             {role === 'cbp_officer' && (
@@ -46,9 +62,16 @@ export default function Header({ title = 'SENTRY CBP', showNav = true }: HeaderP
                 <a href="/dashboard" className="nav-link">
                   Cases
                 </a>
-                <a href="/upload" className="nav-link">
-                  Upload Manifest
-                </a>
+                {showUploadButton && (
+                  <button
+                    onClick={onUploadClick}
+                    className="nav-link nav-action-button"
+                    title="Upload Manifest"
+                  >
+                    <Upload size={16} />
+                    Upload Manifest
+                  </button>
+                )}
               </>
             )}
             {role === 'analyst' && (
@@ -74,6 +97,7 @@ export default function Header({ title = 'SENTRY CBP', showNav = true }: HeaderP
           </nav>
         )}
 
+        {/* User Info & Logout */}
         <div className="header-right">
           <div className="user-info">
             <span className="user-email">{userEmail}</span>

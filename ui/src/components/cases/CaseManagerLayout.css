@@ -6,7 +6,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: var(--neutral-light-bg);
+  background-color: #F5F5F5;
 }
 
 .case-manager-content {
@@ -15,6 +15,7 @@
   flex-direction: column;
   max-width: 100%;
   overflow: hidden;
+  background-color: #FFFFFF;
 }
 
 /* ============================================================================
@@ -22,41 +23,41 @@
    ============================================================================ */
 
 .error-alert {
-  margin: var(--space-lg);
-  padding: var(--space-lg);
-  border-radius: var(--radius-lg);
-  border-left: 4px solid var(--risk-l3-border);
-  background-color: var(--risk-l3-bg);
-  color: var(--risk-l3-text);
+  margin: 16px;
+  padding: 16px;
+  border-radius: 4px;
+  border-left: 4px solid #D9381E;
+  background-color: #FCF2F2;
+  color: #B50909;
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
-  font-size: var(--font-size-sm);
+  gap: 16px;
+  font-size: 14px;
 }
 
 .error-alert strong {
-  font-weight: var(--font-weight-bold);
+  font-weight: 700;
 }
 
 .error-retry-btn {
-  padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--risk-l3-border);
-  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  border: 1px solid #D9381E;
+  border-radius: 4px;
   background-color: transparent;
-  color: var(--risk-l3-border);
-  font-weight: var(--font-weight-semibold);
+  color: #D9381E;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 200ms ease;
   white-space: nowrap;
 }
 
 .error-retry-btn:hover {
-  background-color: var(--risk-l3-border);
-  color: var(--neutral-white);
+  background-color: #D9381E;
+  color: #FFFFFF;
 }
 
 .error-retry-btn:focus-visible {
-  outline: 2px solid var(--federal-focus);
+  outline: 3px solid #D9381E;
   outline-offset: 2px;
 }
 
@@ -112,22 +113,22 @@
 }
 
 .empty-state-btn {
-  padding: var(--space-sm) var(--space-lg);
+  padding: 8px 16px;
   border: none;
-  border-radius: var(--radius-md);
-  background-color: var(--federal-navy);
-  color: var(--neutral-white);
-  font-weight: var(--font-weight-semibold);
+  border-radius: 4px;
+  background-color: #003366;
+  color: #FFFFFF;
+  font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 200ms ease;
 }
 
 .empty-state-btn:hover {
-  background-color: var(--federal-focus);
+  background-color: #0050D8;
 }
 
 .empty-state-btn:focus-visible {
-  outline: 2px solid var(--federal-focus);
+  outline: 3px solid #0050D8;
   outline-offset: 2px;
 }
 

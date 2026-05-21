@@ -1,9 +1,26 @@
-/* CBP Illegal Transshipment Intelligence Dashboard — Design Tokens
-   Enterprise-grade color system with WCAG 2.1 AA compliance (4.5:1 contrast minimum)
-   Federal blue header, semantic risk levels with accessible color pairs
+/* CBP Sentry Intelligence Platform — Design Tokens
+   Enterprise-grade federal color system with WCAG 2.1 AA compliance (4.5:1 contrast minimum)
+   USWDS 3.0 colors, semantic risk levels with accessible color pairs
+   Updated May 20 2026 — Complete button system, federal branding
 */
 
 :root {
+  /* ============================================================================
+     USWDS 3.0 BRAND COLORS — Federal Design System
+     ============================================================================ */
+  --uswds-primary-blue: #0050D8;      /* Primary action blue */
+  --uswds-navy: #003366;              /* Header dark blue */
+  --uswds-blue-hover: #0043BC;        /* Hover state */
+  --uswds-blue-active: #003399;       /* Active state */
+  --uswds-light-blue: #E7F6FF;        /* Light blue backgrounds */
+
+  /* Risk Status Colors */
+  --uswds-danger-red: #D9381E;        /* Danger/Delete red */
+  --uswds-danger-hover: #B8280F;      /* Danger hover */
+  --uswds-success-green: #2E8540;     /* Success green */
+  --uswds-warning-orange: #E6A100;    /* Warning orange */
+  --uswds-info-blue: #0050D8;         /* Info blue */
+
   /* ============================================================================
      SEMANTIC RISK LEVELS — Color System
      ============================================================================ */
@@ -14,11 +31,21 @@
   --risk-l1-text: #1b4d22;         /* Text: forest green (11.2:1 on mint) */
   --risk-l1-accent: #1e7e34;       /* Accent shade for hover/focus states */
 
+  /* Alias: Status Tier Low */
+  --color-risk-low-bg: #e7f4e4;
+  --color-risk-low-border: #2e8540;
+  --color-risk-low-text: #1b4d22;
+
   /* Level 2: Medium Risk (40-69 score) — Accessible Amber Pair */
   --risk-l2-bg: #fff7e6;           /* Background: warm orange (9.8:1 on white) */
   --risk-l2-border: #e6a100;       /* Border: gold (5.2:1 on amber) */
   --risk-l2-text: #7a5300;         /* Text: dark amber (9.1:1 on amber) */
   --risk-l2-accent: #d49400;       /* Accent shade for hover/focus states */
+
+  /* Alias: Status Tier Medium */
+  --color-risk-med-bg: #fff7e6;
+  --color-risk-med-border: #e6a100;
+  --color-risk-med-text: #7a5300;
 
   /* Level 3: High Risk (70-100 score) — Accessible Red Pair */
   --risk-l3-bg: #fcf2f2;           /* Background: pale red (10.5:1 on white) */
@@ -26,40 +53,53 @@
   --risk-l3-text: #b50909;         /* Text: crimson (11.3:1 on pale red) */
   --risk-l3-accent: #a00606;       /* Accent shade for hover/focus states */
 
+  /* Alias: Status Tier High */
+  --color-risk-high-bg: #fcf2f2;
+  --color-risk-high-border: #d9381e;
+  --color-risk-high-text: #b50909;
+
   /* ============================================================================
      FEDERAL DESIGN SYSTEM — Brand Colors
      ============================================================================ */
-  --federal-header: #112e51;       /* Federal blue (per design spec) */
-  --federal-focus: #2491ff;        /* Interactive blue (focus rings, CTAs) */
-  --federal-navy: #013060;         /* Deep navy for typography */
+  --federal-header: #003366;       /* Navy header (USWDS) */
+  --federal-focus: #0050D8;        /* Interactive blue (focus rings, CTAs) */
+  --federal-navy: #003366;         /* Deep navy for typography */
   --federal-teal: #1a5f7a;         /* Supporting teal accent */
+
+  /* Alias: Government Interface */
+  --color-gov-blue-dark: #003366;
+  --color-gov-blue-focus: #0050D8;
 
   /* ============================================================================
      NEUTRAL PALETTE — Accessibility-First
      ============================================================================ */
-  --neutral-white: #ffffff;
-  --neutral-light-bg: #f9fafb;     /* Page background */
-  --neutral-light-card: #f3f4f6;   /* Card backgrounds */
-  --neutral-border: #d1d5db;       /* Primary borders (4.5:1 on white) */
-  --neutral-border-light: #e5e7eb; /* Secondary borders */
-  --neutral-text-primary: #1e293b; /* Body text (13.5:1 on white) */
-  --neutral-text-secondary: #64748b;/* Secondary text (7.5:1 on white) */
-  --neutral-text-tertiary: #94a3b8; /* Tertiary text (4.5:1 on white) */
-  --neutral-disabled: #cbd5e1;     /* Disabled state */
+  --neutral-white: #FFFFFF;
+  --neutral-light-bg: #F5F5F5;     /* Page background */
+  --neutral-light-card: #F5F5F5;   /* Card backgrounds */
+  --neutral-border: #D0D0D0;       /* Primary borders (4.5:1 on white) */
+  --neutral-border-light: #E0E0E0; /* Secondary borders */
+  --neutral-text-primary: #003366; /* Body text */
+  --neutral-text-secondary: #5B616B;/* Secondary text */
+  --neutral-text-tertiary: #94a3b8; /* Tertiary text */
+  --neutral-disabled: #CCCCCC;     /* Disabled state */
 
   /* ============================================================================
      SEMANTIC STATES — Status Colors
      ============================================================================ */
-  --status-success: #10b981;       /* Green: action approved */
-  --status-warning: #f59e0b;       /* Amber: caution needed */
-  --status-error: #ef4444;         /* Red: critical action required */
-  --status-info: #3b82f6;          /* Blue: informational */
+  --status-success: #2E8540;       /* Green: action approved */
+  --status-warning: #E6A100;       /* Amber: caution needed */
+  --status-error: #D9381E;         /* Red: critical action required */
+  --status-info: #0050D8;          /* Blue: informational */
 
   /* ============================================================================
      TYPOGRAPHY — Public Sans / System Sans-Serif
      ============================================================================ */
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Public Sans", Arial, sans-serif;
-  --font-family-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+  --font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-family-mono: 'Roboto Mono', 'Courier New', monospace;
+
+  /* Alias: Font Stacks */
+  --font-stack-sans: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-stack-mono: 'Roboto Mono', 'Courier New', monospace;
 
   --font-size-xs: 0.75rem;         /* 12px */
   --font-size-sm: 0.875rem;        /* 14px */
@@ -150,6 +190,160 @@
   --risk-border: var(--risk-l3-border);
   --risk-text: var(--risk-l3-text);
   --risk-accent: var(--risk-l3-accent);
+}
+
+/* ============================================================================
+   PRIMARY BUTTON — USWDS Style
+   ============================================================================ */
+
+.btn-primary {
+  background-color: #0050D8;
+  color: #FFFFFF;
+  border: 1px solid #0050D8;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-family: var(--font-family);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #0043BC;
+  box-shadow: 0 2px 4px rgba(0, 80, 216, 0.3);
+}
+
+.btn-primary:focus-visible {
+  outline: 3px solid #0050D8;
+  outline-offset: 2px;
+}
+
+.btn-primary:active:not(:disabled) {
+  background-color: #003399;
+  box-shadow: 0 0 0 4px rgba(0, 80, 216, 0.2);
+}
+
+.btn-primary:disabled {
+  background-color: #CCCCCC;
+  color: #6B7280;
+  border-color: #CCCCCC;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============================================================================
+   SECONDARY BUTTON — Light Gray Style
+   ============================================================================ */
+
+.btn-secondary {
+  background-color: #F5F5F5;
+  color: #003366;
+  border: 1px solid #D0D0D0;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-family: var(--font-family);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #E7F6FF;
+  border-color: #0050D8;
+  color: #003366;
+}
+
+.btn-secondary:focus-visible {
+  outline: 3px solid #0050D8;
+  outline-offset: 2px;
+}
+
+.btn-secondary:active:not(:disabled) {
+  background-color: #D0E8FF;
+  border-color: #0050D8;
+}
+
+.btn-secondary:disabled {
+  background-color: #F5F5F5;
+  color: #999999;
+  border-color: #D0D0D0;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============================================================================
+   DANGER BUTTON — Delete/Override Red
+   ============================================================================ */
+
+.btn-danger {
+  background-color: #D9381E;
+  color: #FFFFFF;
+  border: 1px solid #D9381E;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  font-family: var(--font-family);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #B8280F;
+  box-shadow: 0 2px 4px rgba(217, 56, 30, 0.3);
+}
+
+.btn-danger:focus-visible {
+  outline: 3px solid #D9381E;
+  outline-offset: 2px;
+}
+
+.btn-danger:active:not(:disabled) {
+  background-color: #A00606;
+  box-shadow: 0 0 0 4px rgba(217, 56, 30, 0.2);
+}
+
+.btn-danger:disabled {
+  background-color: #CCCCCC;
+  color: #6B7280;
+  border-color: #CCCCCC;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ============================================================================
+   BUTTON GROUP — Flex layout for multiple buttons
+   ============================================================================ */
+
+.btn-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.btn-group button,
+.btn-group .btn-primary,
+.btn-group .btn-secondary,
+.btn-group .btn-danger {
+  min-width: 120px;
 }
 
 /* ============================================================================

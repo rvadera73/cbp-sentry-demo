@@ -5,19 +5,19 @@
 .case-card {
   display: flex;
   align-items: stretch;
-  gap: var(--space-md);
-  padding: var(--space-md);
-  background-color: var(--neutral-white);
-  border: 1px solid var(--neutral-border-light);
-  border-radius: var(--radius-lg);
+  gap: 16px;
+  padding: 16px;
+  background-color: #FFFFFF;
+  border: 1px solid #E0E0E0;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all var(--transition-base);
+  transition: all 200ms ease;
 
   /* Risk token defaults */
-  --risk-bg: var(--neutral-light-bg);
-  --risk-border: var(--neutral-border);
-  --risk-text: var(--neutral-text-primary);
-  --risk-accent: var(--federal-focus);
+  --risk-bg: #F5F5F5;
+  --risk-border: #D0D0D0;
+  --risk-text: #003366;
+  --risk-accent: #0050D8;
 }
 
 /* Semantic Risk Token Classes — Applied from CaseCard.tsx */
@@ -46,7 +46,7 @@
 .case-card:hover {
   background-color: var(--risk-bg);
   border-color: var(--risk-border);
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 /* Selected State: Stronger indicator */
@@ -54,12 +54,12 @@
   background-color: var(--risk-bg);
   border-color: var(--risk-border);
   border-width: 2px;
-  box-shadow: var(--shadow-lg), inset 0 0 0 2px var(--risk-accent);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1), 0 4px 6px rgba(0, 0, 0, 0.05), inset 0 0 0 2px var(--risk-accent);
 }
 
 /* Keyboard Focus: Prominent focus ring (WCAG 2.1 AA) */
 .case-card:focus-visible {
-  outline: 3px solid var(--federal-focus);
+  outline: 3px solid #0050D8;
   outline-offset: 2px;
 }
 

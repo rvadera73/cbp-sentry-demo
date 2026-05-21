@@ -1,8 +1,8 @@
 .sentry-header {
-  background: linear-gradient(135deg, #013060 0%, #1a5f7a 100%);
+  background-color: #003366;
   color: white;
   padding: 1rem 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -17,21 +17,47 @@
 }
 
 .header-left {
-  flex: 1;
+  flex: 0 0 auto;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 1.5rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.logo-shield {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: #E7F6FF;
 }
 
 .header-title {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
   font-weight: 700;
   margin: 0;
   letter-spacing: -0.5px;
+  line-height: 1.2;
 }
 
 .header-subtitle {
-  font-size: 0.85rem;
-  opacity: 0.9;
-  margin: 0.25rem 0 0 0;
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin: 0.15rem 0 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
 }
 
 .header-nav {
@@ -39,11 +65,12 @@
   gap: 0;
   align-items: center;
   flex: 1;
-  justify-content: center;
+  justify-content: flex-start;
+  margin-left: 1rem;
 }
 
 .nav-link {
-  color: white;
+  color: #E7F6FF;
   text-decoration: none;
   padding: 0.75rem 1.25rem;
   font-size: 0.95rem;
@@ -51,10 +78,34 @@
   border-radius: 4px;
   transition: all 0.2s ease;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .nav-link:hover {
   background: rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+}
+
+.nav-link:active {
+  background: rgba(0, 80, 216, 0.3);
+}
+
+.nav-action-button {
+  background: rgba(0, 80, 216, 0.2);
+  border: 1px solid rgba(0, 80, 216, 0.4);
+  color: #E7F6FF;
+  font-weight: 600;
+}
+
+.nav-action-button:hover {
+  background: rgba(0, 80, 216, 0.4);
+  border-color: #0050D8;
+  color: #FFFFFF;
 }
 
 .header-right {

@@ -1,10 +1,11 @@
+/* Import Design Tokens & Global Styles (must come before Tailwind directives) */
+@import './styles/design-tokens.css';
+@import './styles/forms.css';
+
 /* Tailwind CSS Directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import Design Tokens */
-@import './styles/design-tokens.css';
 
 /* SENTRY CBP Design System — Tokens & Global Styles */
 

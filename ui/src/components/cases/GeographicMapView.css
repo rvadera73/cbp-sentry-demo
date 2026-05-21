@@ -1,0 +1,244 @@
+/* Geographic Map View — Federal USWDS Styling */
+
+.geographic-map-view {
+  display: flex;
+  height: 100%;
+  gap: 1rem;
+  background-color: #FFFFFF;
+}
+
+.map-wrapper {
+  flex: 1;
+  min-height: 0;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.leaflet-container-sentry {
+  background-color: #F5F5F5;
+  border-radius: 4px;
+}
+
+.leaflet-container-sentry .leaflet-control-zoom {
+  border-radius: 4px;
+}
+
+.leaflet-container-sentry .leaflet-control-zoom button {
+  background-color: #FFFFFF;
+  border: 1px solid #D0D0D0;
+  color: #003366;
+  font-weight: 600;
+  width: 36px;
+  height: 36px;
+  line-height: 36px;
+  transition: all 200ms ease;
+}
+
+.leaflet-container-sentry .leaflet-control-zoom button:hover {
+  background-color: #E7F6FF;
+  border-color: #0050D8;
+  color: #003366;
+}
+
+.leaflet-container-sentry .leaflet-control-zoom button:focus {
+  outline: 3px solid #0050D8;
+  outline-offset: 2px;
+}
+
+/* Custom Marker Styling */
+.custom-marker-wrapper {
+  display: contents;
+}
+
+.custom-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid;
+  background-color: inherit;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 200ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  position: relative;
+}
+
+.custom-marker:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Marker Popup */
+.marker-popup {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #003366;
+}
+
+.marker-popup h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #003366;
+}
+
+.popup-stat {
+  margin: 4px 0;
+  font-size: 12px;
+  color: #5B616B;
+}
+
+.popup-cases {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #E0E0E0;
+}
+
+.popup-case-link {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  margin: 4px 0;
+  background-color: #E7F6FF;
+  border: 1px solid #0050D8;
+  color: #003366;
+  font-size: 11px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 200ms ease;
+  text-align: left;
+}
+
+.popup-case-link:hover {
+  background-color: #0050D8;
+  color: #FFFFFF;
+}
+
+/* Map Legend */
+.map-legend {
+  width: 240px;
+  background-color: #FFFFFF;
+  border: 1px solid #D0D0D0;
+  border-radius: 4px;
+  padding: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow-y: auto;
+  max-height: 400px;
+  font-size: 12px;
+  color: #003366;
+}
+
+.map-legend h3 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #003366;
+}
+
+.map-legend h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #003366;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.legend-marker {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.legend-line {
+  display: inline-block;
+  width: 20px;
+  height: 2px;
+  border-top: 3px solid;
+  flex-shrink: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .geographic-map-view {
+    flex-direction: column;
+  }
+
+  .map-wrapper {
+    min-height: 400px;
+  }
+
+  .map-legend {
+    max-height: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .geographic-map-view {
+    gap: 0.5rem;
+  }
+
+  .map-wrapper {
+    min-height: 300px;
+  }
+
+  .map-legend {
+    width: 100%;
+  }
+
+  .custom-marker {
+    width: 24px;
+    height: 24px;
+  }
+}
+
+/* Leaflet Overrides for Federal Styling */
+.leaflet-popup {
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.leaflet-popup-content-wrapper {
+  background-color: #FFFFFF;
+  border-radius: 4px;
+  border: 1px solid #D0D0D0;
+}
+
+.leaflet-popup-tip {
+  background-color: #FFFFFF;
+  border-color: #D0D0D0;
+}
+
+.leaflet-tooltip {
+  background-color: #003366;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.leaflet-tooltip-left::before {
+  border-left-color: #003366;
+}
+
+.leaflet-tooltip-right::before {
+  border-right-color: #003366;
+}
+
+/* Accessibility */
+.leaflet-container-sentry a:focus {
+  outline: 3px solid #0050D8;
+  outline-offset: 2px;
+}
