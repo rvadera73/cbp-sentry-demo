@@ -35,6 +35,9 @@ class CORDDataLoader:
             self.conn = sqlite3.connect(self.db_path)
             self.cursor = self.conn.cursor()
 
+            # Ensure tables exist before loading
+            self._ensure_schema()
+
             cord_dir = Path(self.cord_data_dir)
             if not cord_dir.exists():
                 logger.warning(f"CORD data directory not found: {cord_dir}")
@@ -217,6 +220,60 @@ class CORDDataLoader:
             confidence = 0.75
 
         return confidence
+
+    def _ensure_schema(self):
+        """Ensure database schema exists (idempotent)."""
+        try:
+            # Create tables for entities and relationships
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS senzing_entities (
+                    entity_id TEXT PRIMARY KEY,
+                    data_source TEXT,
+                    record_id TEXT,
+                    name_primary TEXT,
+                    country TEXT,
+                    entity_type TEXT,
+                    confidence REAL DEFAULT 1.0,
+                    raw_data TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS senzing_relationships (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entity_id_a TEXT,
+                    entity_id_b TEXT,
+                    relationship_type TEXT,
+                    confidence REAL DEFAULT 1.0,
+                    evidence TEXT,
+                    FOREIGN KEY(entity_id_a) REFERENCES senzing_entities(entity_id),
+                    FOREIGN KEY(entity_id_b) REFERENCES senzing_entities(entity_id)
+                )
+            """)
+
+            self.cursor.execute("""
+                CREATE TABLE IF NOT EXISTS cbp_shipments (
+                    id TEXT PRIMARY KEY,
+                    shipper_id TEXT,
+                    shipper_name TEXT,
+                    consignee_name TEXT,
+                    shipper_age_months INTEGER,
+                    ad_cvd_rate REAL,
+                    risk_score REAL,
+                    element9_declared_country TEXT,
+                    element9_actual_country TEXT,
+                    confidence REAL DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            self.conn.commit()
+            logger.info("✓ Database schema ready")
+
+        except Exception as e:
+            logger.error(f"Failed to ensure schema: {e}")
+            raise
 
 
 def load_cord_data_async(
