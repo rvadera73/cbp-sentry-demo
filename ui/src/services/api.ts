@@ -284,6 +284,71 @@ class SentryAPI {
       return { total: 0, highRisk: 0, mediumRisk: 0, lowRisk: 0 }
     }
   }
+
+  // ============== CORD ENTITY RESOLUTION ==============
+
+  /**
+   * Search CORD index for entities by name
+   * GET /api/cord/search?name={name}&country={country}&limit={limit}
+   */
+  async cordSearch(name: string, country?: string, limit: number = 10): Promise<any> {
+    try {
+      const params: any = { name, limit }
+      if (country) params.country = country
+      const response = await this.client.get('/cord/search', { params })
+      return response.data
+    } catch (error) {
+      console.error('CORD search error:', error)
+      return { status: 'error', matches: [] }
+    }
+  }
+
+  /**
+   * Resolve 3-level entity chain for shipper with OFAC detection
+   * POST /api/cord/resolve?shipper_name={name}&shipper_country={country}&consignee_name={consignee}&consignee_country={cc}
+   */
+  async cordResolveChain(shipper_name: string, shipper_country?: string, consignee_name?: string, consignee_country?: string): Promise<any> {
+    try {
+      const params: any = { shipper_name }
+      if (shipper_country) params.shipper_country = shipper_country
+      if (consignee_name) params.consignee_name = consignee_name
+      if (consignee_country) params.consignee_country = consignee_country
+
+      const response = await this.client.post('/cord/resolve', {}, { params })
+      return response.data
+    } catch (error) {
+      console.error('CORD resolve error:', error)
+      return { status: 'error', resolution: null }
+    }
+  }
+
+  /**
+   * Get full entity details from CORD
+   * GET /api/cord/entity/{entity_id}
+   */
+  async cordGetEntity(entity_id: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/cord/entity/${entity_id}`)
+      return response.data
+    } catch (error) {
+      console.error('CORD get entity error:', error)
+      return { status: 'error', entity: null }
+    }
+  }
+
+  /**
+   * Get relationship explanation between two entities
+   * GET /api/cord/why/{id_a}/{id_b}
+   */
+  async cordWhyLinked(entity_id_a: string, entity_id_b: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/cord/why/${entity_id_a}/${entity_id_b}`)
+      return response.data
+    } catch (error) {
+      console.error('CORD why linked error:', error)
+      return { status: 'error', explanation: null }
+    }
+  }
 }
 
 export const api = new SentryAPI()

@@ -1,5 +1,6 @@
 import React from 'react';
 import CaseCard, { CaseCardData } from './CaseCard';
+import CORDEntityChain from './CORDEntityChain';
 import './CaseSplitPane.css';
 
 interface CaseSplitPaneProps {
@@ -151,6 +152,17 @@ export default function CaseSplitPane({
                   </div>
                 )}
               </div>
+            </section>
+
+            {/* Entity Chain (CORD) */}
+            <section className="case-detail__section">
+              <h3 className="section-title">Entity Ownership Chain</h3>
+              <CORDEntityChain
+                shipper_name={selectedCase.shipper_name}
+                shipper_country={selectedCase.route_origin}
+                consignee_name={selectedCase.consignee_name}
+                consignee_country={selectedCase.route_destination}
+              />
             </section>
 
             {/* Action Buttons */}
