@@ -8,6 +8,15 @@ import sqlite3
 
 logger = logging.getLogger(__name__)
 
+# Import demo entities for case examples
+try:
+    from demo_entities import get_demo_entities, get_demo_relationships, seed_demo_entities
+except ImportError:
+    logger.warning("demo_entities module not available")
+    get_demo_entities = lambda: []
+    get_demo_relationships = lambda: []
+    seed_demo_entities = lambda conn, cursor: None
+
 
 class CORDDataLoader:
     """Load and index CORD JSONL data into Senzing engine."""
@@ -89,8 +98,14 @@ class CORDDataLoader:
                     logger.error(f"Error loading {jsonl_file.name}: {e}")
                     continue
 
+            # Seed demo entities for case examples (after CORD data loaded)
+            logger.info("Seeding demo entities for CBP Sentry cases...")
+            seed_demo_entities(self.conn, self.cursor)
+
             self.conn.commit()
             self.conn.close()
+
+            demo_count = len(get_demo_entities())
 
             return {
                 "status": "success",
@@ -98,7 +113,8 @@ class CORDDataLoader:
                 "failed_records": failed_records,
                 "successful_records": total_records - failed_records,
                 "sources": sources_count,
-                "entity_count": self.entity_count
+                "entity_count": self.entity_count,
+                "demo_entities_seeded": demo_count
             }
 
         except Exception as e:
