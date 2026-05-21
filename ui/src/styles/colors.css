@@ -1,0 +1,68 @@
+/* Unified Sentry Color Palette - CBP Professional Standards */
+
+:root {
+  /* Primary Navy (Government Standard) */
+  --color-navy-primary: #003366;
+  --color-navy-dark: #001F47;
+  --color-navy-light: #004D99;
+
+  /* Secondary Blue (Action & Focus) */
+  --color-blue-primary: #0050D8;
+  --color-blue-dark: #0046B8;
+  --color-blue-light: #4AC4D3;
+  --color-blue-focus: rgba(0, 80, 216, 0.1);
+
+  /* Semantic Colors */
+  --color-success: #2E5A2E;
+  --color-warning: #CC6600;
+  --color-error: #D9381E;
+  --color-info: #0050D8;
+
+  /* Neutral & Background */
+  --color-white: #FFFFFF;
+  --color-gray-50: #F9FAFB;
+  --color-gray-100: #F5F5F5;
+  --color-gray-200: #E0E0E0;
+  --color-gray-300: #D1D5DB;
+  --color-gray-500: #6B7280;
+  --color-gray-700: #374151;
+  --color-gray-900: #111827;
+
+  /* Risk Levels */
+  --color-risk-high-bg: #FDF0F0;
+  --color-risk-high-border: #D9381E;
+  --color-risk-high-text: #8B0000;
+  --color-risk-medium-bg: #FFFBF0;
+  --color-risk-medium-border: #CC6600;
+  --color-risk-medium-text: #8B6600;
+  --color-risk-low-bg: #F0F7F0;
+  --color-risk-low-border: #2E5A2E;
+  --color-risk-low-text: #1B3D1B;
+
+  /* Typography */
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', sans-serif;
+  --font-mono: 'Roboto Mono', 'Monaco', 'Courier New', monospace;
+}
+
+/* Light Mode (Default) */
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-background: #FFFFFF;
+    --color-surface: #F9FAFB;
+    --color-text-primary: #111827;
+    --color-text-secondary: #6B7280;
+    --color-border: #E5E7EB;
+  }
+}
+
+/* Dark Mode (Future) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #1F2937;
+    --color-surface: #111827;
+    --color-text-primary: #F3F4F6;
+    --color-text-secondary: #D1D5DB;
+    --color-border: #374151;
+  }
+}

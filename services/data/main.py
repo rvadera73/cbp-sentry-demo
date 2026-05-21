@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 import json
 from pathlib import Path
 
-from db import init_db, create_shipment, get_shipment, get_all_shipments, update_shipment, get_shipments_stats, search_shipments
+from db import init_db, create_shipment, get_shipment, get_all_shipments, get_shipments_count, update_shipment, get_shipments_stats, search_shipments
 from models import Shipment, ShipmentCreate, ShipmentUpdate
 import sqlite3
 
@@ -231,6 +231,13 @@ async def list_shipments(
     """List all shipments with pagination"""
     shipments = get_all_shipments(limit=limit, offset=offset, status=status)
     return {"data": shipments, "count": len(shipments)}
+
+
+@app.get("/shipments/meta/count")
+async def shipments_count(status: Optional[str] = None) -> dict:
+    """Get total count of manifest shipments"""
+    total = get_shipments_count(status=status)
+    return {"total": total}
 
 
 @app.patch("/shipments/{shipment_id}", response_model=Shipment)

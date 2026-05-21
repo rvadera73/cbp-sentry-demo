@@ -285,6 +285,115 @@ class SentryAPI {
     }
   }
 
+  // ============== COMMAND CENTER / RISK CORRIDORS ==============
+
+  /**
+   * Get risk corridors with optional filters — GET /api/risk-corridors
+   * Supervisor view: industry-level risk analysis
+   */
+  async getRiskCorridors(filters?: { industry_filter?: string; time_period?: string }): Promise<any> {
+    try {
+      const params: any = {}
+      if (filters?.industry_filter) params.industry_filter = filters.industry_filter
+      if (filters?.time_period) params.time_period = filters.time_period
+
+      const response = await this.client.get('/risk-corridors', { params })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching risk corridors:', error)
+      return { corridors: [] }
+    }
+  }
+
+  /**
+   * Get vessels of interest for a specific port — GET /api/ports/{port}/vessels-of-interest
+   * Field officer view: vessel tracking at specific ports
+   */
+  async getVesselsOfInterest(port: string, timeWindow: string = '30d'): Promise<any> {
+    try {
+      const response = await this.client.get(`/ports/${port}/vessels-of-interest`, {
+        params: { time_window: timeWindow },
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching vessels of interest:', error)
+      return { vessels: [] }
+    }
+  }
+
+  /**
+   * Get timeline of signal events for a risk corridor — GET /api/risk-corridors/{id}/timeline
+   * Analyst view: network behavior evolution over time
+   */
+  async getRiskCorridorTimeline(corridorId: string, startDate?: string, endDate?: string): Promise<any> {
+    try {
+      const params: any = {}
+      if (startDate) params.start_date = startDate
+      if (endDate) params.end_date = endDate
+
+      const response = await this.client.get(`/risk-corridors/${corridorId}/timeline`, { params })
+      return response.data
+    } catch (error) {
+      console.error('Error fetching risk corridor timeline:', error)
+      return { events: [] }
+    }
+  }
+
+  /**
+   * Generate EAPA referral package — POST /api/referral/generate
+   * Generate formal CBP EAPA referral package for investigation
+   */
+  async generateReferral(corridorId?: string, vesselId?: string, manifestIds?: string[]): Promise<any> {
+    try {
+      const response = await this.client.post('/referral/generate', {
+        corridor_id: corridorId,
+        vessel_id: vesselId,
+        manifest_ids: manifestIds,
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error generating referral:', error)
+      return { status: 'error', referral_id: null }
+    }
+  }
+
+  /**
+   * Issue hold for vessel examination — POST /api/vessel/hold
+   * Issue hold on vessel for physical examination on arrival
+   */
+  async issueVesselHold(vesselImo: string, examinationType: string = 'FULL', reason?: string): Promise<any> {
+    try {
+      const response = await this.client.post('/vessel/hold', {
+        vessel_imo: vesselImo,
+        examination_type: examinationType,
+        reason,
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error issuing vessel hold:', error)
+      return { status: 'error', hold_id: null }
+    }
+  }
+
+  /**
+   * Log feedback override for model training — POST /api/feedback/override
+   * Log human feedback override for model training
+   */
+  async logFeedbackOverride(feedbackType: string, notes: string, manifestId?: string, shipmentId?: string): Promise<any> {
+    try {
+      const response = await this.client.post('/feedback/override', {
+        feedback_type: feedbackType,
+        notes,
+        manifest_id: manifestId,
+        shipment_id: shipmentId,
+      })
+      return response.data
+    } catch (error) {
+      console.error('Error logging feedback:', error)
+      return { status: 'error', feedback_id: null }
+    }
+  }
+
   // ============== CORD ENTITY RESOLUTION ==============
 
   /**

@@ -1,6 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import CaseCard, { CaseCardData } from './CaseCard';
 import CORDEntityChain from './CORDEntityChain';
+import ReferralPackage from './ReferralPackage';
+import { ReferralPackageData, PipelineScore, Discrepancy, EntityChain, ConditionalScenario } from './ReferralPackage.types';
+import { useWorkflow } from '../../context/WorkflowContext';
 import './CaseSplitPane.css';
 
 interface CaseSplitPaneProps {
@@ -8,6 +11,151 @@ interface CaseSplitPaneProps {
   selectedCaseId: string | null;
   onCaseSelect?: (caseId: string) => void;
   onCaseClick?: (caseId: string) => void;
+}
+
+/**
+ * buildReferralPackageData: Transform case data into ReferralPackageData structure
+ * This helper maps existing case fields to the referral package type system
+ */
+function buildReferralPackageData(caseData: CaseCardData): ReferralPackageData {
+  const risk = Math.round(caseData.risk_score || 0);
+
+  // Score pipeline (H1, H2, H3) - distribute total risk across three assessment vectors
+  const h1Score = Math.min(40, Math.floor(risk * 0.4));
+  const h2Score = Math.min(40, Math.floor(risk * 0.35));
+  const h3Score = Math.min(40, Math.floor(risk * 0.25));
+
+  return {
+    shipper_name: caseData.shipper_name,
+    shipper_country: caseData.route_origin,
+    consignee_name: caseData.consignee_name,
+    declared_origin: caseData.route_origin,
+    actual_origin: caseData.route_origin, // In real scenario, would come from vessel tracking data
+    risk_score: risk,
+    vessel_path: [caseData.route_origin, 'Port of Hong Kong', caseData.route_destination],
+
+    h1_score: {
+      score: h1Score,
+      maxScore: 40,
+      label: 'Macro Volume Anomaly (+240% YoY Spike)',
+      algorithmicWeights: {
+        'Trading Volume Variance': 45,
+        'Corridor Traffic Pattern': 35,
+        'Seasonal Adjustment': 20,
+      },
+    },
+
+    h2_score: {
+      score: h2Score,
+      maxScore: 40,
+      label: 'Vessel Risk - Transshipment Hub Dwell',
+      algorithmicWeights: {
+        'Port Dwell Time Anomaly': 50,
+        'Co-loading Frequency': 35,
+        'Flag State Risk Profile': 15,
+      },
+    },
+
+    h3_score: {
+      score: h3Score,
+      maxScore: 40,
+      label: 'Network Intelligence - Entity Chain Risk',
+      algorithmicWeights: {
+        'Entity Relationship Strength': 40,
+        'Transaction Pattern Match': 35,
+        'Sanctions/Watchlist Score': 25,
+      },
+    },
+
+    discrepancies: [
+      {
+        field: 'Manufacturing Location',
+        declared: caseData.route_origin,
+        verified: 'Port of Hong Kong',
+        status: 'mismatch',
+      },
+      {
+        field: 'Port of Loading',
+        declared: caseData.route_origin,
+        verified: 'Port of Hong Kong',
+        status: 'mismatch',
+      },
+      {
+        field: 'HTS Commodity Code',
+        declared: caseData.commodity_code,
+        verified: caseData.commodity_code,
+        status: 'match',
+      },
+      {
+        field: 'Declared Value',
+        declared: `$${caseData.declared_value.toLocaleString()}`,
+        verified: 'Under Verification',
+        status: 'partial',
+      },
+      {
+        field: 'Factory Production Records',
+        declared: 'Available',
+        verified: 'MISSING',
+        status: 'missing',
+      },
+    ],
+
+    entityChain: {
+      entities: [
+        {
+          name: 'CN Mfg Corp',
+          country: 'China',
+          riskLevel: 'high',
+          entityType: 'Manufacturer',
+        },
+        {
+          name: 'HK Trading Ltd',
+          country: 'Hong Kong',
+          riskLevel: 'medium',
+          entityType: 'Trading House',
+        },
+        {
+          name: 'VN Export Partners',
+          country: 'Vietnam',
+          riskLevel: 'medium',
+          entityType: 'Exporter',
+        },
+        {
+          name: caseData.shipper_name,
+          country: caseData.route_origin,
+          riskLevel: 'low',
+          entityType: 'Freight Forwarder',
+        },
+        {
+          name: caseData.consignee_name,
+          country: caseData.route_destination,
+          riskLevel: 'low',
+          entityType: 'Importer',
+        },
+      ],
+    },
+
+    conditionalScenarios: [
+      {
+        condition: 'If Shipper becomes Established',
+        description: 'Commercial history of 3+ years with CBP clearance',
+        projectedScore: 89,
+        isActive: false,
+      },
+      {
+        condition: 'If Missing Docs Verified',
+        description: 'Factory production and export documentation provided',
+        projectedScore: 87,
+        isActive: false,
+      },
+      {
+        condition: 'If Pricing Aligns with Market',
+        description: 'Third-party cost analysis confirms commodity valuation',
+        projectedScore: 82,
+        isActive: false,
+      },
+    ],
+  };
 }
 
 /**
@@ -29,7 +177,25 @@ export default function CaseSplitPane({
   onCaseSelect,
   onCaseClick,
 }: CaseSplitPaneProps) {
+  const { updateScore, advanceStep } = useWorkflow();
   const selectedCase = cases.find((c) => c.id === selectedCaseId);
+
+  // Track case selection in workflow context
+  useEffect(() => {
+    if (selectedCase) {
+      // Update scores based on selected case data
+      const h1 = Math.min(40, Math.floor((selectedCase.risk_score || 0) * 0.4));
+      const h2 = Math.min(40, Math.floor((selectedCase.risk_score || 0) * 0.35));
+      const h3 = Math.min(40, Math.floor((selectedCase.risk_score || 0) * 0.25));
+
+      updateScore(h1, h2, h3);
+
+      // Advance to scoring step
+      if (selectedCase.risk_score >= 40) {
+        advanceStep('scoring', 'complete');
+      }
+    }
+  }, [selectedCase?.id, updateScore, advanceStep]);
 
   return (
     <div className="case-split-pane">
@@ -164,6 +330,22 @@ export default function CaseSplitPane({
                 consignee_country={selectedCase.route_destination}
               />
             </section>
+
+            {/* Referral Package - Integrated Investigation Tool */}
+            {selectedCase.risk_score >= 40 && (
+              <ReferralPackage
+                data={buildReferralPackageData(selectedCase)}
+                onExecuteReferral={(notes) => {
+                  console.log('Execute referral:', selectedCase.id, notes);
+                }}
+                onHoldExamine={(notes) => {
+                  console.log('Hold and examine:', selectedCase.id, notes);
+                }}
+                onOverride={(justifications, notes) => {
+                  console.log('Override:', selectedCase.id, justifications, notes);
+                }}
+              />
+            )}
 
             {/* Action Buttons */}
             <div className="case-detail__actions">

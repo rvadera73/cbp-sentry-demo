@@ -277,6 +277,21 @@ def get_all_shipments(
     return [dict(row) for row in rows]
 
 
+def get_shipments_count(status: Optional[str] = None, db_path: str = "/app/data/cbp_sentry.db") -> int:
+    """Get total count of manifest shipments (SHP-*)"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    if status:
+        cursor.execute("SELECT COUNT(*) FROM shipments WHERE status = ? AND id LIKE 'SHP-%'", (status,))
+    else:
+        cursor.execute("SELECT COUNT(*) FROM shipments WHERE id LIKE 'SHP-%'")
+
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+
 def update_shipment(shipment_id: str, updates: Dict[str, Any], db_path: str = "/app/data/cbp_sentry.db") -> bool:
     """Update shipment fields"""
     if not updates:

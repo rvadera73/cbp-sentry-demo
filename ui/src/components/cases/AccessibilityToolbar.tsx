@@ -53,7 +53,7 @@ export default function AccessibilityToolbar({
   isLoading = false,
 }: AccessibilityToolbarProps) {
   const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
-  const searchTimeoutRef = useRef<NodeJS.Timeout>();
+  const searchTimeoutRef = useRef<any>(undefined);
 
   // Debounce search input
   useEffect(() => {

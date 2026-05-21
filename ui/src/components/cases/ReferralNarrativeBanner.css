@@ -1,0 +1,116 @@
+/* ReferralNarrativeBanner Component Styles
+   Contextual investigation narrative alert banner
+*/
+
+.referral-narrative-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-lg);
+  align-items: flex-start;
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--risk-border);
+  background-color: var(--risk-bg);
+  margin-bottom: var(--space-lg);
+}
+
+/* Icon Container */
+.banner__icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background-color: rgba(217, 56, 30, 0.1);
+}
+
+.banner__icon-symbol {
+  color: var(--risk-text);
+  stroke-width: 2;
+}
+
+/* Content Container */
+.banner__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+/* Narrative Text */
+.banner__narrative {
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--risk-text);
+  margin: 0;
+  font-weight: var(--font-weight-normal);
+}
+
+/* Risk Badge */
+.banner__badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: var(--space-sm) var(--space-md);
+  background-color: rgba(181, 9, 9, 0.1);
+  border: 1px solid var(--risk-border);
+  border-radius: var(--radius-md);
+}
+
+.banner__badge-text {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--risk-text);
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.02em;
+}
+
+/* Focus State (for keyboard navigation if wrapper becomes focusable) */
+.referral-narrative-banner:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .referral-narrative-banner {
+    grid-template-columns: auto 1fr;
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .banner__icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .banner__icon-symbol {
+    width: 20px;
+    height: 20px;
+  }
+
+  .banner__narrative {
+    font-size: var(--font-size-xs);
+  }
+
+  .banner__badge-text {
+    font-size: var(--font-size-xs);
+  }
+}
+
+@media (max-width: 480px) {
+  .referral-narrative-banner {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+  }
+
+  .banner__icon {
+    width: 36px;
+    height: 36px;
+    margin: 0 auto;
+  }
+}

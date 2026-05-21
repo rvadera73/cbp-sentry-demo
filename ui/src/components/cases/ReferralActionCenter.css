@@ -1,0 +1,453 @@
+/* ReferralActionCenter Component Styles
+   Sticky footer action panel with execution and override controls
+*/
+
+.referral-action-center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  border-top: 2px solid var(--neutral-border);
+  background-color: var(--neutral-white);
+  margin-top: auto;
+}
+
+/* ============================================================================
+   ACTION SECTIONS
+   ============================================================================ */
+
+.action-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.action-section--notes {
+  flex: 1;
+}
+
+.action-section--risk {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background-color: var(--neutral-light-bg);
+  border-radius: var(--radius-md);
+}
+
+.action-section--override {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.action-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--federal-navy);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================================
+   TEXTAREA
+   ============================================================================ */
+
+.action-textarea {
+  padding: var(--space-md);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--radius-md);
+  background-color: var(--neutral-white);
+  color: var(--neutral-text-primary);
+  line-height: var(--line-height-normal);
+  resize: vertical;
+  min-height: 100px;
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.action-textarea:focus {
+  outline: none;
+  border-color: var(--federal-focus);
+  box-shadow: 0 0 0 3px rgba(36, 145, 255, 0.1);
+}
+
+.action-textarea:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+.action-textarea:disabled {
+  background-color: var(--neutral-light-bg);
+  color: var(--neutral-text-tertiary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.action-textarea::placeholder {
+  color: var(--neutral-text-tertiary);
+}
+
+/* ============================================================================
+   RISK INDICATOR
+   ============================================================================ */
+
+.risk-indicator-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.risk-indicator-badge {
+  display: inline-flex;
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  font-family: var(--font-family-mono);
+  width: fit-content;
+}
+
+.risk-badge--high {
+  background-color: var(--risk-l3-bg);
+  color: var(--risk-l3-text);
+  border: 1px solid var(--risk-l3-border);
+}
+
+.risk-badge--medium {
+  background-color: var(--risk-l2-bg);
+  color: var(--risk-l2-text);
+  border: 1px solid var(--risk-l2-border);
+}
+
+.risk-badge--low {
+  background-color: var(--risk-l1-bg);
+  color: var(--risk-l1-text);
+  border: 1px solid var(--risk-l1-border);
+}
+
+/* ============================================================================
+   OVERRIDE SECTION
+   ============================================================================ */
+
+.override-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.override-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.override-checkbox input {
+  display: none;
+}
+
+.checkbox-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--neutral-border);
+  border-radius: var(--radius-sm);
+  background-color: var(--neutral-white);
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.override-checkbox input:checked + .checkbox-marker {
+  border-color: var(--federal-focus);
+  background-color: var(--federal-focus);
+}
+
+.override-checkbox input:checked + .checkbox-marker::after {
+  content: '✓';
+  color: var(--neutral-white);
+  font-weight: var(--font-weight-bold);
+  font-size: 14px;
+}
+
+.override-checkbox input:disabled + .checkbox-marker {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--federal-navy);
+}
+
+/* Justification Dropdown */
+.justification-dropdown {
+  padding: var(--space-md);
+  border: 1px solid var(--neutral-border-light);
+  border-radius: var(--radius-md);
+  background-color: var(--neutral-light-bg);
+  animation: slideDown var(--transition-base) ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
+.justification-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-md);
+}
+
+.justification-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  user-select: none;
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--transition-base);
+}
+
+.justification-item:hover {
+  background-color: rgba(18, 46, 81, 0.05);
+}
+
+.justification-item input {
+  display: none;
+}
+
+.justification-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--neutral-border);
+  border-radius: 3px;
+  background-color: var(--neutral-white);
+  transition: all var(--transition-base);
+  flex-shrink: 0;
+}
+
+.justification-item input:checked + .justification-marker {
+  border-color: var(--federal-focus);
+  background-color: var(--federal-focus);
+}
+
+.justification-item input:checked + .justification-marker::after {
+  content: '✓';
+  color: var(--neutral-white);
+  font-weight: var(--font-weight-bold);
+  font-size: 12px;
+}
+
+.justification-item input:disabled + .justification-marker {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.justification-label {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-text-primary);
+}
+
+.justification-summary {
+  padding: var(--space-sm) var(--space-md);
+  background-color: rgba(16, 185, 129, 0.1);
+  border-left: 3px solid var(--status-success);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--neutral-text-primary);
+}
+
+/* ============================================================================
+   ACTION BUTTONS
+   ============================================================================ */
+
+.action-buttons {
+  display: flex;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  padding: var(--space-sm) var(--space-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  flex: 1;
+  min-width: 200px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* Primary Button (Execute) */
+.action-btn--primary {
+  background-color: var(--federal-navy);
+  color: var(--neutral-white);
+  border: 2px solid var(--federal-navy);
+}
+
+.action-btn--primary:hover:not(:disabled) {
+  background-color: var(--federal-focus);
+  border-color: var(--federal-focus);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.action-btn--primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-btn--primary:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* Secondary Button (Hold) */
+.action-btn--secondary {
+  background-color: var(--neutral-light-bg);
+  color: var(--federal-navy);
+  border: 2px solid var(--federal-navy);
+}
+
+.action-btn--secondary:hover:not(:disabled) {
+  background-color: var(--federal-navy);
+  color: var(--neutral-white);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.action-btn--secondary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-btn--secondary:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* Override Button */
+.action-btn--override {
+  background-color: var(--status-warning);
+  color: var(--neutral-white);
+  border: 2px solid var(--status-warning);
+}
+
+.action-btn--override:hover:not(:disabled) {
+  background-color: #d49400;
+  border-color: #d49400;
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.action-btn--override:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-btn--override:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* Disabled State */
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .referral-action-center {
+    gap: var(--space-md);
+    padding: var(--space-md);
+  }
+
+  .action-section--risk {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-sm);
+  }
+
+  .action-textarea {
+    font-size: var(--font-size-xs);
+    min-height: 80px;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    min-width: unset;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .referral-action-center {
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+  }
+
+  .action-label {
+    font-size: var(--font-size-xs);
+  }
+
+  .action-textarea {
+    padding: var(--space-sm);
+    font-size: 14px;
+    min-height: 80px;
+  }
+
+  .risk-indicator-label {
+    font-size: var(--font-size-xs);
+  }
+
+  .risk-indicator-badge {
+    font-size: var(--font-size-xs);
+    padding: var(--space-xs) var(--space-sm);
+  }
+
+  .justification-item {
+    padding: var(--space-xs);
+    font-size: var(--font-size-xs);
+  }
+
+  .justification-dropdown {
+    padding: var(--space-sm);
+  }
+
+  .action-btn {
+    padding: var(--space-sm);
+    font-size: var(--font-size-xs);
+  }
+}

@@ -1,0 +1,384 @@
+.investigation-workflow-status {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+/* Title */
+.workflow-title {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Main Layout: Timeline left, Score box right */
+.workflow-content {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Timeline Container */
+.workflow-timeline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Timeline Step */
+.timeline-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Step Circle */
+.step-circle {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fafafa;
+  border: 2px solid #d1d5db;
+  transition: all 0.3s ease;
+}
+
+.step-circle.completed {
+  background: #f0fdf4;
+  border-color: #16a34a;
+}
+
+.step-circle.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  animation: pulse 2s infinite;
+}
+
+.step-circle.pending {
+  background: #fafafa;
+  border-color: #d1d5db;
+}
+
+.step-icon-check {
+  color: #16a34a;
+}
+
+.step-icon-active {
+  color: #3b82f6;
+}
+
+.step-icon-pending {
+  color: #d1d5db;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* Step Labels */
+.step-labels {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.step-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.2;
+}
+
+.step-detail {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+/* Arrow Between Steps */
+.step-arrow {
+  flex-shrink: 0;
+  color: #d1d5db;
+  font-size: 18px;
+  font-weight: 300;
+  transition: color 0.3s ease;
+}
+
+.step-arrow.completed {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* Score Summary Box - Right Side */
+.score-summary {
+  flex-shrink: 0;
+  width: 180px;
+  padding: 16px;
+  background: #fafafa;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.score-summary.high {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+.score-summary.medium {
+  background: #fed7aa;
+  border-color: #f97316;
+}
+
+.score-summary.low {
+  background: #dcfce7;
+  border-color: #16a34a;
+}
+
+/* Score Header */
+.score-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.score-value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.score-level {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Score Components Breakdown */
+.score-components {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.component-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.component-label {
+  font-weight: 500;
+  color: #374151;
+}
+
+.component-value {
+  font-weight: 700;
+  color: #1f2937;
+}
+
+/* Status Indicator */
+.workflow-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6b7280;
+}
+
+.workflow-status-indicator.complete {
+  color: #16a34a;
+}
+
+.workflow-status-indicator.processing {
+  color: #3b82f6;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.workflow-status-indicator.processing .status-dot {
+  animation: pulse 1.5s infinite;
+}
+
+/* Legend */
+.workflow-legend {
+  display: flex;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid #e5e7eb;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-circle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #d1d5db;
+}
+
+.legend-circle.completed {
+  background: #f0fdf4;
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.legend-circle.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #3b82f6;
+}
+
+.legend-circle.pending {
+  background: #fafafa;
+  border-color: #d1d5db;
+  color: #d1d5db;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .workflow-content {
+    gap: 16px;
+  }
+
+  .score-summary {
+    width: 160px;
+    padding: 12px;
+  }
+
+  .score-value {
+    font-size: 20px;
+  }
+
+  .score-level {
+    font-size: 10px;
+  }
+
+  .component-row {
+    font-size: 11px;
+  }
+
+  .step-name {
+    font-size: 12px;
+  }
+
+  .step-detail {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .investigation-workflow-status {
+    padding: 16px;
+  }
+
+  .workflow-content {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .workflow-timeline {
+    width: 100%;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .timeline-step {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-arrow {
+    display: none;
+  }
+
+  .score-summary {
+    width: 100%;
+  }
+
+  .workflow-legend {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .investigation-workflow-status {
+    padding: 12px;
+  }
+
+  .workflow-title {
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
+
+  .step-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .step-name {
+    font-size: 11px;
+  }
+
+  .step-detail {
+    font-size: 9px;
+  }
+
+  .score-value {
+    font-size: 18px;
+  }
+
+  .component-row {
+    font-size: 10px;
+  }
+
+  .workflow-legend {
+    font-size: 11px;
+  }
+}

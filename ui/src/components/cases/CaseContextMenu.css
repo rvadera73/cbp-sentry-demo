@@ -1,0 +1,103 @@
+.case-context-menu {
+  position: fixed;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  z-index: 2000;
+  min-width: 220px;
+  max-width: 300px;
+  animation: slideUp 0.15s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  color: #1f2937;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.context-menu-item:first-child {
+  border-radius: 6px 6px 0 0;
+}
+
+.context-menu-item:last-child {
+  border-radius: 0 0 6px 6px;
+}
+
+.context-menu-item:hover {
+  background: #f3f4f6;
+  color: #013060;
+}
+
+.context-menu-item:active {
+  background: #e5e7eb;
+}
+
+.context-menu-item svg {
+  flex-shrink: 0;
+  color: #6b7280;
+}
+
+.context-menu-item:hover svg {
+  color: #013060;
+}
+
+.context-menu-item > span:nth-child(2) {
+  flex: 1;
+}
+
+.context-menu-code {
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.context-menu-item:hover .context-menu-code {
+  color: #6b7280;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0.5rem 0;
+}
+
+@media (max-width: 640px) {
+  .case-context-menu {
+    min-width: 180px;
+    max-width: 90vw;
+  }
+
+  .context-menu-item {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+  }
+
+  .context-menu-code {
+    display: none;
+  }
+}

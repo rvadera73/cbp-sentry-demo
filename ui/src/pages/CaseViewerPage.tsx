@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import Header from '../components/layout/Header'
-import ScoreBreakdown from '../components/scoring/ScoreBreakdown'
 import WorkflowSignalMap from '../components/cases/WorkflowSignalMap'
 import EntityChainViewer from '../components/cases/EntityChainViewer'
-import ReferralPackageViewer from '../components/cases/ReferralPackageViewer'
+import FederalReferralDocument from '../components/cases/FederalReferralDocument'
 import { AlertCircle, ChevronLeft } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { scoringApi, type ScoringResponse } from '../services/scoringApi'
@@ -330,12 +329,6 @@ export default function CaseViewerPage() {
                 📋 Overview
               </button>
               <button
-                className={`tab-btn ${activeTab === 'score-breakdown' ? 'active' : ''}`}
-                onClick={() => setActiveTab('score-breakdown')}
-              >
-                📊 Score Breakdown
-              </button>
-              <button
                 className={`tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
                 onClick={() => setActiveTab('workflow')}
               >
@@ -406,51 +399,6 @@ export default function CaseViewerPage() {
                       </tr>
                     </tbody>
                   </table>
-                </div>
-              )}
-              {activeTab === 'score-breakdown' && (
-                <div className="tab-panel">
-                  {scoringLoading ? (
-                    <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                      <p>Loading risk assessment...</p>
-                    </div>
-                  ) : error ? (
-                    <div style={{ padding: '2rem', color: '#d32f2f', backgroundColor: '#ffebee', borderRadius: '4px' }}>
-                      <p><strong>Error:</strong> {error}</p>
-                    </div>
-                  ) : scoringData ? (
-                    <ScoreBreakdown
-                      totalScore={scoringData.total_score}
-                      confidence={scoringData.confidence}
-                      h1={{
-                        horizon: scoringData.h1.horizon,
-                        label: scoringData.h1.label,
-                        score: scoringData.h1.score,
-                        maxScore: scoringData.h1.max_score,
-                        weight: scoringData.h1.weight,
-                        summary: scoringData.h1.summary,
-                        factors: scoringData.h1.factors,
-                      }}
-                      h2={{
-                        horizon: scoringData.h2.horizon,
-                        label: scoringData.h2.label,
-                        score: scoringData.h2.score,
-                        maxScore: scoringData.h2.max_score,
-                        weight: scoringData.h2.weight,
-                        summary: scoringData.h2.summary,
-                        factors: scoringData.h2.factors,
-                      }}
-                      h3={{
-                        horizon: scoringData.h3.horizon,
-                        label: scoringData.h3.label,
-                        score: scoringData.h3.score,
-                        maxScore: scoringData.h3.max_score,
-                        weight: scoringData.h3.weight,
-                        summary: scoringData.h3.summary,
-                        factors: scoringData.h3.factors,
-                      }}
-                    />
-                  ) : null}
                 </div>
               )}
               {activeTab === 'workflow' && (
@@ -531,13 +479,14 @@ export default function CaseViewerPage() {
               )}
               {activeTab === 'referral' && (
                 <div className="tab-panel">
-                  <ReferralPackageViewer
+                  <FederalReferralDocument
                     shipmentId={shipmentId || ''}
                     shipment={shipment}
                     score={currentScore}
                     h1Score={scoringData?.h1.score || 0}
                     h2Score={scoringData?.h2.score || 0}
                     h3Score={scoringData?.h3.score || 0}
+                    referralData={cordData}
                   />
                 </div>
               )}

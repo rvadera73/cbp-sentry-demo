@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { useWorkflow } from '../context/WorkflowContext'
 import { api } from '../services/api'
 import ScoreGauge from '../components/scoring/ScoreGauge'
-import ScoreBreakdown from '../components/scoring/ScoreBreakdown'
 
 const ScoringPage: React.FC = () => {
   const navigate = useNavigate()
