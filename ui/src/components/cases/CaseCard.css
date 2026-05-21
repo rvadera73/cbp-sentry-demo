@@ -1,0 +1,367 @@
+/* CaseCard Component Styles
+   Semantic risk tokens + enterprise layout patterns
+*/
+
+.case-card {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background-color: var(--neutral-white);
+  border: 1px solid var(--neutral-border-light);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-base);
+
+  /* Risk token defaults */
+  --risk-bg: var(--neutral-light-bg);
+  --risk-border: var(--neutral-border);
+  --risk-text: var(--neutral-text-primary);
+  --risk-accent: var(--federal-focus);
+}
+
+/* Semantic Risk Token Classes — Applied from CaseCard.tsx */
+.case-card.risk-token-l1 {
+  --risk-bg: var(--risk-l1-bg);
+  --risk-border: var(--risk-l1-border);
+  --risk-text: var(--risk-l1-text);
+  --risk-accent: var(--risk-l1-accent);
+}
+
+.case-card.risk-token-l2 {
+  --risk-bg: var(--risk-l2-bg);
+  --risk-border: var(--risk-l2-border);
+  --risk-text: var(--risk-l2-text);
+  --risk-accent: var(--risk-l2-accent);
+}
+
+.case-card.risk-token-l3 {
+  --risk-bg: var(--risk-l3-bg);
+  --risk-border: var(--risk-l3-border);
+  --risk-text: var(--risk-l3-text);
+  --risk-accent: var(--risk-l3-accent);
+}
+
+/* Hover State: Subtle elevation + border highlight */
+.case-card:hover {
+  background-color: var(--risk-bg);
+  border-color: var(--risk-border);
+  box-shadow: var(--shadow-md);
+}
+
+/* Selected State: Stronger indicator */
+.case-card--selected {
+  background-color: var(--risk-bg);
+  border-color: var(--risk-border);
+  border-width: 2px;
+  box-shadow: var(--shadow-lg), inset 0 0 0 2px var(--risk-accent);
+}
+
+/* Keyboard Focus: Prominent focus ring (WCAG 2.1 AA) */
+.case-card:focus-visible {
+  outline: 3px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* Critical Risk (≥90): Thick left border indicator */
+.case-card.risk-indicator-critical {
+  border-left: 6px solid var(--risk-text);
+  padding-left: calc(var(--space-md) - 2px); /* Adjust for border width */
+}
+
+/* ============================================================================
+   CASE CARD — LEFT PILLAR: Risk Indicator Block
+   ============================================================================ */
+
+.case-card__risk-pillar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+  width: 80px;
+  padding: var(--space-md);
+  background-color: var(--risk-bg);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--risk-border);
+  text-align: center;
+}
+
+.case-card__risk-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+}
+
+.case-card__risk-level {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  color: var(--risk-text);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: var(--line-height-tight);
+}
+
+.case-card__risk-score {
+  font-size: 1.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--risk-text);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.case-card__risk-denominator {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ============================================================================
+   CASE CARD — CENTER CONTENT: Entity + Route + Financials
+   ============================================================================ */
+
+.case-card__content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Entity Identification: Legal name, trade name, type */
+.case-card__entity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-sm);
+}
+
+.case-card__legal-name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-bold);
+  color: var(--neutral-text-primary);
+  flex-shrink: 0;
+}
+
+.case-card__trade-name {
+  font-size: var(--font-size-sm);
+  color: var(--neutral-text-secondary);
+  font-style: italic;
+}
+
+.case-card__entity-type {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  background-color: var(--neutral-light-card);
+  border-radius: var(--radius-sm);
+  color: var(--neutral-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.case-card__filing-id {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-xs);
+  color: var(--neutral-text-tertiary);
+  flex-shrink: 0;
+  padding: 2px 6px;
+  background-color: var(--neutral-light-card);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* Route: Origin → Destination with corridor */
+.case-card__route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--neutral-text-secondary);
+}
+
+.case-card__route-segment {
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-text-primary);
+}
+
+.case-card__route-arrow {
+  color: var(--neutral-border);
+}
+
+.case-card__corridor {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  background-color: var(--neutral-light-card);
+  border-radius: var(--radius-sm);
+  color: var(--neutral-text-tertiary);
+  white-space: nowrap;
+}
+
+/* Consignee */
+.case-card__consignee {
+  display: flex;
+  gap: var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--neutral-text-secondary);
+}
+
+.case-card__label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-text-secondary);
+}
+
+.case-card__value {
+  color: var(--neutral-text-primary);
+}
+
+/* HTS Code & Description */
+.case-card__hts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+}
+
+.case-card__hts-code {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: baseline;
+}
+
+.case-card__code {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--neutral-text-primary);
+  background-color: var(--neutral-light-card);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.case-card__hts-description {
+  color: var(--neutral-text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-normal);
+}
+
+/* List Variant: HTS description truncated with ellipsis */
+.case-card--list .case-card__hts-description {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+}
+
+/* Split Variant: Full HTS description visible */
+.case-card--split .case-card__hts-description {
+  -webkit-line-clamp: 2;
+}
+
+/* Footer: Financial & Filing Info */
+.case-card__footer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-md);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--risk-border);
+  margin-top: var(--space-sm);
+}
+
+.case-card__footer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.case-card__footer-item .case-card__label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.case-card__footer-item .case-card__value {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ============================================================================
+   CASE CARD — RIGHT SIDE: Actions & Critical Indicator
+   ============================================================================ */
+
+.case-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+.case-card__critical-icon {
+  color: var(--risk-l3-border);
+  animation: pulse-critical 2s infinite;
+}
+
+.case-card__arrow {
+  color: var(--neutral-border);
+  transition: color var(--transition-base), transform var(--transition-base);
+}
+
+.case-card:hover .case-card__arrow {
+  color: var(--risk-accent);
+  transform: translateX(4px);
+}
+
+/* ============================================================================
+   ANIMATION: Pulse for Critical Risk
+   ============================================================================ */
+
+@keyframes pulse-critical {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .case-card {
+    flex-direction: column;
+  }
+
+  .case-card__risk-pillar {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .case-card__footer {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .case-card {
+    padding: var(--space-sm);
+    gap: var(--space-sm);
+  }
+
+  .case-card__footer {
+    grid-template-columns: 1fr;
+  }
+
+  .case-card__actions {
+    gap: 0;
+  }
+
+  .case-card__critical-icon {
+    display: none;
+  }
+}

@@ -11,6 +11,10 @@ from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from cord_loader import load_cord_data_async
+from cbp_augmentor import augment_cbp_shipments_async
+from resolver import EntityResolver
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
@@ -334,13 +338,28 @@ class SenzingSDKWrapper:
 # ============= LIFESPAN STARTUP/SHUTDOWN =============
 
 async def initialize_senzing():
-    """Initialize Senzing engine at startup."""
+    """Initialize Senzing engine at startup and load CORD data."""
     global _senzing_engine, SENZING_INITIALIZED
 
     try:
         _senzing_engine = SenzingSDKWrapper(CORD_DATA_DIR)
         SENZING_INITIALIZED = True
         logger.info("✓ Senzing engine initialized")
+
+        # Load CORD data (Phase 2)
+        logger.info("Loading CORD data into Senzing engine...")
+        load_result = await asyncio.to_thread(load_cord_data_async, CORD_DATA_DIR, "/app/data/senzing.db")
+        logger.info(f"CORD load result: {json.dumps(load_result, indent=2)}")
+
+        # Augment with CBP shipments (Phase 3)
+        logger.info("Augmenting with CBP shipment data...")
+        augment_result = await augment_cbp_shipments_async(DATA_SERVICE_URL, "/app/data/senzing.db")
+        logger.info(f"CBP augmentation result: {json.dumps(augment_result, indent=2)}")
+
+        # Log final entity count
+        final_count = _senzing_engine.get_entity_count()
+        logger.info(f"✓ Senzing engine ready with {final_count:,} entities")
+
     except Exception as e:
         logger.error(f"✗ Failed to initialize Senzing: {e}")
         SENZING_INITIALIZED = False
@@ -442,76 +461,28 @@ async def get_entity(entity_id: str):
     }
 
 
-@app.post("/resolve", response_model=EntityChain)
+@app.post("/resolve")
 async def resolve_entity_chain(request: ResolveRequest):
-    """3-level entity resolution: shipper → parent → ultimate owner."""
+    """3-level entity resolution: shipper → parent → ultimate owner.
+
+    Uses EntityResolver for comprehensive chain resolution with OFAC detection,
+    ISF linking, and risk scoring.
+    """
     if not _senzing_engine:
         raise HTTPException(status_code=503, detail="Senzing engine not available")
 
     try:
-        # Level 1: Search for shipper
-        level_1_results = _senzing_engine.search_by_attributes(
+        # Use EntityResolver for full resolution (Phase 4)
+        resolver = EntityResolver("/app/data/senzing.db")
+        result = await asyncio.to_thread(
+            resolver.resolve_shipper_chain,
             request.shipper_name,
             request.shipper_country,
-            limit=1
+            request.consignee_name,
+            request.consignee_country
         )
+        return result
 
-        if not level_1_results:
-            raise HTTPException(status_code=404, detail="Shipper entity not found")
-
-        level_1_entity = level_1_results[0]
-        level_1_id = level_1_entity["entity_id"]
-
-        # Level 2: Get parent company
-        level_2_entity = None
-        level_2_id = None
-        relationships = _senzing_engine.get_relationships(level_1_id)
-        if relationships:
-            level_2_id = relationships[0]["target_entity_id"]
-            level_2_entity = _senzing_engine.get_entity_by_id(level_2_id)
-
-        # Level 3: Get ultimate owner
-        level_3_entity = None
-        if level_2_id:
-            relationships_l3 = _senzing_engine.get_relationships(level_2_id)
-            if relationships_l3:
-                level_3_id = relationships_l3[0]["target_entity_id"]
-                level_3_entity = _senzing_engine.get_entity_by_id(level_3_id)
-
-        # OFAC detection
-        ofac_detected = False
-        for entity in [level_1_entity, level_2_entity, level_3_entity]:
-            if entity and entity.get("data_source") == "OFAC":
-                ofac_detected = True
-                break
-
-        # Confidence calculation
-        confidences = [level_1_entity.get("confidence", 1.0)]
-        if level_2_entity:
-            confidences.append(level_2_entity.get("confidence", 1.0))
-        if level_3_entity:
-            confidences.append(level_3_entity.get("confidence", 1.0))
-
-        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
-
-        # Risk indicator
-        risk_indicator = None
-        if level_1_entity.get("country") == "CN":
-            risk_indicator = "CHINA_ORIGIN_MEDIUM_RISK"
-            if level_1_entity.get("confidence", 1.0) < 0.7:
-                risk_indicator = "CHINA_ORIGIN_LOW_CONFIDENCE"
-
-        return EntityChain(
-            level_1_entity=level_1_entity,
-            level_2_entity=level_2_entity,
-            level_3_entity=level_3_entity,
-            ofac_detected=ofac_detected,
-            avg_confidence=avg_confidence,
-            risk_indicator=risk_indicator
-        )
-
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Entity resolution failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

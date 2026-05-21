@@ -1,0 +1,220 @@
+/* CaseSummaryStrip Component Styles
+   Grid-aligned ribbon with semantic risk color tints
+*/
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background-color: var(--neutral-white);
+  border-bottom: 1px solid var(--neutral-border-light);
+  margin-bottom: var(--space-lg);
+}
+
+/* Loading skeleton state */
+.summary-strip[aria-busy='true'] {
+  pointer-events: none;
+}
+
+.summary-strip__skeleton {
+  height: 80px;
+  background: linear-gradient(90deg, var(--neutral-light-card) 25%, var(--neutral-border-light) 50%, var(--neutral-light-card) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius-lg);
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* ============================================================================
+   SUMMARY METRIC: Individual Card
+   ============================================================================ */
+
+.summary-metric {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--neutral-border-light);
+  background-color: var(--neutral-light-bg);
+  transition: all var(--transition-base);
+}
+
+.summary-metric:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--neutral-border);
+}
+
+/* Icon Container */
+.summary-metric__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Content: Label + Value */
+.summary-metric__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.summary-metric__label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--neutral-text-secondary);
+}
+
+.summary-metric__value {
+  font-size: 1.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--neutral-text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.summary-metric__denominator {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* ============================================================================
+   RISK-LEVEL SPECIFIC STYLES
+   ============================================================================ */
+
+/* High Risk Metric */
+.summary-metric--high-risk {
+  background-color: var(--risk-l3-bg);
+  border-color: var(--risk-l3-border);
+}
+
+.summary-metric--high-risk .summary-metric__icon {
+  color: var(--risk-l3-text);
+}
+
+.summary-metric--high-risk .summary-metric__label {
+  color: var(--risk-l3-text);
+}
+
+.summary-metric--high-risk .summary-metric__value {
+  color: var(--risk-l3-text);
+}
+
+/* Medium Risk Metric */
+.summary-metric--medium-risk {
+  background-color: var(--risk-l2-bg);
+  border-color: var(--risk-l2-border);
+}
+
+.summary-metric--medium-risk .summary-metric__icon {
+  color: var(--risk-l2-text);
+}
+
+.summary-metric--medium-risk .summary-metric__label {
+  color: var(--risk-l2-text);
+}
+
+.summary-metric--medium-risk .summary-metric__value {
+  color: var(--risk-l2-text);
+}
+
+/* Low Risk Metric */
+.summary-metric--low-risk {
+  background-color: var(--risk-l1-bg);
+  border-color: var(--risk-l1-border);
+}
+
+.summary-metric--low-risk .summary-metric__icon {
+  color: var(--risk-l1-text);
+}
+
+.summary-metric--low-risk .summary-metric__label {
+  color: var(--risk-l1-text);
+}
+
+.summary-metric--low-risk .summary-metric__value {
+  color: var(--risk-l1-text);
+}
+
+/* Total & Secondary Metrics (neutral styling) */
+.summary-metric--total,
+.summary-metric--value,
+.summary-metric--avg-score {
+  background-color: var(--neutral-light-bg);
+  border-color: var(--neutral-border-light);
+}
+
+.summary-metric--total .summary-metric__icon,
+.summary-metric--value .summary-metric__icon,
+.summary-metric--avg-score .summary-metric__icon {
+  color: var(--federal-navy);
+}
+
+.summary-metric--total .summary-metric__label,
+.summary-metric--value .summary-metric__label,
+.summary-metric--avg-score .summary-metric__label {
+  color: var(--neutral-text-secondary);
+}
+
+.summary-metric--total .summary-metric__value,
+.summary-metric--value .summary-metric__value,
+.summary-metric--avg-score .summary-metric__value {
+  color: var(--federal-navy);
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 1024px) {
+  .summary-strip {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: var(--space-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+
+  .summary-metric {
+    padding: var(--space-sm);
+    gap: var(--space-sm);
+  }
+
+  .summary-metric__value {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .summary-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-metric {
+    min-width: 0;
+  }
+
+  .summary-metric__value {
+    font-size: 1.25rem;
+  }
+}
