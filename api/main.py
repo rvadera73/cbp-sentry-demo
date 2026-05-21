@@ -75,6 +75,7 @@ from services.horizons.routes import router as horizons_router
 from services.shipments.routes import router as shipments_router
 from services.cord_rag.routes import router as cord_router
 from services.isf.routes import router as isf_router
+from services.risk_corridors.routes import router as risk_corridors_router
 
 app.include_router(ingest_router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(scoring_router, prefix="/api/scoring", tags=["scoring"])
@@ -85,6 +86,7 @@ app.include_router(horizons_router, prefix="/api/horizons", tags=["horizons"])
 app.include_router(shipments_router, tags=["shipments"])
 app.include_router(cord_router, prefix="/api/cord", tags=["cord-rag"])
 app.include_router(isf_router)
+app.include_router(risk_corridors_router, tags=["risk-corridors"])
 
 
 @app.exception_handler(Exception)
