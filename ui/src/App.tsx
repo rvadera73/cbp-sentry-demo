@@ -3,7 +3,7 @@ import { useRole } from './context/RoleContext'
 import { WorkflowProvider } from './context/WorkflowContext'
 import Header from './components/layout/Header'
 import LoginPage from './pages/LoginPage'
-import CBPOfficerDashboard from './pages/CBPOfficerDashboard'
+import ManifestRiskQueuePage from './pages/ManifestRiskQueuePage'
 import CaseViewerPage from './pages/CaseViewerPage'
 import ScoringCalibrationPage from './pages/ScoringCalibrationPage'
 import NotFoundPage from './pages/NotFoundPage'
@@ -65,7 +65,7 @@ function App() {
           {/* Protected Routes - Role-Based Dashboards */}
           <Route
             path="/dashboard"
-            element={<ProtectedRoute element={<CBPOfficerDashboard />} allowedRoles={['cbp_officer']} />}
+            element={<ManifestRiskQueuePage />}
           />
 
           <Route

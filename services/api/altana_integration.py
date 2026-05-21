@@ -1,8 +1,11 @@
 """
 Altana Atlas Supply Chain Verification Integration
 
-Triggers supply chain deep-dive verification for high-risk shipments (score ≥ 90%).
+Triggers supply chain deep-dive verification for high-risk shipments (score ≥ 75%).
 Uses Altana's global knowledge graph to trace upstream suppliers and verify origin.
+
+For demo: Stubbed to fixture mode. Only called when risk_score >= 75%.
+Real implementation: Replace with actual Altana API key and endpoints.
 """
 
 import logging
@@ -17,6 +20,9 @@ logger = logging.getLogger(__name__)
 ALTANA_API_KEY = os.getenv("ALTANA_API_KEY", "demo-key-12345")
 ALTANA_BASE_URL = "https://api.altanaai.com/api/v1"
 ALTANA_ENABLED = os.getenv("ALTANA_ENABLED", "false").lower() == "true"
+
+# High-risk threshold for Altana verification
+ALTANA_RISK_THRESHOLD = 75.0  # Only verify shipments with risk_score >= 75%
 
 
 class AltanaVerificationClient:

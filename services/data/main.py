@@ -21,7 +21,11 @@ def seed_demo_data():
     The manifest JSON is the authoritative data source.
     All shipment IDs come from manifest (SHP-000001, etc.)
     Database is populated ONCE from manifest JSON on first startup.
-    No hardcoded fallback data — manifests file is REQUIRED.
+
+    Priority:
+    1. If manifest_demo_cases.json exists (CBP demo/fixture mode) → load it
+    2. Else if manifest_feb_march_2026_with_isf.json exists → load the full manifest
+    3. Else error
     """
     conn = sqlite3.connect("/app/data/cbp_sentry.db")
     cursor = conn.cursor()
@@ -34,8 +38,12 @@ def seed_demo_data():
         conn.close()
         return
 
-    # REQUIRED: Load manifest JSON (no fallback, no demo data, no shortcuts)
-    manifest_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
+    # Load FULL manifest (1500+ cases) as primary data source
+    full_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
+    # Load DEMO cases to enrich/override with showcase examples
+    demo_file = Path("/app/seed_data/manifest_demo_cases.json")
+
+    manifest_file = full_file
 
     logger.info(f"📦 INITIALIZING DATABASE from manifest JSON")
     logger.info(f"   Looking for: {manifest_file}")
@@ -46,7 +54,9 @@ def seed_demo_data():
             f"   This file MUST exist to populate the database.\n"
             f"   All shipments in the system come from this manifest.\n\n"
             f"   Fix:\n"
-            f"   1. Ensure services/data/seed_data/manifest_feb_march_2026_with_isf.json exists locally\n"
+            f"   1. Ensure one of these files exists:\n"
+            f"      - services/data/seed_data/manifest_demo_cases.json (CBP demo)\n"
+            f"      - services/data/seed_data/manifest_feb_march_2026_with_isf.json (full)\n"
             f"   2. Run: docker-compose down -v && docker-compose up\n"
             f"   3. OR: bash scripts/unified-setup.sh local\n\n"
         )

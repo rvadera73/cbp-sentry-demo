@@ -56,21 +56,26 @@ services:
     environment:
       DATA_SERVICE_URL: ${DATA_SERVICE_URL:-http://sentry-data:8005}
       SENZING_URL: ${SENZING_URL:-http://senzing:8250}
+      CORD_SERVICE_URL: ${CORD_SERVICE_URL:-http://sentry-cord-integration:8004}
       CORD_DATA_DIR: /app/cord-data
-      CORD_INDEX_PATH: /tmp/cord_index.db
-      API_MODE: ${API_MODE:-fixture}
+      CORD_INDEX_PATH: /app/data/cord_index.db
+      API_MODE: ${API_MODE:-live}
       PYTHONUNBUFFERED: "1"
       ENVIRONMENT: ${DEPLOYMENT_ENV:-local}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       VESSELAPI_KEY: ${VESSELAPI_KEY:-}
       OFAC_API_KEY: ${OFAC_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-cbp-sentry}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
       - ./cord-data:/app/cord-data:ro
-      - sentry_api_data_volume:/app/cord-index
+      - sentry_data_volume:/app/data
     depends_on:
       sentry-data:
+        condition: service_healthy
+      sentry-cord-integration:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "/healthcheck.sh"]
@@ -119,6 +124,43 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # === CORD Integration Service ===
+  sentry-cord-integration:
+    build:
+      context: ./services/cord-integration
+      dockerfile: Dockerfile
+      cache_from:
+        - sentry-cord-integration:latest
+    image: sentry-cord-integration:latest
+    container_name: sentry-cord-integration
+    environment:
+      CORD_DATA_DIR: /app/cord-data
+      DATA_SERVICE_URL: ${DATA_SERVICE_URL:-http://sentry-data:8005}
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${CORD_PORT:-8004}:8004"
+    volumes:
+      - ./cord-data:/app/cord-data:ro
+      - sentry_data_volume:/app/data
+    depends_on:
+      sentry-data:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - sentry-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # === OPTIONAL: Senzing Entity Resolution ===
   senzing:
     image: senzing/senzing-api-server:3.5.2
@@ -151,11 +193,9 @@ services:
       - senzing
 
 # === VOLUMES ===
-# Only data persists, NOT source code
+# sentry_data_volume: shared by both data + API (for DB + CORD index persistence)
 volumes:
   sentry_data_volume:
-    driver: local
-  sentry_api_data_volume:
     driver: local
   senzing_data_volume:
     driver: local
