@@ -1,0 +1,158 @@
+/* CaseManagerLayout Component Styles
+   Enterprise case management container with 3-view architecture
+*/
+
+.case-manager-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: var(--neutral-light-bg);
+}
+
+.case-manager-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   ERROR STATE
+   ============================================================================ */
+
+.error-alert {
+  margin: var(--space-lg);
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  border-left: 4px solid var(--risk-l3-border);
+  background-color: var(--risk-l3-bg);
+  color: var(--risk-l3-text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  font-size: var(--font-size-sm);
+}
+
+.error-alert strong {
+  font-weight: var(--font-weight-bold);
+}
+
+.error-retry-btn {
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--risk-l3-border);
+  border-radius: var(--radius-md);
+  background-color: transparent;
+  color: var(--risk-l3-border);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.error-retry-btn:hover {
+  background-color: var(--risk-l3-border);
+  color: var(--neutral-white);
+}
+
+.error-retry-btn:focus-visible {
+  outline: 2px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   LOADING STATE
+   ============================================================================ */
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  padding: var(--space-3xl) var(--space-xl);
+  color: var(--neutral-text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--neutral-border-light);
+  border-top-color: var(--federal-focus);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-state p {
+  font-size: var(--font-size-base);
+}
+
+/* ============================================================================
+   EMPTY STATE
+   ============================================================================ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-lg);
+  padding: var(--space-3xl) var(--space-xl);
+  color: var(--neutral-text-secondary);
+}
+
+.empty-state p {
+  font-size: var(--font-size-base);
+}
+
+.empty-state-btn {
+  padding: var(--space-sm) var(--space-lg);
+  border: none;
+  border-radius: var(--radius-md);
+  background-color: var(--federal-navy);
+  color: var(--neutral-white);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.empty-state-btn:hover {
+  background-color: var(--federal-focus);
+}
+
+.empty-state-btn:focus-visible {
+  outline: 2px solid var(--federal-focus);
+  outline-offset: 2px;
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .case-manager-layout {
+    min-height: auto;
+  }
+
+  .error-alert {
+    margin: var(--space-md);
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .error-retry-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .loading-state,
+  .empty-state {
+    padding: var(--space-2xl) var(--space-md);
+  }
+}

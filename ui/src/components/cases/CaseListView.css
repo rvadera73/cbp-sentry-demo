@@ -1,0 +1,62 @@
+/* CaseListView Component Styles
+   High-density vertical list of case cards
+*/
+
+.case-list-view {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.case-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  flex: 1;
+  min-width: 0;
+}
+
+/* List item (wrapper for each card) */
+.case-list-container > [role='listitem'] {
+  display: block;
+}
+
+/* Scrollbar styling for webkit browsers */
+.case-list-view::-webkit-scrollbar {
+  width: 8px;
+}
+
+.case-list-view::-webkit-scrollbar-track {
+  background: var(--neutral-light-bg);
+}
+
+.case-list-view::-webkit-scrollbar-thumb {
+  background: var(--neutral-border);
+  border-radius: 4px;
+  transition: background var(--transition-base);
+}
+
+.case-list-view::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-text-tertiary);
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  .case-list-container {
+    gap: var(--space-xs);
+    padding: var(--space-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .case-list-container {
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+  }
+}
