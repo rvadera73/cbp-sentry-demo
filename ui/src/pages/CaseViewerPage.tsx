@@ -276,35 +276,50 @@ export default function CaseViewerPage() {
           </div>
         </div>
 
-        <div className="case-content">
-          {/* Risk Gauge & Action Buttons */}
-          <div className="case-sidebar">
-            <div className="risk-gauge-container">
-              <svg className="risk-gauge" viewBox="0 0 200 200">
-                <circle cx="100" cy="100" r="90" fill="none" stroke="#e5e5e5" strokeWidth="20" />
-                <circle
-                  cx="100"
-                  cy="100"
-                  r="90"
-                  fill="none"
-                  stroke={getRiskColor(currentScore)}
-                  strokeWidth="20"
-                  strokeDasharray={`${((currentScore / 100) * 565.48)}, 565.48`}
-                  transform="rotate(-90 100 100)"
-                />
-                <text x="100" y="85" textAnchor="middle" fontSize="36" fontWeight="700" fill="#1e293b">
-                  {Math.round(currentScore)}
-                </text>
-                <text x="100" y="110" textAnchor="middle" fontSize="14" fill="#666">
-                  {getRiskLabel(currentScore)}
-                </text>
-              </svg>
-            </div>
+        {/* New Sidebar Layout */}
+        <div className="case-content-with-sidebar">
+          {/* Left Sidebar Navigation */}
+          <div className="case-sidebar-nav">
+            <nav className="sidebar-tabs">
+              <button
+                className={`sidebar-tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overview')}
+                title="Shipment information"
+              >
+                <span>📋</span>
+                <span className="tab-label">Overview</span>
+              </button>
+              <button
+                className={`sidebar-tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
+                onClick={() => setActiveTab('workflow')}
+                title="Investigation workflow and signals"
+              >
+                <span>🔄</span>
+                <span className="tab-label">Workflow</span>
+              </button>
+              <button
+                className={`sidebar-tab-btn ${activeTab === 'entity-chain' ? 'active' : ''}`}
+                onClick={() => setActiveTab('entity-chain')}
+                title="Entity ownership chain"
+              >
+                <span>🔗</span>
+                <span className="tab-label">Entities</span>
+              </button>
+              <button
+                className={`sidebar-tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
+                onClick={() => setActiveTab('referral')}
+                title="Full referral package"
+              >
+                <span>📦</span>
+                <span className="tab-label">Referral</span>
+              </button>
+            </nav>
 
+            {/* Officer Action Section */}
             <div className="action-buttons">
               <h3>Officer Action</h3>
               <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
-                Score {Math.round(currentScore)}/100 — Showing viable options
+                Score {Math.round(currentScore)}/100
               </p>
               {viableActions.map(btn => (
                 <button
@@ -319,36 +334,8 @@ export default function CaseViewerPage() {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="case-tabs-container">
-            <div className="tabs-header">
-              <button
-                className={`tab-btn ${activeTab === 'overview' ? 'active' : ''}`}
-                onClick={() => setActiveTab('overview')}
-              >
-                📋 Overview
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'workflow' ? 'active' : ''}`}
-                onClick={() => setActiveTab('workflow')}
-              >
-                🔄 Workflow & Signals
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'entity-chain' ? 'active' : ''}`}
-                onClick={() => setActiveTab('entity-chain')}
-              >
-                🔗 Entity Chain
-              </button>
-              <button
-                className={`tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
-                onClick={() => setActiveTab('referral')}
-              >
-                📦 Referral Package
-              </button>
-            </div>
-
-            <div className="tab-content">
+          {/* Main Content Area */}
+          <div className="case-content-main">
               {activeTab === 'overview' && (
                 <div className="tab-panel">
                   <div style={{ marginBottom: '24px', padding: '16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px' }}>
@@ -490,7 +477,6 @@ export default function CaseViewerPage() {
                   />
                 </div>
               )}
-            </div>
           </div>
         </div>
 
