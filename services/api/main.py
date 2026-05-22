@@ -22,6 +22,12 @@ from vertex_ai_integration import get_vertex_ai_client
 from altana_integration import altana_client, ALTANA_RISK_THRESHOLD
 from business_logic.corridor_factory import RiskCorridorFactory
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 # Config
@@ -35,6 +41,12 @@ _oidc_token_expiry = {}
 
 # Risk Corridor Factory instance
 corridor_factory = RiskCorridorFactory()
+
+# Gemini AI setup
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
+if GEMINI_AVAILABLE and GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+    GEMINI_MODEL = genai.GenerativeModel("gemini-pro")
 
 
 async def get_oidc_token(target_service_url: str) -> Optional[str]:
@@ -2778,6 +2790,166 @@ async def analyze_hts_code(hts_code: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"HTS analysis error: {e}")
         raise HTTPException(status_code=400, detail=f"HTS analysis failed: {str(e)}")
+
+
+# ==================== GEMINI AI ENDPOINTS ====================
+
+@app.post("/api/gemini/synopsis")
+async def gemini_case_synopsis(request: Dict[str, Any]) -> Dict[str, str]:
+    """Generate AI synopsis for a CBP investigation case.
+
+    Input: {caseName, entity, category, shipments[], findings[]}
+    Returns: {synopsis: string}
+    """
+    if not GEMINI_AVAILABLE or not GOOGLE_API_KEY:
+        # Fallback demo response
+        return {
+            "synopsis": f"CBP investigation into {request.get('entity', 'Unknown Entity')} "
+                       f"importing {request.get('category', 'merchandise')}. "
+                       f"Case involves {len(request.get('shipments', []))} shipments "
+                       f"and {len(request.get('findings', []))} AI findings. "
+                       f"Risk indicators suggest transshipment evasion patterns via "
+                       f"restricted origin countries. Recommend escalation to enforcement division."
+        }
+
+    try:
+        shipments_summary = f"{len(request.get('shipments', []))} shipments analyzed"
+        findings_summary = f"{len(request.get('findings', []))} anomalies detected"
+
+        prompt = f"""You are a CBP trade enforcement analyst. Provide a 2-3 sentence executive
+summary of this investigation case:
+
+Case: {request.get('caseName', 'Unknown')}
+Target Entity: {request.get('entity', 'Unknown')}
+Product Category: {request.get('category', 'Unknown')}
+Shipments: {shipments_summary}
+AI Findings: {findings_summary}
+
+Focus on anomalies, risk factors, and enforcement recommendation."""
+
+        response = GEMINI_MODEL.generate_content(prompt)
+        return {"synopsis": response.text}
+    except Exception as e:
+        logger.error(f"Gemini synopsis error: {e}")
+        return {"synopsis": f"Unable to generate synopsis: {str(e)}"}
+
+
+@app.post("/api/gemini/assistant")
+async def gemini_chat_assistant(request: Dict[str, Any]) -> Dict[str, Any]:
+    """CBP Sentry chat assistant with enforcement context.
+
+    Input: {message, history[], context?{id, name, target, riskScore, stage, officer}}
+    Returns: {text: string, isDemoMode: boolean}
+    """
+    if not GEMINI_AVAILABLE or not GOOGLE_API_KEY:
+        return {
+            "text": f"Demo mode: You asked about {request.get('message', 'something')}. "
+                   f"In production, the AI would provide detailed CBP enforcement guidance.",
+            "isDemoMode": True
+        }
+
+    try:
+        message = request.get("message", "")
+        history = request.get("history", [])
+        context = request.get("context", {})
+
+        context_str = ""
+        if context:
+            context_str = f"\n\nCase Context:\nCase ID: {context.get('id', 'N/A')}\n" \
+                         f"Name: {context.get('name', 'N/A')}\n" \
+                         f"Target: {context.get('target', 'N/A')}\n" \
+                         f"Risk Score: {context.get('riskScore', 'N/A')}/100\n" \
+                         f"Officer: {context.get('officer', 'N/A')}"
+
+        system_prompt = """You are Sentry, the authorized CBP (Customs and Border Protection)
+Intelligence Assistant. You provide expert guidance on trade enforcement, transshipment detection,
+entity resolution, and compliance investigations. You can cross-reference container manifests,
+evaluate routing anomalies, and help draft DOJ referral narratives. Be concise and authoritative."""
+
+        prompt = system_prompt + context_str + f"\n\nUser: {message}"
+
+        response = GEMINI_MODEL.generate_content(prompt)
+        return {
+            "text": response.text,
+            "isDemoMode": False
+        }
+    except Exception as e:
+        logger.error(f"Gemini assistant error: {e}")
+        return {
+            "text": f"Error: {str(e)}",
+            "isDemoMode": True
+        }
+
+
+@app.post("/api/gemini/draft-referral")
+async def gemini_draft_referral(request: Dict[str, Any]) -> Dict[str, str]:
+    """Generate DHS-compliant referral narrative draft.
+
+    Input: {caseName, targetEntity, category, shipments[], findings[], sections[]}
+    Returns: {narrative: string}
+    """
+    if not GEMINI_AVAILABLE or not GOOGLE_API_KEY:
+        # Fallback demo response
+        case_name = request.get("caseName", "CBP-2026-XXXX")
+        target = request.get("targetEntity", "Unknown Entity")
+        return {
+            "narrative": f"""OFFICIAL DHS GENERAL COUNSEL TRADE FRAUD COMPLIANCE DRAFT
+
+CASE ID: {case_name}
+TARGET ENTITY: {target}
+
+EXECUTIVE SUMMARY & CHARGES
+Investigation into {target} revealed systematic transshipment evasion through restricted origin
+concealment and circular invoicing schemes. AI analysis flagged {len(request.get('shipments', []))}
+shipments with anomaly scores ≥80. Recommend escalation to DOJ Trade Division.
+
+SUBJECT CORPORATE OVERVIEW
+{target} operates as an intermediary entity with shell company characteristics. Beneficial ownership
+traces to restricted foreign manufacturing bases. Tax records indicate suspicious layering patterns.
+
+FORENSIC EVIDENCE ACCUMULATION
+{len(request.get('findings', []))} critical AI findings support fraud allegations: origin country
+mismatch, weight discrepancy in manifests, vessel AIS routing anomalies, and circular billing patterns.
+
+RECOMMENDED LEGAL ACTIONS
+Initiate formal investigation under 19 U.S.C. § 1592. Recommend 250% penalty on false statements
+and potential criminal referral for conspiracy to evade tariffs. Block entity from future US imports."""
+        }
+
+    try:
+        sections = request.get("sections", [
+            "Executive Summary & Charges",
+            "Subject Corporate Overview",
+            "Forensic Evidence Accumulation",
+            "Recommended Legal Actions"
+        ])
+
+        shipments = request.get("shipments", [])
+        findings = request.get("findings", [])
+        shipments_detail = f"{len(shipments)} shipments with origin concealment and manifest anomalies" if shipments else "multiple shipments"
+        findings_detail = f"{len(findings)} AI findings flagged" if findings else "multiple anomalies detected"
+
+        section_list = "\n".join([f"- {s}" for s in sections])
+
+        prompt = f"""Draft a DHS-compliant CSOP-BP-GS-26-0001 trade fraud referral narrative for:
+
+Case: {request.get('caseName', 'Unknown')}
+Target Entity: {request.get('targetEntity', 'Unknown')}
+Category: {request.get('category', 'Unknown')}
+Shipments: {shipments_detail}
+Findings: {findings_detail}
+
+Include these sections:
+{section_list}
+
+Use formal legal language. Cite relevant statutes. Recommend enforcement actions based on severity.
+Each section should be 2-3 sentences."""
+
+        response = GEMINI_MODEL.generate_content(prompt)
+        return {"narrative": response.text}
+    except Exception as e:
+        logger.error(f"Gemini referral draft error: {e}")
+        return {"narrative": f"Error generating referral: {str(e)}"}
 
 
 if __name__ == "__main__":

@@ -1,0 +1,135 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Sparkles } from 'lucide-react';
+
+interface Message {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+interface V2ChatPanelProps {
+  caseContext?: {
+    id: string;
+    name: string;
+    target: string;
+    riskScore: number;
+    officer: string;
+  };
+}
+
+export default function V2ChatPanel({ caseContext }: V2ChatPanelProps) {
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: 'assistant',
+      text: 'Authorized Sentry Platform Secure Assistant live. Ask me to cross-reference container logs, evaluate routing anomalies, or draft a DOJ referral narrative.',
+    },
+  ]);
+  const [currentMessage, setCurrentMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = async () => {
+    if (!currentMessage.trim()) return;
+
+    const userText = currentMessage;
+    setCurrentMessage('');
+    setMessages(prev => [...prev, { role: 'user', text: userText }]);
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/gemini/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userText,
+          history: messages.map(m => ({ role: m.role, content: m.text })),
+          context: caseContext,
+        }),
+      });
+
+      const data = await response.json();
+      setMessages(prev => [...prev, { role: 'assistant', text: data.text || 'No response received.' }]);
+    } catch (error) {
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: 'Error: Unable to connect to AI service. Please try again.',
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-80 bg-white border-l border-[#D0D7DE] flex flex-col h-full shadow-lg">
+      {/* Header */}
+      <div className="p-3 border-b border-[#D0D7DE] bg-[#F7F9FC] flex items-center space-x-2">
+        <Sparkles className="h-4 w-4 text-cyan-500" />
+        <span className="text-xs font-bold text-[#112E51] uppercase font-mono">CBP Ask-AI</span>
+      </div>
+
+      {/* Chat Messages */}
+      <div
+        ref={chatRef}
+        className="flex-1 overflow-y-auto p-3 space-y-3"
+      >
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
+            <div
+              className={`max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                msg.role === 'user'
+                  ? 'bg-[#005EA2] text-white rounded-br-none'
+                  : 'bg-[#F7F9FC] border border-[#D0D7DE] text-[#1B1B1B] rounded-bl-none'
+              }`}
+            >
+              {msg.text}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-[#F7F9FC] border border-[#D0D7DE] px-3 py-2 rounded-lg rounded-bl-none">
+              <div className="flex space-x-1">
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="p-3 border-t border-[#D0D7DE] flex space-x-2">
+        <input
+          type="text"
+          value={currentMessage}
+          onChange={(e) => setCurrentMessage(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              handleSendMessage();
+            }
+          }}
+          placeholder="Ask a question..."
+          className="flex-1 bg-[#F7F9FC] border border-[#D0D7DE] rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#005EA2] focus:ring-1 focus:ring-[#005EA2]"
+          disabled={loading}
+        />
+        <button
+          onClick={handleSendMessage}
+          disabled={loading || !currentMessage.trim()}
+          className="px-2.5 py-1.5 bg-[#005EA2] hover:bg-[#0076D6] disabled:bg-gray-300 text-white rounded text-xs font-bold cursor-pointer transition-all"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
