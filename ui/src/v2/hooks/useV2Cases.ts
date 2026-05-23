@@ -5,35 +5,52 @@ import { api } from '../../services/api';
 interface UseV2CasesReturn {
   cases: Case[];
   shipments: Shipment[];
+  caseShipments: Record<string, Shipment[]>;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
 }
 
+// HS code to commodity name mapping
+const COMMODITY_MAP: Record<string, string> = {
+  '7604': 'Aluminum Extrusions',
+  '7610': 'Aluminum Structures',
+  '7611': 'Aluminum Waste & Scrap',
+  '8541': 'Semiconductor Devices & Solar Cells',
+  '8517': 'Telecom Equipment',
+  '2933': 'Pharmaceutical Compounds',
+  '2942': 'Organic Chemicals',
+  '7308': 'Steel Structures',
+  '9999': 'General Merchandise',
+};
+
+function getCommodityName(hsCode: string): string {
+  if (!hsCode) return 'General Merchandise';
+  const prefix = hsCode.split('.')[0];
+  return COMMODITY_MAP[prefix] || 'General Merchandise';
+}
+
 /**
- * Fetches shipments from API and maps to wireframe Case type
+ * Fetches shipments from API and maps to wireframe Case + Shipment types with corridor & commodity context
  */
 export function useV2Cases(): UseV2CasesReturn {
   const [cases, setCases] = useState<Case[]>([]);
   const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [caseShipments, setCaseShipments] = useState<Record<string, Shipment[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const derivePriority = (riskScore: number): 'Critical' | 'High' | 'Medium' | 'Low' => {
-    if (riskScore >= 90) return 'Critical';
-    if (riskScore >= 70) return 'High';
-    if (riskScore >= 50) return 'Medium';
+    if (riskScore >= 80) return 'Critical';
+    if (riskScore >= 60) return 'High';
+    if (riskScore >= 40) return 'Medium';
     return 'Low';
   };
 
-  const deriveCaseStatus = (status?: string): Case['case_status'] => {
-    if (!status) return 'Active';
-    const s = status.toLowerCase();
-    if (s.includes('closed')) return 'Closed';
-    if (s.includes('enforced')) return 'Enforced';
-    if (s.includes('referral')) return 'Referral Prepared';
-    if (s.includes('audit')) return 'Under Audit';
-    return 'Active';
+  const deriveCaseStatus = (riskScore: number): Case['case_status'] => {
+    if (riskScore >= 75) return 'Active';
+    if (riskScore >= 50) return 'Under Audit';
+    return 'Referral Prepared';
   };
 
   const fetchCases = async () => {
@@ -42,58 +59,179 @@ export function useV2Cases(): UseV2CasesReturn {
       setError(null);
 
       const response = await api.getShipments(50, 0);
-      const shipmentData = response.shipments || [];
+      let shipmentData = response.shipments || [];
 
-      setShipments(
-        shipmentData.map((s: any): Shipment => ({
-          shipment_id: s.id || `SH-${Math.random()}`,
-          origin_country: s.origin_country || 'Unknown',
-          destination_country: s.destination_country || 'USA',
-          declared_origin: s.shipper_country || 'Unknown',
-          suspected_origin: s.origin_country !== s.shipper_country ? s.origin_country : s.origin_country,
-          product_code: s.commodity_code || '',
-          product_description: s.commodity_name || 'Unknown Commodity',
-          route: s.route || [s.origin_country, s.destination_country],
-          container_id: s.container_id || `CONT-${Math.random()}`,
+      // Enrich shipments with detailed risk breakdown via API endpoint
+      shipmentData = await Promise.all(
+        shipmentData.map(async (s: any) => {
+          try {
+            // Fetch detailed breakdown for each shipment using the api client
+            // The backend endpoint /api/data/shipments/{id}?include_breakdown=true returns enriched data
+            const response = await fetch(`/api/data/shipments/${s.id || s.shipment_id}?include_breakdown=true`, {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (response.ok) {
+              const enrichedShipment = await response.json();
+              return {
+                ...s,
+                risk_breakdown: enrichedShipment.risk_breakdown,
+                audit_trail: enrichedShipment.audit_trail,
+                ai_synthesis: enrichedShipment.ai_synthesis,
+                // Update risk_score if refined by Altana
+                risk_score: enrichedShipment.risk_score || s.risk_score
+              };
+            }
+            return s;
+          } catch (e) {
+            // If breakdown fetch fails, return original shipment
+            console.warn(`Failed to fetch risk breakdown for shipment ${s.id}:`, e);
+            return s;
+          }
+        })
+      );
+
+      // Map shipments with all API fields
+      const mappedShipments: Shipment[] = shipmentData.map((s: any): Shipment => {
+        // Parse h2_signals
+        const h2Signals = Array.isArray(s.h2_signals) ? s.h2_signals :
+                         typeof s.h2_signals === 'string' ? JSON.parse(s.h2_signals) : [];
+
+        // Add ELEMENT9_MISMATCH to signals if mismatch detected
+        const allSignals = [...h2Signals];
+        if (s.element9_is_mismatch === 1 || s.element9_is_mismatch === true) {
+          allSignals.push('ELEMENT9_MISMATCH');
+        }
+
+        // Parse port_calls
+        let portCalls = [s.origin_country || 'XX', 'SG', s.destination_country || 'US'];
+        if (s.port_calls) {
+          try {
+            portCalls = typeof s.port_calls === 'string' ? JSON.parse(s.port_calls) : s.port_calls;
+          } catch (e) {
+            portCalls = [s.origin_country || 'XX', 'SG', s.destination_country || 'US'];
+          }
+        }
+
+        return {
+          shipment_id: s.id?.toString() || `SH-${Math.random().toString(36).substring(7)}`,
+          origin_country: s.origin_country || 'XX',
+          destination_country: s.destination_country || 'US',
+          declared_origin: s.element9_declared_country || s.shipper_country || 'XX',
+          suspected_origin: s.element9_actual_country || s.origin_country || 'XX',
+          product_code: s.commodity_code || s.hs_code || '9999',
+          product_description: s.commodity_name || getCommodityName(s.commodity_code || s.hs_code),
+          route: portCalls,
+          container_id: s.id?.toString() || `CONT-${Math.random().toString(36).substring(7)}`,
           manifest_data: {
             shipper: s.shipper_name || 'Unknown',
             consignee: s.consignee_name || 'Unknown',
-            weight_kg: s.weight_kg || 0,
-            declared_value_usd: s.declared_value || 0,
-            carrier: s.carrier || 'Unknown Carrier',
-            vessel: s.vessel || 'Unknown Vessel',
-            voyage_number: s.voyage_number || 'Unknown',
-            bill_of_lading: s.bill_of_lading || 'Unknown',
+            weight_kg: s.declared_weight_kg || 0,
+            declared_value_usd: s.declared_value || s.declared_value_usd || 0,
+            carrier: s.vessel_name || 'Unknown Carrier',
+            vessel: s.vessel_name || 'Unknown Vessel',
+            voyage_number: s.voyage_number || '',
+            bill_of_lading: s.bill_of_lading || '',
           },
-          manifest_anomalies: s.h2_signals || [],
-          ai_anomaly_score: Math.round(s.risk_score || 0),
-          customs_flags: [],
-          inspection_history: '',
+          manifest_anomalies: allSignals,
+          ai_anomaly_score: s.risk_score || 50,
+          customs_flags: s.customs_flags ? (typeof s.customs_flags === 'string' ? JSON.parse(s.customs_flags) : s.customs_flags) : [],
+          inspection_history: s.inspection_history || 'No recent inspections',
           date: s.created_at || new Date().toISOString().split('T')[0],
-        }))
-      );
 
-      const mappedCases: Case[] = shipmentData.map((s: any, idx: number): Case => ({
-        case_id: s.id || `CBP-2026-${1000 + idx}`,
-        case_name: `${s.shipper_name || 'Unknown'} Import Investigation`,
-        target_entity: `${s.shipper_name || 'Unknown'} / ${s.consignee_name || 'Unknown'}`,
-        risk_score: Math.round(s.risk_score || 0),
-        assigned_officer: 'Rav J. D.',
-        investigation_stage: 'Overview',
-        case_status: deriveCaseStatus(s.status),
-        referral_status: 'Not Initiated',
-        priority: derivePriority(s.risk_score || 0),
-        opened_date: s.created_at || new Date().toISOString().split('T')[0],
-        sla_timer: '14 days',
-        product_category: s.commodity_name || 'Unknown',
-        ai_confidence: Math.min(100, Math.round((s.risk_score || 0) + Math.random() * 20)),
-        ai_synopsis: undefined,
-      }));
+          // API Fields
+          hs_code: s.commodity_code || s.hs_code,
+          commodity_name: s.commodity_name || getCommodityName(s.commodity_code || s.hs_code),
+          h1_score: s.h1_score || 0,
+          h2_score: s.h2_score || 0,
+          h3_score: Math.max(0, (s.risk_score || 0) - (s.h1_score || 0) - (s.h2_score || 0)),
+          h1_risk_level: (s.h1_score || 0) >= 20 ? 'HIGH' : 'MEDIUM',
+          h2_signals: h2Signals,
+          h3_recommendation: s.h3_recommendation || 'EXAMINE',
+          element9_is_mismatch: s.element9_is_mismatch === 1 || s.element9_is_mismatch === true,
+          element9_declared_country: s.element9_declared_country,
+          element9_actual_country: s.element9_actual_country,
+          shipper_name: s.shipper_name,
+          shipper_country: s.shipper_country,
+          shipper_age_months: s.shipper_age_months,
+          dwell_days: s.dwell_days,
+          ad_cvd_applicable: s.ad_cvd_applicable === 1 || s.ad_cvd_applicable === true,
+          ad_cvd_rate: s.ad_cvd_rate || 0,
+          port_calls: portCalls,
+          vessel_name: s.vessel_name,
+          vessel_imo: s.vessel_imo,
+          risk_score: s.risk_score || 50,
+
+          // Risk Breakdown & Audit Trail
+          risk_breakdown: s.risk_breakdown,
+          audit_trail: s.audit_trail,
+          ai_synthesis: s.ai_synthesis,
+        };
+      });
+
+      setShipments(mappedShipments);
+
+      // Group shipments by case (manifest_id)
+      const groupedByManifest: Record<string, Shipment[]> = {};
+      mappedShipments.forEach(s => {
+        const caseId = s.manifest_data.shipper + '-' + s.origin_country + '-' + s.destination_country;
+        if (!groupedByManifest[caseId]) {
+          groupedByManifest[caseId] = [];
+        }
+        groupedByManifest[caseId].push(s);
+      });
+      setCaseShipments(groupedByManifest);
+
+      // Map cases with corridor & commodity context
+      const mappedCases: Case[] = Object.entries(groupedByManifest).map(([caseId, shipmentList], idx) => {
+        const firstShipment = shipmentList[0];
+        const riskScore = firstShipment.risk_score || 50;
+
+        return {
+          case_id: `CBP-${2026}-${9000 + idx}`,
+          case_name: `${firstShipment.shipper_name || 'Unknown'} → ${firstShipment.manifest_data.consignee || 'Unknown'}`,
+          target_entity: firstShipment.shipper_name || 'Unknown Entity',
+          risk_score: riskScore,
+          assigned_officer: 'Unassigned',
+          investigation_stage: 'Overview',
+          case_status: deriveCaseStatus(riskScore),
+          referral_status: 'Not Initiated',
+          priority: derivePriority(riskScore),
+          opened_date: firstShipment.date,
+          sla_timer: '21 Days Remaining',
+          product_category: firstShipment.commodity_name || 'Unknown',
+          ai_confidence: Math.min(100, Math.round(riskScore + 10 + Math.random() * 5)),
+
+          // Commodity & Corridor
+          commodity_code: firstShipment.hs_code,
+          commodity_name: firstShipment.commodity_name,
+          origin_country: firstShipment.origin_country,
+          destination_country: firstShipment.destination_country,
+
+          // Scoring Components
+          h1_score: firstShipment.h1_score,
+          h2_score: firstShipment.h2_score,
+          h3_score: firstShipment.h3_score,
+
+          // Tariff & Trade
+          ad_cvd_applicable: firstShipment.ad_cvd_applicable,
+          ad_cvd_rate: firstShipment.ad_cvd_rate,
+
+          // Shipment Context
+          shipper_age_months: firstShipment.shipper_age_months,
+          declared_weight_kg: firstShipment.manifest_data.weight_kg,
+          dwell_days: firstShipment.dwell_days,
+
+          // Anomalies
+          manifest_anomalies: firstShipment.manifest_anomalies,
+        };
+      });
 
       setCases(mappedCases);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch cases';
       setError(message);
+      console.error('useV2Cases error:', err);
     } finally {
       setLoading(false);
     }
@@ -106,6 +244,7 @@ export function useV2Cases(): UseV2CasesReturn {
   return {
     cases,
     shipments,
+    caseShipments,
     loading,
     error,
     refetch: fetchCases,

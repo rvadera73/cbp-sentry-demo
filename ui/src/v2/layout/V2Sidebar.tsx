@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Layers, FolderLock, Anchor, Network, FileCheck, BookOpen, Sliders, ChevronRight,
+  Layers, FolderLock, Anchor, Network, BookOpen, Sliders, ChevronRight,
   ChevronLeft, ShieldCheck
 } from 'lucide-react';
 
@@ -18,7 +18,6 @@ interface V2SidebarProps {
   isExpanded: boolean;
   setIsExpanded: (expanded: boolean) => void;
   activeCaseCount: number;
-  referralPendingCount: number;
 }
 
 const navItems: NavItem[] = [
@@ -26,7 +25,6 @@ const navItems: NavItem[] = [
   { id: 'investigations', label: 'Active Investigations', icon: <FolderLock className="w-5 h-5" />, section: 'primary' },
   { id: 'shipments', label: 'Shipment Intelligence', icon: <Anchor className="w-5 h-5" />, section: 'primary' },
   { id: 'entities', label: 'Entity Resolution', icon: <Network className="w-5 h-5" />, section: 'primary' },
-  { id: 'referrals', label: 'Referral Packages', icon: <FileCheck className="w-5 h-5" />, section: 'primary' },
   { id: 'watchlists', label: 'AI Watchlists', icon: <BookOpen className="w-5 h-5" />, section: 'admin' },
   { id: 'ai-tuning', label: 'AI Tuning & Rules', icon: <Sliders className="w-5 h-5" />, section: 'admin' },
 ];
@@ -37,7 +35,6 @@ export default function V2Sidebar({
   isExpanded,
   setIsExpanded,
   activeCaseCount,
-  referralPendingCount,
 }: V2SidebarProps) {
   const primaryItems = navItems.filter(item => item.section === 'primary');
   const adminItems = navItems.filter(item => item.section === 'admin');
@@ -45,7 +42,6 @@ export default function V2Sidebar({
   // Enhance items with badge counts
   const enhancedPrimary = primaryItems.map(item => {
     if (item.id === 'investigations') return { ...item, badge: activeCaseCount };
-    if (item.id === 'referrals' && referralPendingCount > 0) return { ...item, badge: referralPendingCount };
     return item;
   });
 

@@ -53,13 +53,23 @@ export default function V2Layout({
   onOfficerChange,
 }: V2LayoutProps) {
   const [currentOfficer, setCurrentOfficer] = useState(initialOfficer);
-  const [environment, setEnvironment] = useState<'PROD' | 'UAT' | 'TRAINING'>('PROD');
   const [aiStatus, setAiStatus] = useState<'idle' | 'generating' | 'completed' | 'error'>('idle');
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
+  const [isChatExpanded, setIsChatExpanded] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('sentry-chat-expanded') || 'true');
+    } catch {
+      return true;
+    }
+  });
+
+  // Save chat preference to localStorage
+  React.useEffect(() => {
+    localStorage.setItem('sentry-chat-expanded', JSON.stringify(isChatExpanded));
+  }, [isChatExpanded]);
 
   const { cases, loading } = useV2Cases();
   const activeCaseCount = cases.filter(c => c.case_status === 'Active').length;
-  const referralPendingCount = cases.filter(c => c.referral_status === 'In Progress').length;
 
   const handleOfficerChange = (officer: CBPOfficer) => {
     setCurrentOfficer(officer);
@@ -73,8 +83,6 @@ export default function V2Layout({
         currentOfficer={currentOfficer}
         officers={officers}
         onOfficerChange={handleOfficerChange}
-        environment={environment}
-        setEnvironment={setEnvironment}
         aiStatus={aiStatus}
       />
 
@@ -87,7 +95,6 @@ export default function V2Layout({
           isExpanded={isSidebarExpanded}
           setIsExpanded={setIsSidebarExpanded}
           activeCaseCount={activeCaseCount}
-          referralPendingCount={referralPendingCount}
         />
 
         {/* Page Content */}
@@ -98,7 +105,7 @@ export default function V2Layout({
 
           {/* Chat Panel - visible at xl and above */}
           <div className="hidden xl:flex">
-            <V2ChatPanel />
+            <V2ChatPanel isExpanded={isChatExpanded} onToggleExpand={() => setIsChatExpanded(!isChatExpanded)} />
           </div>
         </main>
       </div>

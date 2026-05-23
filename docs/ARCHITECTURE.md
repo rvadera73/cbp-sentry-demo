@@ -1,583 +1,594 @@
-# CBP Sentry - System Architecture Documentation
+# CBP Sentry — System Architecture
 
-## 1. SYSTEM OVERVIEW
-
-**Purpose:** AI-powered risk scoring system for CBP illegal transshipment detection
-**Technology Stack:** Python 3.12, FastAPI, React 19, SQLite, Docker, Google Cloud Run
-**Deployment:** Microservices on Cloud Run with secure inter-service communication
+**Version:** 2.0 | **Updated:** 2026-05-23 | **Audience:** Engineers, DevOps, Integration Partners
 
 ---
 
-## 2. CURRENT SYSTEM STATE
+## 1. Overview
 
-### 2.1 Running Containers (Local)
-```
-sentry-ui:3001          → React frontend (Nginx)
-sentry-api:8000         → FastAPI gateway + H1/H2/H3 scoring
-sentry-data:8005        → SQLite CRUD abstraction layer
-```
+CBP Sentry is an AI-powered trade fraud detection system designed to identify transshipment and evasion schemes at the U.S. border. It combines:
 
-### 2.2 Missing/Stubbed Components
-- **Senzing SDK**: Not yet integrated (entity resolution)
-- **VesselAPI**: Not yet integrated (vessel tracking data)
-- **CORD RAG**: Partially implemented (local SQLite, not live API)
-- **Altana Atlas**: Not yet integrated (supply chain intelligence)
+- **Real-time manifest analysis** with ML risk scoring (7-factor model)
+- **Entity resolution** via CORD 21M-entity database + Senzing SDK
+- **External intelligence** from Altana Atlas, OFAC/SDN, AIS vessel tracking
+- **Human-in-the-loop AI** generating officer narratives via Gemini Pro
+- **CBP-compliant workflows** for investigation and DHS referral
 
----
+**Core Purpose:** Reduce time-to-investigation from weeks to hours; reduce false positives via calibrated ML + human feedback loops.
 
-## 3. SERVICE ARCHITECTURE
-
-### 3.1 Service Responsibilities
-
-| Service | Port | Purpose | Current Status |
-|---------|------|---------|-----------------|
-| **sentry-api** | 8000 | H1/H2/H3 scoring, orchestration | ✓ Running |
-| **sentry-data** | 8005 | SQLite CRUD layer | ✓ Running |
-| **sentry-ui** | 3001 | React frontend | ✓ Running |
-| **Senzing** | 8250 | Entity resolution | ✗ Not integrated |
-| **VesselAPI** | (external) | AIS vessel tracking | ✗ Not integrated |
-
-### 3.2 Data Flow & Service Topology
-
-**ASCII Flow (simplified):**
-```
-User → sentry-ui (3001)
-  ↓ (HTTPS)
-API Gateway (8000)
-  ├→ H1 Scorer (corridor risk)
-  ├→ H2 Scorer (vessel anomaly)
-  ├→ H3 Scorer (intelligence)
-  └→ sentry-data (8005)
-       ├→ SQLite database
-       └→ External APIs (fixture mode)
-```
-
-**Mermaid Service Topology:**
-```mermaid
-graph TB
-    User["👤 CBP Officer Browser"]
-    
-    LB["🌐 Load Balancer<br/>SSL/TLS"]
-    
-    UI["🎨 sentry-ui:3001<br/>React + Nginx<br/>Case Viewer, Referral Package"]
-    API["⚙️ sentry-api:8000<br/>FastAPI Gateway<br/>H1/H2/H3 Scoring"]
-    DATA["💾 sentry-data:8005<br/>SQLite CRUD Layer<br/>Shipments, Manifests, Scores"]
-    ER["🔗 entity_resolution<br/>CORD RAG + Senzing<br/>Entity Matching"]
-    
-    OCorp["🏢 OpenCorporates<br/>Company Registries"]
-    AIS["🚢 VesselAPI / AIS<br/>Vessel Tracking"]
-    OFAC["⚠️ OFAC/SDN<br/>Sanction Lists"]
-    
-    DB["🗄️ SQLite File<br/>data/cbp_sentry.db<br/>1,191 shipments"]
-    CORDDB["🔍 CORD RAG DB<br/>cord_rag.db<br/>244K entities"]
-    
-    User -->|HTTP/HTTPS| LB
-    LB --> UI
-    LB --> API
-    LB --> DATA
-    
-    UI -->|/api/*| API
-    API -->|OIDC Token| DATA
-    API -->|HTTP| ER
-    API -->|Fixture/Live| OCorp
-    API -->|Fixture/Live| AIS
-    API -->|API Key| OFAC
-    
-    DATA -->|Read/Write| DB
-    ER -->|Read| CORDDB
-```
+**Deployment:** Docker Compose (local), Cloud Run + Cloud Storage (staging), PostgreSQL + Cloud Run (production).
 
 ---
 
-## 4. SCORING SYSTEM (100 POINTS MAX)
+## 2. Service Architecture
 
-### 4.1 Three-Level Horizons
-
-| Horizon | Points | Components | Data Sources |
-|---------|--------|------------|--------------|
-| **H1: Corridor Risk** | 40 | Origin/dest country, HS code, tariff rates, pricing | OpenCorporates, Comtrade, ITC |
-| **H2: Vessel Anomaly** | 35 | AIS dwell time, ISF Element 9 mismatch, port calls | VesselAPI, PortAuthority, ISF |
-| **H3: Intelligence** | 25 | Entity ownership depth, shipper age, OFAC match, watch list | Senzing, OFAC, Watchlists |
-
-**Mermaid Scoring Pipeline:**
-```mermaid
-graph LR
-    Manifest["📦 Shipment Manifest"]
-    
-    H1["<b>H1: Corridor Risk</b><br/>40 points<br/><br/>🌍 Origin/Dest Country<br/>📊 HS Code Tariff<br/>💰 AD/CVD Rates<br/>💵 Price Anomaly"]
-    H1Score["H1 Score<br/>0-40 pts"]
-    
-    H2["<b>H2: Vessel Anomaly</b><br/>35 points<br/><br/>⚓ AIS Dwell Time<br/>✈️ ISF Element 9<br/>🛢️ Port Sequence<br/>⏱️ Transit Delta"]
-    H2Score["H2 Score<br/>0-35 pts"]
-    
-    H3["<b>H3: Intelligence</b><br/>25 points<br/><br/>🏢 Entity Chain Depth<br/>📜 Shipper Age<br/>⚠️ OFAC Match<br/>👁️ Watch List Hit"]
-    H3Score["H3 Score<br/>0-25 pts"]
-    
-    Total["<b>Total Score</b><br/>0-100 points<br/><br/>🔴 RED ≥70<br/>🟡 YELLOW 40-69<br/>🟢 GREEN <40"]
-    
-    Manifest --> H1 --> H1Score
-    Manifest --> H2 --> H2Score
-    Manifest --> H3 --> H3Score
-    
-    H1Score --> Total
-    H2Score --> Total
-    H3Score --> Total
-    
-    Total --> |Risk Classification| Referral["📋 CBP Referral<br/>Package<br/>14 Tables"]
-```
-
-### 4.2 Risk Classification
-
-- **RED** (≥70): EXAMINE ON ARRIVAL
-- **YELLOW** (40-69): REVIEW / RECOMMEND EXAM
-- **GREEN** (<40): CLEAR
-
-Current distribution (1,191 records):
-- RED: 37 cases
-- YELLOW: 590 cases
-- GREEN: 564 cases
-
----
-
-## 5. DATABASE LAYER
-
-### 5.1 SQLite Schema
+### Service Topology
 
 ```
-shipments (1,191 records)
-├── id (PK): SHP-000001
-├── manifest_id: MNF-2026-SHP-000001
-├── shipper_name, consignee_name
-├── origin_country, destination_country (ISO-2)
-├── hs_code (tariff classification)
-├── declared_value_usd, declared_weight_kg
-├── vessel_name
-├── risk_score (computed, 0-100)
-├── h1_score, h2_score (nullable)
-├── ofac_match, status
-└── created_at, updated_at
-
-scoring_overrides (analyst feedback)
-├── shipment_id (FK)
-├── original_score, override_decision
-├── analyst_id, analyst_name
-└── notes
-
-weight_configurations (H1/H2/H3 tuning)
-├── corridor (e.g., "VN→US")
-├── w_corridor, w_vessel, w_manifest
-└── created_by, notes
+┌─────────────────────────────────────────────────────────────────┐
+│                     BROWSER (Web Client)                        │
+│                      Port: 3001 (nginx)                         │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+┌──────────────────────────▼──────────────────────────────────────┐
+│            sentry-api (Primary API Gateway)                     │
+│             FastAPI/uvicorn — Port 8000                         │
+│  Health: GET /health                                            │
+│  Dependencies: healthy sentry-data + sentry-cord-integration    │
+└──────────┬──────────────────┬──────────────────────┬────────────┘
+           │                  │                      │
+    ┌──────▼────────┐  ┌──────▼────────┐   ┌────────▼──────┐
+    │ sentry-data   │  │ sentry-cord   │   │   External    │
+    │ Port 8005     │  │ integration   │   │   APIs        │
+    │ SQLite DB     │  │ Port 8004     │   │               │
+    │               │  │ CORD index    │   │ • Gemini Pro  │
+    │ Health: /     │  │               │   │ • Altana      │
+    │ health        │  │ Health: /     │   │ • OFAC/SDN    │
+    │               │  │ health        │   │ • Vessel API  │
+    └───────────────┘  └───────────────┘   │ • OpenCorp    │
+                                            │ • Comtrade    │
+                                            │ • ITC Tariffs │
+                                            └───────────────┘
 ```
 
----
+### Service Definitions
 
-## 6. MISSING INTEGRATIONS
+| Service | Port | Framework | Role | Database |
+|---|---|---|---|---|
+| **sentry-api** | 8000 | FastAPI + uvicorn | Request orchestration, risk scoring, Gemini integration, external API proxying | —(queries data service) |
+| **sentry-data** | 8005 | FastAPI + uvicorn | CRUD operations, shipment persistence, seed data loading | SQLite 3 |
+| **sentry-cord-integration** | 8004 | FastAPI + uvicorn | Entity resolution, CORD search, Senzing SDK wrapper, ownership chain tracing | CORD SQLite index (21M records) |
+| **sentry-ui** | 3001 (prod) / 5173 (dev) | React 19 + Vite + nginx | Investigation workspace, case management, officer narrative, PDF export | — (queries sentry-api) |
+| **senzing** (optional) | 8250 | Senzing API Server 3.5.2 | Advanced entity resolution sandbox; not used in production | Senzing repository |
 
-### 6.1 Senzing Entity Resolution
+### Health Checks
 
-**Status:** ✗ Not integrated in production
+All services expose health check endpoints consumed by Docker Compose startup orchestration:
 
-**What it does:**
-- Matches entities across data sources
-- Builds ownership chains (shipper ↔ manufacturer)
-- Resolves beneficial owners
-- Provides confidence scores
+- **sentry-data:** `GET /health` → returns `{"status": "healthy", "records_in_db": <count>}`
+- **sentry-api:** `GET /health` → returns `{"status": "healthy", "mode": "live", "dependencies": {...}}`
+- **sentry-cord-integration:** `GET /health` → returns `{"status": "healthy", "entity_count": 21000000, "ready": true}`
+- **sentry-ui:** `GET /` → nginx returns 200 + index.html
 
-**Required:**
-- Docker: `senzing/senzing-api-server:3.5.x`
-- G2 database (PostgreSQL)
-- License key
-
-**Integration:** Replace stub in `services/api/external_apis/entity_resolution.py`
-
-### 6.2 VesselAPI Integration
-
-**Status:** ✗ Stubbed in `h2_adapters.py`
-
-**What it does:**
-- Real-time AIS vessel positions
-- Dwell time: port arrival → departure
-- ISF Element 9 validation
-- Port call sequences
-
-**Options:**
-- AISStream.io WebSocket
-- MarineTraffic REST API
-- Both require paid subscription
-
-**Integration:** Replace stub in `services/api/external_apis/h2_adapters.py`
-
-### 6.3 Altana Atlas
-
-**Status:** ✗ Not integrated
-
-**What it does:**
-- Supply chain visibility
-- Trader risk flags
-- Transaction patterns
-- Anomaly detection vs baseline
-
-**Integration:** New endpoint `/api/altana/supply-chain`
-
----
-
-## 7. CLOUD DEPLOYMENT ARCHITECTURE
-
-### 7.1 Google Cloud Run Services
+### Service Startup Dependencies
 
 ```
-┌─────────────────────────────────────────┐
-│  Google Cloud Platform                  │
-├─────────────────────────────────────────┤
-│                                         │
-│  Cloud Load Balancer (SSL/TLS)          │
-│  ├─ sentry-ui:latest (React SPA)        │
-│  ├─ sentry-api:latest (FastAPI)         │
-│  ├─ sentry-data:latest (CRUD)           │
-│  ├─ sentry-senzing:latest               │
-│  └─ sentry-vessel:latest                │
-│         │              │                │
-│         └──────┬───────┘                │
-│                │                        │
-│  ┌─────────────▼──────────────┐        │
-│  │ Cloud SQL (PostgreSQL)     │        │
-│  │ - shipments, scores        │        │
-│  │ - Senzing G2 database      │        │
-│  └────────────────────────────┘        │
-│                                         │
-│  ┌────────────────────────────┐        │
-│  │ Secret Manager             │        │
-│  │ - API keys                 │        │
-│  │ - DB credentials           │        │
-│  │ - Senzing license          │        │
-│  └────────────────────────────┘        │
-│                                         │
-│  ┌────────────────────────────┐        │
-│  │ Cloud Logging & Monitoring │        │
-│  │ - Application logs         │        │
-│  │ - Metrics & alerts         │        │
-│  │ - Audit trail              │        │
-│  └────────────────────────────┘        │
-│                                         │
-└─────────────────────────────────────────┘
-```
+sentry-data
+  ├─ Loads seed JSON → SQLite
+  └─ Ready (no dependencies)
 
-### 7.2 Service-to-Service Communication
-
-```
-Authentication: Google Service Accounts + OIDC tokens
-
-sentry-api (SA: sentry-api@project.iam.gserviceaccount.com)
-    ↓ (OIDC token + HTTPS)
-sentry-data (SA: sentry-data@project.iam.gserviceaccount.com)
-    ↓ (Cloud SQL Proxy, IAM authentication)
-Cloud SQL
+sentry-cord-integration
+  ├─ Waits for sentry-data healthy
+  ├─ Fetches shipments from data service
+  ├─ Loads CORD SQLite index
+  └─ Ready
 
 sentry-api
-    ↓ (Senzing SDK library call, embedded)
-Senzing (G2 database in Cloud SQL)
+  ├─ Waits for sentry-data healthy
+  ├─ Waits for sentry-cord-integration healthy
+  └─ Ready to accept requests
 
-sentry-api (API key from Secret Manager)
-    ↓ (HTTPS)
-VesselAPI (AISStream.io or MarineTraffic)
-```
-
-### 7.3 Environment Variables (Secret Manager)
-
-```yaml
-DATABASE_URL: postgresql://user:pass@localhost:5432/sentry
-DATABASE_SSL_MODE: require
-
-SENZING_LICENSE: <base64-encoded-license>
-SENZING_G2_DATABASE_URL: postgresql://...
-
-VESSELAPI_KEY: <api-key>
-VESSELAPI_PROVIDER: aisstream  # or marinetraffic
-
-ALTANA_API_KEY: <api-key>
-OFAC_API_KEY: <api-key>
-
-API_MODE: live  # not fixture
-DEBUG: false
-
-# Cloud Run specific
-PORT: 8080  # Container port
+sentry-ui
+  ├─ Waits for sentry-api healthy
+  └─ Ready to serve browser traffic
 ```
 
 ---
 
-## 8. GITHUB ACTIONS DEPLOYMENT
+## 3. Data Flow
 
-### 8.1 CI/CD Pipeline Structure
-
-**File:** `.github/workflows/deploy.yml`
-
-**Triggers:**
-```yaml
-on:
-  push:
-    branches: [main, dev]
-    paths:
-      - 'services/**'
-      - 'ui/**'
-      - '.github/workflows/**'
-  pull_request:
-    branches: [main, dev]
-```
-
-**Pipeline Stages:**
-1. **Setup** → Authenticate to GCP
-2. **Test** → Run pytest, TypeScript checks
-3. **Build** → Docker build → Artifact Registry
-4. **Deploy** → gcloud run deploy
-5. **Smoke Tests** → Verify endpoints
-6. **Notify** → Slack, email
-
-### 8.2 Docker Image Strategy
+### Request Lifecycle: Get a Shipment with Risk Breakdown
 
 ```
-Artifact Registry: gcr.io/project-id/cbp-sentry/
-
-sentry-api:
-  ├─ build from services/api/Dockerfile
-  ├─ layers: base → dependencies → code
-  ├─ size: ~500MB
-
-sentry-data:
-  ├─ build from services/data/Dockerfile
-  ├─ layers: base → dependencies → code
-  ├─ size: ~300MB
-
-sentry-ui:
-  ├─ build from ui/Dockerfile
-  ├─ multi-stage: build → nginx
-  ├─ size: ~50MB
-
-sentry-senzing:
-  ├─ from senzing/senzing-api-server:3.5.x
-  ├─ wrapper: initialization script
-  ├─ size: ~2GB (includes G2 engine)
+Browser (React)
+  │
+  └─► GET /api/data/shipments/SHP-001?include_breakdown=true
+      │
+      └─► sentry-api:8000/api/data/shipments/SHP-001?include_breakdown=true
+          │
+          ├─ [Lookup] GET http://sentry-data:8005/shipments/SHP-001
+          │   └─ Returns raw manifest + H1/H2/H3 scores
+          │
+          ├─ [Enrich] POST internal _calculate_comprehensive_risk()
+          │   ├─ Load 7-factor weights
+          │   ├─ Fetch entity details from sentry-cord-integration:8004
+          │   ├─ If risk_score ≥ 80: call Altana Atlas API
+          │   └─ Return shipment + risk_breakdown object
+          │
+          └─ Returns to browser
+              {
+                "id": "SHP-001",
+                "shipper_name": "...",
+                "risk_score": 92,
+                "risk_breakdown": {
+                  "factors": [
+                    {"name": "Documentation", "weight": 0.25, "score": 95, "rationale": "..."},
+                    {"name": "Corridor", "weight": 0.20, "score": 85, ...},
+                    ...
+                  ],
+                  "altana_validation": {...}
+                }
+              }
 ```
 
-### 8.3 Deployment Strategy
+### Entity Resolution Flow
 
-**Staging (dev branch):**
 ```
-git push origin dev
-  ↓
-  ├─ Build images
-  ├─ Push to staging tags
-  ├─ Deploy to Cloud Run (--region us-central1)
-  ├─ Run smoke tests
-  └─ Notify #deployments Slack
+Officer searches for shipper "Guangzhou Trading Ltd"
+  │
+  └─► POST /api/cord/resolve
+      │
+      ├─ GET /search (name + country) → top 5 CORD matches
+      │
+      ├─ For each match: GET /entity/{id}
+      │   └─ Extract entity_id, name, country, risk_level
+      │
+      ├─ FOR TOP MATCH: 3-level resolution chain
+      │   ├─ Query Senzing: shipper → parent company → ultimate owner
+      │   ├─ Check each level against OFAC/SDN list
+      │   └─ Return [shipper, parent, owner] with sanctions status
+      │
+      └─ Returns to browser: TradeEntity[] with why_linked relationships
 ```
 
-**Production (main branch):**
+### External API Integration
+
+| API | Service | Trigger | Use Case |
+|---|---|---|---|
+| **Google Gemini Pro** | sentry-api | User clicks "Generate Synopsis" or "Draft Referral" | AI-generated case narratives, chat assistance |
+| **Altana Atlas** | sentry-api | risk_score ≥ 80 (automatic) | Supply chain opacity scoring, sanctions exposure |
+| **OFAC/SDN List** | sentry-cord-integration | Entity resolution lookup | Sanctions screening, blocking at shipment level |
+| **VesselFinder / AIS** | (future enhancement) | Vessel tracking | Port dwell anomalies, route verification |
+| **OpenCorporates** | (pre-loaded H1 model) | Corridor risk calculation | Company registration, beneficial ownership |
+| **Comtrade** | (pre-loaded H1 model) | Corridor risk calculation | Historical trade patterns, volume benchmarks |
+| **ITC Tariffs** | (pre-loaded H1 model) | Commodity risk calculation | HS code duty rates, trade agreements |
+
+---
+
+## 4. Data Layer Architecture
+
+### SQLite Database (sentry-data)
+
+**Location:** `/app/data/cbp_sentry.db` (persistent volume in Docker Compose)
+
+**Schema:**
+
+#### Table: `shipments`
 ```
-git push origin main
-  ↓
-  ├─ Build images
-  ├─ Push to gcr.io (release tags)
-  ├─ Manual approval required
-  ├─ Blue/green deploy (canary 10% → 100%)
-  ├─ Run smoke tests + performance tests
-  ├─ Monitor error rate (5 min, <1%)
-  └─ Notify #deployments Slack
+id (PRIMARY KEY)               TEXT      SHP-2026-00001
+manifest_id                    TEXT
+filing_date                    DATETIME
+shipper_name                   TEXT
+shipper_country                TEXT      2-letter country code
+consignee_name                 TEXT
+consignee_country              TEXT
+hs_code                        TEXT      HS commodity code (6+ digits)
+commodity_description          TEXT
+declared_value_usd             FLOAT
+declared_weight_kg             FLOAT
+origin_country                 TEXT      True country of origin
+destination_country            TEXT      US
+vessel_name                    TEXT
+vessel_flag                    TEXT      PA, LR, MH, etc.
+vessel_imo                     TEXT
+dwell_days                     FLOAT     Port dwell time
+declared_origin                TEXT      ISF Element 9
+ais_stuffing_country           TEXT      Actual stuffing (AIS data)
+port_calls                     JSON      ["CN", "SG", "US"]
+shipper_age_months             INT
+importer_age_months            INT
+ad_cvd_applicable              BOOLEAN
+ad_cvd_rate                    FLOAT
+ad_cvd_cases                   JSON      ["A-570-070"]
+commodity_risk_level           TEXT      CRITICAL | HIGH | MEDIUM | LOW
+corridor_risk                  FLOAT     0.0 - 1.0
+corridor_label                 TEXT      "VN → USA"
+risk_score                     FLOAT     0.0 - 100.0
+status                         TEXT      FILED | HELD | EXAMINED | CLEARED
+created_at                     DATETIME
+updated_at                     DATETIME
+element_9 (JSON)               JSON      {is_mismatch, actual_stuffing, dwell_anomaly...}
+element9_risk_level            TEXT      HIGH | LOW
+h1_score                       FLOAT     Corridor risk
+h2_score                       FLOAT     AIS/Vessel risk
+h3_score                       FLOAT     Manifest/Document risk
+```
+
+#### Table: `manifests`
+```
+id                             TEXT      MNF-2026-00001
+filing_date                    DATETIME
+source_file                    TEXT      filename.xlsx
+row_count                      INT
+status                         TEXT      INGESTED | PROCESSED | ERROR
+created_at                     DATETIME
+```
+
+#### Table: `scores`
+```
+id                             TEXT
+shipment_id                    TEXT
+score_version                  TEXT      v2.1
+score_timestamp                DATETIME
+h1_score                       FLOAT
+h2_score                       FLOAT
+h3_score                       FLOAT
+final_risk_score               FLOAT
+breakdown_json                 JSON      7-factor breakdown
+created_at                     DATETIME
+```
+
+### Seed Data Pipeline
+
+On service startup (`sentry-data` entrypoint):
+
+```python
+async def startup():
+  1. Initialize AsyncSession with SQLite engine
+  2. Create all tables if not exist
+  3. For each JSON file in seed_data/:
+     a. Load manifest JSON (array of objects)
+     b. For each record:
+        - CREATE OR IGNORE shipment (prevents duplicates)
+        - Ensure element_9 is parsed as JSON
+        - Calculate H3 score if missing
+  4. Commit transaction
+  5. Return /health with record count
+```
+
+**Seed Files:**
+- `seed_data/manifest_demo_cases.json` — 30 showcase cases (5 original + 25 new CRITICAL/HIGH/ELEVATED bands)
+- `seed_data/legacy_archived.json` — (optional) historical data for testing
+
+---
+
+## 5. Risk Scoring Engine
+
+### 7-Factor ML Model
+
+```
+Final Risk Score = (calibration_multiplier × weighted_factors) + altana_adjustment
+Calibration Multiplier = 1.2x (post-score to match synthetic data distribution)
+Altana Adjustment = +5 (if sanctions match) or -8 (if verified clean)
+```
+
+**Factor Breakdown:**
+
+| Factor | Weight | Sub-factors | Description |
+|---|---|---|---|
+| **Documentation Risk** | 25% | Element 9 mismatch (50%), ISF amendments (30%), manifest completeness (20%) | ISF Element 9 (country of origin) vs AIS stuffing location; amendment frequency; missing fields |
+| **Corridor Risk** | 20% | Route baseline scores | Pre-computed per corridor: CN→US (8.5), VN→US (7.0), MY→US (6.5), SG→US (5.0), CA→US (4.5) |
+| **Commodity Risk** | 15% | Tariff rate (50%), export control (30%), UFLPA (20%) | Duty rate from ITC tariffs; EAR/ITAR status; forced labor indicators |
+| **Routing Consistency** | 15% | AIS dwell anomaly (40%), port selection (30%), vessel flag (20%) | Port dwell vs baseline (e.g., >10 days flags); port selection logic; Panama-flagged vessels |
+| **Party Profile Risk** | 15% | Shipper age (35%), prior violations (30%), OFAC/sanctions (20%), beneficial ownership opacity (15%) | Company registration age; enforcement history; OFAC SDN list match; opacity score |
+| **Pattern Anomaly** | 10% | Pricing vs benchmark (50%), weight anomaly (25%), trade frequency (25%) | Price per kg deviation; declared weight variance; shipment frequency spikes |
+| **Time Sensitivity** | 10% | Pre-tariff timing (50%), seasonal anomaly (50%) | Filings 30+ days before tariff changes; seasonal import pattern breaks |
+
+### Three-Horizon Pipeline
+
+```
+INPUT: Manifest data (shipper, commodity, route, vessel, declared value)
+
+┌─────────────────────────────────────────────────────────┐
+│ Horizon 1 (H1): Corridor Risk                           │
+│ ─────────────────────────────────────────────────────   │
+│ Analyzes trade corridor patterns                        │
+│ - Country pair, commodity, industry history             │
+│ - Baseline risk (CN→US = 8.5 / 10)                      │
+│ - Result: H1_score (0-100)                              │
+└─────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ Horizon 2 (H2): Pre-Intelligence Anomalies              │
+│ ─────────────────────────────────────────────────────   │
+│ Analyzes ISF filings + AIS vessel tracking              │
+│ - Element 9 mismatch (declared vs actual stuffing)      │
+│ - Port dwell anomalies                                  │
+│ - Vessel flag / IMO history                             │
+│ - Result: H2_score (0-100)                              │
+└─────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ Horizon 3 (H3): Manifest-Level Signals                  │
+│ ─────────────────────────────────────────────────────   │
+│ Analyzes shipper/consignee profiles + pricing           │
+│ - Party age, prior violations, OFAC match               │
+│ - Price anomaly (declared vs benchmark)                 │
+│ - Weight anomaly                                        │
+│ - Result: H3_score (0-100)                              │
+└─────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────┐
+│ FINAL: Comprehensive Risk Score                         │
+│ ─────────────────────────────────────────────────────   │
+│ Weighted formula: 0.25×H1 + 0.20×H2 + ... (7 factors)   │
+│ Apply calibration: 1.2x multiplier                      │
+│ Add Altana adjustment: ±5/8                             │
+│ Constrain: 0-100 range                                  │
+│ Result: risk_score (integer 0-100)                      │
+│ Map to recommendation: HOLD / EXAMINE / CLEAR           │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Risk Score Interpretation
+
+```
+Risk Score Range        Recommendation        Color       Action
+─────────────────────────────────────────────────────────────────
+80 - 100               HOLD FOR EXAMINATION   Red         Automatic referral to DHS
+50 - 79                EXAMINE                Amber       Officer discretion, further review
+0 - 49                 CLEAR                  Green       Normal processing
+```
+
+### Calibration & Feedback Loop
+
+- **Analyst feedback:** Officer accepts/rejects a score → stored in `scores.feedback_override` table
+- **Weight recalibration:** Monthly job aggregates feedback → suggests weight adjustments
+- **Recalibration endpoint:** POST `/api/weight-suggestions/{id}/approve` immediately applies new weights to all future scores
+- **Audit trail:** All weight changes logged with timestamp, approval user, reason
+
+---
+
+## 6. Entity Resolution Architecture
+
+### CORD Index (21M Records)
+
+- **Source:** CORD database (public entity records from 195 countries)
+- **Storage:** SQLite at `/app/data/cord_index.db` (sentry-cord-integration service)
+- **Indexing:** Fuzzy match on company name + country code; exact match on LEI/tax ID
+- **Usage:** `GET /search?name={query}&country={code}` returns top-K matches with confidence scores
+
+### Senzing SDK Integration
+
+The `SenzingSDKWrapper` class (mock of real Senzing SDK) implements:
+
+- **Entity loading:** `add_record()` → add a company record to Senzing repository
+- **Entity linking:** `search_by_attributes()` → find similar entities in repository
+- **Relationship extraction:** `get_match_info()` → explain why two entities were linked
+- **Ownership tracing:** 3-level chain — shipper → parent company → ultimate beneficial owner
+
+### Resolution Chain (3 Levels)
+
+```
+INPUT: Shipper name, country
+
+LEVEL 1 (Shipper):
+  └─ Search CORD + Senzing for exact/fuzzy match
+  └─ Return shipper entity_id, name, registration date, address
+
+LEVEL 2 (Parent Company):
+  └─ Query shipper's declared parent from corporate registry
+  └─ Search CORD for parent entity
+  └─ Return parent entity_id, name, country
+
+LEVEL 3 (Ultimate Beneficial Owner):
+  └─ Query parent's ownership structure
+  └─ Trace to ultimate owner (non-shell entity with real operations)
+  └─ Check against OFAC SDN list
+  └─ Return owner entity_id, sanctions status
+
+OUTPUT: [shipper, parent, owner] with confidence scores and why_linked explanations
+```
+
+### OFAC/SDN Screening
+
+- **Trigger:** After 3-level resolution chain completes
+- **Check:** Each entity (shipper, parent, owner) against OFAC SDN list (annual updates)
+- **Result:** `sanctions_status` ∈ {None, Match Found, Under Investigation, Blocked list}
+- **Action:** If `Blocked list`, reject shipment automatically (cannot be cleared by officer)
+
+---
+
+## 7. External Integrations
+
+### Google Gemini Pro (AI Narratives)
+
+- **Endpoint:** `POST /api/gemini/synopsis` — auto-generate case synopsis from shipment data
+- **Endpoint:** `POST /api/gemini/draft-referral` — auto-draft DHS-compliant officer narrative
+- **Prompt:** Structured, CBP-compliant formatting; includes Element 9, OFAC, commodity risk
+- **Fallback:** Template-based narrative if API key missing or quota exceeded
+- **Auth:** `GOOGLE_API_KEY` environment variable (Secret Manager in Cloud Run)
+
+### Altana Atlas (Supply Chain Verification)
+
+- **Trigger:** Automatic when risk_score ≥ 80 (CRITICAL band)
+- **API Call:** POST `https://api.altanafinance.com/supply-chain-verification`
+- **Input:** Shipper, consignee, commodity, route, declared value
+- **Output:** Opacity score (0-100), sanctions exposure, capacity check, verification confidence
+- **Action:** If Altana confirms risk, +5 adjustment; if verified clean, -8 adjustment
+- **Auth:** `ALTANA_API_KEY` environment variable
+
+### OFAC SDN List
+
+- **Source:** OFAC .csv download (annual updates + dynamic feeds)
+- **Refresh:** On sentry-cord-integration startup; daily refresh job (optional)
+- **Check:** Shipper name, parent company, ultimate owner against SDN consolidated list
+- **Result:** `sanctions_match` boolean + confidence score
+- **Action:** If match found, set `ofac_flag: true` on shipment; DHS mandatory referral
+
+### VesselFinder / AIS Data
+
+- **Use:** Port dwell anomaly detection (H2 factor)
+- **API:** VesselFinder or MarineTraffic AIS feed
+- **Query:** Vessel IMO + port code → port call history, dwell times
+- **Output:** Actual dwell vs baseline; port sequence verification
+- **Current:** Hardcoded in manifest (future: live API integration)
+
+### OpenCorporates / Comtrade / ITC (Pre-loaded Models)
+
+These are not real-time API calls; they're baked into the H1 corridor risk model:
+
+- **OpenCorporates:** Company registration age, beneficial ownership transparency scores
+- **Comtrade:** Historical bilateral trade flows, tariff product codes, volume benchmarks
+- **ITC Tariffs:** HS code duty rates, trade agreement preferences, anti-dumping cases
+
+---
+
+## 8. Security Architecture
+
+### Authentication & Authorization
+
+- **Auth Method:** JWT tokens (OAuth 2.0 with client credentials flow)
+- **Roles:** `cbp_officer` (full workflow), `analyst` (tuning + calibration), `admin` (user management)
+- **Route Guards:** All `/api/*` endpoints check JWT + role in middleware
+
+### Data Protection
+
+- **Encryption at Rest:** SQLite database file on encrypted volume (Docker named volumes + Cloud Storage)
+- **Encryption in Transit:** HTTPS only (nginx termination on port 80 → 443 in production)
+- **PII Handling:** No PII logged; sanitize error messages; mask entity names in logs
+
+### External API Security
+
+- **Secret Management:** All API keys stored in Secret Manager (Cloud Run), environment variables (local dev)
+- **Rate Limiting:** Gemini API: 60 req/min (Google quota); Altana: 100 req/day (custom contract)
+- **Timeout:** 30s default; 60s for Gemini (slow model)
+
+---
+
+## 9. Network & Communication
+
+### Docker Compose Network
+
+- **Network Name:** `sentry-network` (bridge)
+- **Service Discovery:** Docker internal DNS — `sentry-api:8000` resolves from within containers
+- **External Access:** Host port mapping (localhost:3001 for UI, localhost:8000 for API)
+
+### Service-to-Service Communication
+
+```
+sentry-api → sentry-data
+  Base URL: http://sentry-data:8005
+  Example: GET http://sentry-data:8005/shipments/SHP-001
+
+sentry-api → sentry-cord-integration
+  Base URL: http://sentry-cord-integration:8004
+  Example: POST http://sentry-cord-integration:8004/resolve
+
+sentry-cord-integration → sentry-data
+  Base URL: http://sentry-data:8005
+  Usage: Fetch shipments for CBP augmentation on startup
+```
+
+### Cloud Run Network (Staging / Production)
+
+Service-to-service calls are authenticated via Workload Identity:
+
+```
+sentry-api (Cloud Run)
+  ├─ Calls sentry-data (Cloud Run)
+  │  URL: https://sentry-data-{hash}.{region}.run.app
+  │  Auth: Service account token (OIDC)
+  │
+  └─ Calls sentry-cord-integration (Cloud Run)
+     URL: https://sentry-cord-integration-{hash}.{region}.run.app
+     Auth: Service account token (OIDC)
+
+Browser
+  └─ Calls sentry-ui (Cloud Run, nginx reverse proxy)
+     URL: https://sentry-ui-{hash}.{region}.run.app
+     Reverse proxy routes /api/* to sentry-api Cloud Run service
 ```
 
 ---
 
-## 9. SECURITY ARCHITECTURE
+## 10. Technology Stack Summary
 
-### 9.1 Authentication Layers
-
-```
-┌─ External Users (CBP Officers)
-│  ├─ OAuth 2.0 (Google Identity)
-│  ├─ SAML (CBP SSO) - future
-│  └─ Roles: cbp_officer, analyst, admin
-│
-├─ Service-to-Service
-│  ├─ OIDC tokens (Google-signed JWT)
-│  ├─ Service accounts with minimal IAM
-│  └─ No shared credentials
-│
-└─ External APIs
-   ├─ API keys (Secret Manager)
-   ├─ Rotated every 90 days
-   └─ Per-service keys (not shared)
-```
-
-### 9.2 Data Protection
-
-| Layer | Method |
-|-------|--------|
-| **At Rest** | Cloud SQL encryption, Cloud Storage encryption |
-| **In Transit** | HTTPS only, TLS 1.3 minimum |
-| **Database Access** | Cloud SQL Proxy (no public IP) |
-| **Secrets** | Google Secret Manager (automatic rotation) |
-
-### 9.3 Network Security
-
-```
-VPC (Private)
-  ├─ All services: no public IPs
-  ├─ Ingress: only from Load Balancer
-  ├─ Egress: only to allowed external APIs
-  ├─ Cloud SQL: private service connection
-  └─ Cloud Armor: DDoS protection
-
-Load Balancer
-  ├─ SSL/TLS termination
-  ├─ Rate limiting
-  ├─ WAF (Web Application Firewall)
-  └─ DDoS protection
-```
+| Layer | Technology | Version |
+|---|---|---|
+| **Frontend** | React + TypeScript | 19 + 5.6 |
+| **Frontend Build** | Vite + npm | 5.4 + 10.x |
+| **Frontend Styling** | Tailwind CSS + USWDS | 3.4 + 2.14 |
+| **Frontend Charts** | Recharts | 2.15 |
+| **Backend API** | FastAPI + uvicorn | 0.115 + 0.30 |
+| **Backend Async** | asyncio + aiohttp | stdlib + 3.9 |
+| **Database (Dev)** | SQLite 3 | 3.x |
+| **Database (Prod)** | PostgreSQL | 15+ |
+| **Entity DB** | CORD SQLite | 21M records |
+| **Entity Resolution** | Senzing SDK | 3.x (mock) |
+| **AI Models** | Google Gemini Pro | Latest |
+| **Containerization** | Docker | 24+ |
+| **Orchestration (Dev)** | Docker Compose | 2.20+ |
+| **Orchestration (Prod)** | Cloud Run + Cloud Storage | Latest |
+| **CI/CD** | Cloud Build + GitHub Actions | — |
 
 ---
 
-## 10. MONITORING & OBSERVABILITY
+## 11. Deployment Modes
 
-### 10.1 Logging (Cloud Logging)
+### Local Development (`docker-compose.yml`)
 
-```
-Application logs → Cloud Logging
-  ├─ Structured JSON format
-  ├─ Request logs: latency, status, user_id
-  ├─ Error logs: exceptions, stack traces
-  └─ Audit logs: upload, score, export actions
+All services in one network; SQLite persistent volume; optional Senzing profile.
 
-Log retention:
-  ├─ Application: 30 days
-  ├─ Audit: 1 year
-  └─ Shipment records: 7 years
-```
+### Cloud Run Staging (SQLite)
 
-### 10.2 Metrics (Cloud Monitoring)
+4 separate Cloud Run services; Cloud Storage FUSE bucket for `/app/data`; Workload Identity for service-to-service auth; Secret Manager for API keys.
 
-```
-Performance:
-  ├─ Latency: p50, p95, p99
-  ├─ Error rate: 4xx, 5xx by endpoint
-  ├─ Throughput: requests/sec
-  └─ Cache hit rate
+### Cloud Run Production (PostgreSQL)
 
-Resource:
-  ├─ CPU: container, database
-  ├─ Memory: container, database
-  ├─ Disk: database, storage
-  └─ Connections: database pool
-
-Custom:
-  ├─ Scoring distribution: RED/YELLOW/GREEN %
-  ├─ Manifest ingest rate: records/sec
-  ├─ Entity resolution match rate
-  └─ OFAC hits per day
-```
-
-### 10.3 Alerting
-
-```
-PagerDuty:
-  ├─ Latency p95 > 5s (page after 5 min)
-  ├─ Error rate > 5% (page immediately)
-  └─ Database CPU > 90% (page immediately)
-
-Slack (#alerts channel):
-  ├─ Latency p95 > 3s (warn after 10 min)
-  ├─ Error rate > 1% (warn after 5 min)
-  ├─ Database CPU > 80% (warn)
-  └─ Disk space < 10% (warn)
-```
+4 separate Cloud Run services; Cloud SQL PostgreSQL; Cloud VPC Connector for SQL connectivity; Secret Manager for all credentials.
 
 ---
 
-## 11. COMPLIANCE & AUDIT
+## 12. Health & Observability
 
-### 11.1 Data Retention
+### Health Check Pattern
 
+All services implement `GET /health`:
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-05-23T14:30:45Z",
+  "version": "2.0",
+  "dependencies": {
+    "database": "connected",
+    "cord_index": "loaded",
+    "external_apis": "ready"
+  }
+}
 ```
-Shipment records: 7 years (CBP requirement per 19 CFR 123.2)
-Scoring audit trail: 2 years
-API logs: 30 days (cost), archived to Cloud Storage
-User audit logs: 1 year
-```
 
-### 11.2 Compliance Frameworks
+### Logging
 
-- **FedRAMP Moderate** (eventual requirement)
-- **FISMA** (Federal Information Security Management Act)
-- **CBP Data Handling** (19 CFR 123.2)
-- **SOC 2 Type II** (audit recommendations)
+- **Format:** JSON (structured logs for log aggregation)
+- **Level:** INFO (local), WARN (staging), ERROR (production)
+- **Transport:** stdout (Docker logs) → Cloud Logging (Cloud Run)
+
+### Metrics
+
+- **Request latency:** Per-endpoint P50/P95/P99 in milliseconds
+- **Risk scoring:** Avg score, distribution, Altana call count/latency
+- **Entity resolution:** Search latency, match accuracy, OFAC hit rate
+- **Uptime:** Service availability per endpoint
 
 ---
 
-## 12. CONTAINER INVENTORY
+## Next Steps
 
-### Current (Running)
-| Container | Image | Port | Status |
-|-----------|-------|------|--------|
-| sentry-ui | sentry-ui:latest | 3001 | ✓ |
-| sentry-api | sentry-api:latest | 8000 | ✓ |
-| sentry-data | sentry-data:latest | 8005 | ✓ |
+For deployment instructions, see [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-### Required (Not Yet)
-| Container | Image | Port | Purpose |
-|-----------|-------|------|---------|
-| sentry-senzing | senzing/senzing-api-server:3.5.x | 8250 | Entity resolution |
-| sentry-vessel | custom | (none) | VesselAPI wrapper (Cloud Run) |
-
-### Total Containers on Cloud Run: 5
-- sentry-ui (1 instance min)
-- sentry-api (1 instance min, scales to 100)
-- sentry-data (1 instance min, scales to 50)
-- sentry-senzing (1 instance always-on, stateful)
-- sentry-vessel (2 instances min, scales to 20, stateless)
-
----
-
-## 13. NEXT STEPS (PRIORITY ORDER)
-
-**Phase 1: Cloud Infrastructure (Week 1-2)**
-- [ ] GCP project setup
-- [ ] Service accounts & IAM roles
-- [ ] Cloud SQL instance (PostgreSQL)
-- [ ] Secret Manager populated
-- [ ] Artifact Registry repo
-- [ ] Cloud Load Balancer
-
-**Phase 2: GitHub Actions (Week 2-3)**
-- [ ] `.github/workflows/deploy.yml` created
-- [ ] Artifact Registry authentication
-- [ ] Cloud Run deployment automation
-- [ ] Smoke tests in CI/CD
-- [ ] Slack notifications
-
-**Phase 3: Senzing Integration (Week 3-4)**
-- [ ] Senzing license acquired
-- [ ] G2 database schema in Cloud SQL
-- [ ] Senzing Docker image configured
-- [ ] `/api/entity-resolution` endpoint
-- [ ] Integration tests
-
-**Phase 4: VesselAPI Integration (Week 4-5)**
-- [ ] AISStream.io or MarineTraffic subscription
-- [ ] API key in Secret Manager
-- [ ] `/api/h2/vessel-analysis` endpoint
-- [ ] ISF Element 9 validation logic
-- [ ] Integration tests
-
-**Phase 5: Security Hardening (Week 5-6)**
-- [ ] Network policies (VPC, Cloud Armor)
-- [ ] RBAC configuration
-- [ ] Audit logging setup
-- [ ] Backup & disaster recovery
-- [ ] Security testing
-
-**Phase 6: Testing & Launch (Week 6-7)**
-- [ ] Load testing (1K concurrent users)
-- [ ] Performance testing
-- [ ] UAT environment setup
-- [ ] Documentation & runbooks
-- [ ] Incident response procedures
-
+For UI/UX design and feature details, see [`DESIGN.md`](DESIGN.md).

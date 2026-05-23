@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Search, AlertTriangle, Clock, Coins, Shield, TrendingUp } from 'lucide-react';
 import { useV2Cases } from '../hooks/useV2Cases';
 import { useV2ThreatFeed } from '../hooks/useV2ThreatFeed';
-import { Case } from '../types/v2.types';
+import { Case, Shipment } from '../types/v2.types';
 
 interface DashboardStats {
   criticalInvestigations: number;
@@ -12,9 +12,21 @@ interface DashboardStats {
   slaRemaining: string;
 }
 
-export default function V2DashboardPage() {
-  const { cases, loading: casesLoading } = useV2Cases();
-  const { threatFeed, loading: threatLoading } = useV2ThreatFeed();
+interface V2DashboardPageProps {
+  cases?: Case[];
+  shipments?: Shipment[];
+  selectCaseForDetail?: (caseObj: Case) => void;
+  synopsisMap?: Record<string, string>;
+}
+
+export default function V2DashboardPage({ cases: propCases, shipments: propShipments, selectCaseForDetail, synopsisMap = {} }: V2DashboardPageProps) {
+  // Use passed props if available, otherwise fetch locally
+  const { cases: localCases, loading: casesLoading } = useV2Cases();
+  const { threatFeed: localThreatFeed, loading: threatLoading } = useV2ThreatFeed();
+
+  const cases = propCases || localCases;
+  const threatFeed = localThreatFeed;
+
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState('all');
@@ -149,7 +161,11 @@ export default function V2DashboardPage() {
                   <tr><td colSpan={6} className="p-4 text-center text-gray-500">No cases match filters</td></tr>
                 ) : (
                   filteredCases.map((c) => (
-                    <tr key={c.case_id} className="hover:bg-slate-50 transition-all">
+                    <tr
+                      key={c.case_id}
+                      onClick={() => selectCaseForDetail?.(c)}
+                      className="hover:bg-slate-50 transition-all cursor-pointer"
+                    >
                       <td className="p-2.5">
                         <div className="flex items-center space-x-1">
                           <div className={`w-1.5 h-1.5 rounded-full ${c.risk_score >= 80 ? 'bg-[#D83933]' : 'bg-amber-500'}`}></div>
@@ -170,7 +186,10 @@ export default function V2DashboardPage() {
                         {c.sla_timer}
                       </td>
                       <td className="p-2.5">
-                        <button className="px-2 py-1 bg-[#112E51] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded cursor-pointer transition-all whitespace-nowrap">
+                        <button
+                          onClick={() => selectCaseForDetail?.(c)}
+                          className="px-2 py-1 bg-[#112E51] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded cursor-pointer transition-all whitespace-nowrap"
+                        >
                           DRILL
                         </button>
                       </td>
@@ -210,7 +229,15 @@ export default function V2DashboardPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-[9px] text-gray-400 font-mono">{event.timestamp}</span>
                     {event.related_case_id && (
-                      <button className="text-[9px] text-[#005EA2] font-bold hover:underline cursor-pointer">
+                      <button
+                        onClick={() => {
+                          const relatedCase = cases.find(c => c.case_id === event.related_case_id);
+                          if (relatedCase && selectCaseForDetail) {
+                            selectCaseForDetail(relatedCase);
+                          }
+                        }}
+                        className="text-[9px] text-[#005EA2] font-bold hover:underline cursor-pointer"
+                      >
                         {event.related_case_id}
                       </button>
                     )}

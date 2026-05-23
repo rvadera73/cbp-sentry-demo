@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles } from 'lucide-react';
+import { Send, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
   text: string;
+  sources?: string[];
 }
 
 interface V2ChatPanelProps {
@@ -14,9 +15,11 @@ interface V2ChatPanelProps {
     riskScore: number;
     officer: string;
   };
+  isExpanded?: boolean;
+  onToggleExpand?: () => void;
 }
 
-export default function V2ChatPanel({ caseContext }: V2ChatPanelProps) {
+export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleExpand }: V2ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
@@ -53,7 +56,11 @@ export default function V2ChatPanel({ caseContext }: V2ChatPanelProps) {
       });
 
       const data = await response.json();
-      setMessages(prev => [...prev, { role: 'assistant', text: data.text || 'No response received.' }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        text: data.text || 'No response received.',
+        sources: data.sources || []
+      }]);
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -64,12 +71,41 @@ export default function V2ChatPanel({ caseContext }: V2ChatPanelProps) {
     }
   };
 
+  // Collapsed view
+  if (!isExpanded) {
+    return (
+      <div className="w-16 bg-white border-l border-[#D0D7DE] flex flex-col h-full shadow-lg items-center py-2">
+        <button
+          onClick={onToggleExpand}
+          className="p-2 hover:bg-slate-100 rounded transition-colors"
+          title="Expand Assistant"
+        >
+          <ChevronLeft className="w-5 h-5 text-[#112E51]" />
+        </button>
+        <div className="flex-1" />
+        <div className="h-10 w-10 flex items-center justify-center hover:bg-slate-100 rounded mb-2 cursor-pointer" title="Assistant">
+          <Sparkles className="w-5 h-5 text-cyan-500" />
+        </div>
+      </div>
+    );
+  }
+
+  // Expanded view
   return (
     <div className="w-80 bg-white border-l border-[#D0D7DE] flex flex-col h-full shadow-lg">
       {/* Header */}
-      <div className="p-3 border-b border-[#D0D7DE] bg-[#F7F9FC] flex items-center space-x-2">
-        <Sparkles className="h-4 w-4 text-cyan-500" />
-        <span className="text-xs font-bold text-[#112E51] uppercase font-mono">CBP Ask-AI</span>
+      <div className="p-3 border-b border-[#D0D7DE] bg-[#F7F9FC] flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Sparkles className="h-4 w-4 text-cyan-500" />
+          <span className="text-xs font-bold text-[#112E51] uppercase font-mono">Assistant</span>
+        </div>
+        <button
+          onClick={onToggleExpand}
+          className="p-1 hover:bg-slate-200 rounded transition-colors"
+          title="Collapse Assistant"
+        >
+          <ChevronRight className="w-4 h-4 text-slate-600" />
+        </button>
       </div>
 
       {/* Chat Messages */}
@@ -78,19 +114,27 @@ export default function V2ChatPanel({ caseContext }: V2ChatPanelProps) {
         className="flex-1 overflow-y-auto p-3 space-y-3"
       >
         {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
+          <div key={idx}>
             <div
-              className={`max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
-                msg.role === 'user'
-                  ? 'bg-[#005EA2] text-white rounded-br-none'
-                  : 'bg-[#F7F9FC] border border-[#D0D7DE] text-[#1B1B1B] rounded-bl-none'
-              }`}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
-              {msg.text}
+              <div
+                className={`max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                  msg.role === 'user'
+                    ? 'bg-[#005EA2] text-white rounded-br-none'
+                    : 'bg-[#F7F9FC] border border-[#D0D7DE] text-[#1B1B1B] rounded-bl-none'
+                }`}
+              >
+                {msg.text}
+              </div>
             </div>
+            {msg.sources && msg.sources.length > 0 && (
+              <div className="flex justify-start mt-1 px-1">
+                <div className="text-[9px] text-slate-500 font-mono">
+                  Sources: {msg.sources.join(', ')}
+                </div>
+              </div>
+            )}
           </div>
         ))}
         {loading && (
