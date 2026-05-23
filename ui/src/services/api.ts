@@ -17,20 +17,17 @@ import type {
 const getAPIBaseURL = (): string => {
   if (typeof window === 'undefined') return '/api'
 
+  // If API URL was set at build time (via VITE_API_URL env var in Docker/Cloud Run)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+
   const hostname = window.location.hostname
 
   // Local development: localhost:3000 or localhost:3001
   // Nginx proxy at /api routes to http://sentry-api:8000
   if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
     return '/api'
-  }
-
-  // Cloud Run: sentry-ui-{HASH}.{REGION}.run.app
-  // Extract hash and construct sentry-api URL with same hash
-  const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/)
-  if (cloudRunMatch) {
-    const [, hash, region] = cloudRunMatch
-    return `https://sentry-api-${hash}.${region}.run.app/api`
   }
 
   // Fallback to relative paths (works with nginx proxy)

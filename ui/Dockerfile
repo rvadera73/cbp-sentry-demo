@@ -10,6 +10,12 @@ RUN npm ci --prefer-offline --no-audit
 # Step 2: Copy source and build (only invalidates on source change)
 COPY src ./src
 COPY tsconfig.json tsconfig.node.json vite.config.ts tailwind.config.ts postcss.config.js index.html ./
+
+# Step 3: Build with optional API_URL (for Cloud Run deployments)
+# In Cloud Run, build with: --build-arg API_URL=https://sentry-api-XXXX.run.app/api
+# In local Docker, omit API_URL and use nginx proxy at /api
+ARG API_URL=""
+ENV VITE_API_URL=${API_URL}
 RUN npm run build
 
 # === PRODUCTION STAGE ===
