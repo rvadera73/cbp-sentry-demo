@@ -121,7 +121,7 @@ jobs:
   build-ui:
     name: Build sentry-ui
     runs-on: ubuntu-latest
-    needs: [setup, test]
+    needs: [setup, test, deploy-api]
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
@@ -129,11 +129,18 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
+      - name: Get sentry-api URL
+        id: api-url
+        run: |
+          API_URL=$(gcloud run services describe sentry-api --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "url=${API_URL}/api" >> $GITHUB_OUTPUT
       - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
       - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
-          docker build -t "$IMG" ui/
+          docker build \
+            --build-arg API_URL="${{ steps.api-url.outputs.url }}" \
+            -t "$IMG" ui/
           docker push "$IMG"
 
   deploy-api:
@@ -202,7 +209,7 @@ jobs:
   deploy-ui:
     name: Deploy sentry-ui
     runs-on: ubuntu-latest
-    needs: [setup, build-ui]
+    needs: [setup, build-ui, deploy-data]
     if: github.event_name == 'push'
     environment:
       name: ${{ needs.setup.outputs.environment }}
