@@ -46,6 +46,33 @@ jobs:
             echo "name=staging" >> $GITHUB_OUTPUT
           fi
 
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      data: ${{ steps.filter.outputs.data }}
+      cord: ${{ steps.filter.outputs.cord }}
+      ui: ${{ steps.filter.outputs.ui }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'services/api/**'
+              - '.github/workflows/deploy.yml'
+            data:
+              - 'services/data/**'
+              - '.github/workflows/deploy.yml'
+            cord:
+              - 'services/cord-integration/**'
+              - '.github/workflows/deploy.yml'
+            ui:
+              - 'ui/**'
+              - '.github/workflows/deploy.yml'
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -109,8 +136,12 @@ jobs:
   build-api:
     name: Build sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, test]
-    if: github.event_name == 'push'
+    needs: [setup, test, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.api == 'true'
+      )
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -127,8 +158,12 @@ jobs:
   build-data:
     name: Build sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, test]
-    if: github.event_name == 'push'
+    needs: [setup, test, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.data == 'true'
+      )
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -145,8 +180,12 @@ jobs:
   build-cord:
     name: Build sentry-cord-integration
     runs-on: ubuntu-latest
-    needs: [setup, test]
-    if: github.event_name == 'push'
+    needs: [setup, test, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.cord == 'true'
+      )
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -163,8 +202,14 @@ jobs:
   build-ui:
     name: Build sentry-ui
     runs-on: ubuntu-latest
-    needs: [setup, test, deploy-api]
-    if: github.event_name == 'push'
+    needs: [setup, test, deploy-api, changes]
+    if: |
+      !failure() && !cancelled() &&
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.ui == 'true' ||
+        needs.changes.outputs.api == 'true'
+      )
     steps:
       - uses: actions/checkout@v4
       - uses: google-github-actions/auth@v2
@@ -188,8 +233,12 @@ jobs:
   deploy-api:
     name: Deploy sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, build-api]
-    if: github.event_name == 'push'
+    needs: [setup, build-api, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.api == 'true'
+      )
     environment:
       name: ${{ needs.setup.outputs.environment }}
     steps:
@@ -232,8 +281,12 @@ jobs:
   deploy-data:
     name: Deploy sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, build-data, bootstrap-bucket]
-    if: github.event_name == 'push'
+    needs: [setup, build-data, bootstrap-bucket, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.data == 'true'
+      )
     environment:
       name: ${{ needs.setup.outputs.environment }}
     outputs:
@@ -270,8 +323,12 @@ jobs:
   deploy-cord:
     name: Deploy sentry-cord-integration
     runs-on: ubuntu-latest
-    needs: [setup, build-cord, deploy-data, bootstrap-bucket]
-    if: github.event_name == 'push'
+    needs: [setup, build-cord, bootstrap-bucket, changes]
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.cord == 'true'
+      )
     environment:
       name: ${{ needs.setup.outputs.environment }}
     outputs:
@@ -281,6 +338,12 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
+      - name: Resolve Data URL
+        id: urls
+        run: |
+          DATA_URL=$(gcloud run services describe sentry-data --region ${{ env.REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
+          echo "data_url=${DATA_URL:-http://sentry-data:8005}" >> $GITHUB_OUTPUT
+          echo "Resolved Data URL: ${DATA_URL:-http://sentry-data:8005}"
       - name: Deploy to Cloud Run
         id: deploy
         run: |
@@ -301,7 +364,7 @@ jobs:
             --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
             --add-volume-mount volume=appdata,mount-path=/app/data \
             --set-env-vars CORD_DATA_DIR=/app/cord-data \
-            --set-env-vars DATA_SERVICE_URL=${{ needs.deploy-data.outputs.url }} \
+            --set-env-vars DATA_SERVICE_URL=${{ steps.urls.outputs.data_url }} \
             --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }}
           URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
           echo "url=$URL" >> $GITHUB_OUTPUT
@@ -310,8 +373,14 @@ jobs:
   deploy-ui:
     name: Deploy sentry-ui
     runs-on: ubuntu-latest
-    needs: [setup, build-ui, deploy-data]
-    if: github.event_name == 'push'
+    needs: [setup, build-ui, changes]
+    if: |
+      !failure() && !cancelled() &&
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        needs.changes.outputs.ui == 'true' ||
+        needs.changes.outputs.api == 'true'
+      )
     environment:
       name: ${{ needs.setup.outputs.environment }}
     steps:
@@ -339,7 +408,7 @@ jobs:
     name: Run Smoke Tests
     runs-on: ubuntu-latest
     needs: [setup, deploy-ui]
-    if: github.event_name == 'push'
+    if: always() && github.event_name == 'push'
     steps:
       - uses: google-github-actions/auth@v2
         with:
