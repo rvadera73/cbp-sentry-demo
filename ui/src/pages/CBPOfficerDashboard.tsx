@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/layout/Header';
 import { AlertTriangle, TrendingUp, Clock, Upload, ArrowRight } from 'lucide-react';
+import { getRiskLevel, getRiskBorderColor } from '../utils/risk';
 import '../styles/CBPOfficerDashboard.css';
 
 interface Shipment {
@@ -72,17 +73,6 @@ export default function CBPOfficerDashboard() {
   const mediumRiskCount = shipments.filter(s => (s.risk_score || 0) >= 40 && (s.risk_score || 0) < 70).length;
   const totalValue = shipments.reduce((sum, s) => sum + (s.declared_value_usd || 0), 0);
 
-  const getRiskColor = (score: number) => {
-    if (score >= 70) return '#dc2626';
-    if (score >= 40) return '#f97316';
-    return '#16a34a';
-  };
-
-  const getRiskLabel = (score: number) => {
-    if (score >= 70) return 'HIGH';
-    if (score >= 40) return 'MEDIUM';
-    return 'LOW';
-  };
 
   return (
     <div className="cbp-dashboard">
@@ -166,9 +156,9 @@ export default function CBPOfficerDashboard() {
                   onClick={() => navigate(`/cases/${shipment.id}`)}
                 >
                   <div className="queue-item-header">
-                    <div className="risk-badge" style={{ borderLeftColor: getRiskColor(shipment.risk_score) }}>
+                    <div className="risk-badge" style={{ borderLeftColor: getRiskBorderColor(shipment.risk_score || 0) }}>
                       <span className="risk-score">{shipment.risk_score || 0}</span>
-                      <span className="risk-label">{getRiskLabel(shipment.risk_score || 0)}</span>
+                      <span className="risk-label">{getRiskLevel(shipment.risk_score || 0).toUpperCase()}</span>
                     </div>
                     <div className="queue-item-main">
                       <h3 className="queue-item-title">

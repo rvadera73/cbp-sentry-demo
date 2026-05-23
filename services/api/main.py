@@ -151,14 +151,19 @@ _current_config = {
 async def lifespan(app: FastAPI):
     logger.info(f"Sentry API started in {API_MODE} mode")
 
-    # Initialize CORD FTS index on startup (builds index if not present)
-    try:
-        from cord_engine import get_cord_engine
-        cord = get_cord_engine()
-        entity_count = cord.get_entity_count()
-        logger.info(f"✓ CORD engine initialized: {entity_count} entities indexed")
-    except Exception as e:
-        logger.warning(f"CORD engine initialization failed: {e}")
+    # Initialize CORD FTS index on startup (non-fatal if unavailable)
+    import os
+    cord_data_dir = os.getenv("CORD_DATA_DIR", "/app/cord-data")
+    if os.path.exists(cord_data_dir):
+        try:
+            from cord_engine import get_cord_engine
+            cord = get_cord_engine()
+            entity_count = cord.get_entity_count()
+            logger.info(f"✓ CORD engine initialized: {entity_count} entities indexed")
+        except Exception as e:
+            logger.warning(f"CORD engine initialization failed (continuing anyway): {e}")
+    else:
+        logger.info(f"CORD data directory not found at {cord_data_dir} — continuing without CORD engine")
 
     yield
     logger.info("Sentry API shutdown")

@@ -1,51 +1,74 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { api } from '../services/api';
+import { FileText, MapPin, Package, Upload } from 'lucide-react';
 import Header from '../components/layout/Header';
 import CaseLens from '../components/command-center/CaseLens';
 import CommodityLens from '../components/command-center/CommodityLens';
 import CorridorLens from '../components/command-center/CorridorLens';
 import '../styles/command-center/CommandCenter.css';
 
-interface LensSelectorProps {
+interface PageTitleBarProps {
+  selectedLens: 'case' | 'commodity' | 'corridor';
+  uploadMessage: string | null;
+}
+
+function PageTitleBar({ selectedLens, uploadMessage }: PageTitleBarProps) {
+  const titles = {
+    case: 'Command Center',
+    commodity: 'Commodity Analysis',
+    corridor: 'Corridor Intelligence',
+  };
+
+  return (
+    <div className="page-title-bar">
+      <h1>{titles[selectedLens]}</h1>
+      {uploadMessage && (
+        <div className="alert-box alert-box--success">
+          <div className="alert-box__message">{uploadMessage}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TabBarProps {
   selectedLens: 'case' | 'commodity' | 'corridor';
   onLensChange: (lens: 'case' | 'commodity' | 'corridor') => void;
   onUploadClick: () => void;
 }
 
-function LensSelector({ selectedLens, onLensChange, onUploadClick }: LensSelectorProps) {
-  const lenses: { id: 'case' | 'commodity' | 'corridor'; label: string; description: string }[] = [
-    { id: 'case', label: 'Cases', description: 'All active cases by risk priority' },
-    { id: 'commodity', label: 'Commodity Lens', description: 'Industry-level risk analysis' },
-    { id: 'corridor', label: 'Corridor Lens', description: 'Port of Entry vessel tracking' },
+function TabBar({ selectedLens, onLensChange, onUploadClick }: TabBarProps) {
+  const tabs: { id: 'case' | 'commodity' | 'corridor'; label: string; icon: React.ComponentType<any> }[] = [
+    { id: 'case', label: 'Cases', icon: FileText },
+    { id: 'corridor', label: 'Corridors', icon: MapPin },
+    { id: 'commodity', label: 'Commodities', icon: Package },
   ];
 
   return (
-    <div className="lens-selector">
-      <div className="lens-selector__controls">
-        <div className="lens-selector__label">ANALYTICAL TASK LENSES:</div>
-        <button
-          className="lens-selector__upload-btn"
-          onClick={onUploadClick}
-          aria-label="Upload manifest data from Excel file"
-        >
-          📁 Upload Manifest
-        </button>
-      </div>
-      <div className="lens-selector__group" role="radiogroup" aria-label="Select analytical lens">
-        {lenses.map(lens => (
-          <label key={lens.id} className={`lens-selector__option ${selectedLens === lens.id ? 'active' : ''}`}>
-            <input
-              type="radio"
-              name="lens"
-              value={lens.id}
-              checked={selectedLens === lens.id}
-              onChange={() => onLensChange(lens.id)}
-              aria-label={`${lens.label}: ${lens.description}`}
-            />
-            <span className="lens-selector__label-text">{lens.label}</span>
-          </label>
-        ))}
-      </div>
+    <div className="tab-bar">
+      {tabs.map(tab => {
+        const IconComponent = tab.icon;
+        return (
+          <button
+            key={tab.id}
+            className={`tab-bar__item ${selectedLens === tab.id ? 'tab-bar__item--active' : ''}`}
+            onClick={() => onLensChange(tab.id)}
+            aria-selected={selectedLens === tab.id}
+            role="tab"
+          >
+            <IconComponent className="tab-bar__icon" size={16} />
+            {tab.label}
+          </button>
+        );
+      })}
+      <button
+        className="usa-button usa-button--outline"
+        style={{ marginLeft: 'auto' }}
+        onClick={onUploadClick}
+        aria-label="Upload manifest data from Excel file"
+      >
+        <Upload size={14} />
+        Upload Manifest
+      </button>
     </div>
   );
 }
@@ -57,46 +80,52 @@ interface Shipment {
   consignee_name: string;
   origin_country: string;
   destination_country: string;
-  hs_code: string;
-  declared_value_usd: number;
+  commodity_code: string;
+  declared_value: number;
   risk_score: number;
   status: string;
 }
 
-interface CommandCenterContentProps {
-  selectedLens: 'case' | 'commodity' | 'corridor';
+interface Corridor {
+  id: string;
+  route: string;
+  industry: string;
+  hs_code: string;
+  shipment_count: number;
+  aggregate_value: number;
+  yoy_surge?: {
+    volume_surge_pct: number;
+    value_surge_pct: number;
+  };
+  risk_level: string;
 }
 
-function CommandCenterContent({ selectedLens }: CommandCenterContentProps) {
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>();
+interface Vessel {
+  id: string;
+  vessel_name: string;
+  imo: number;
+  flag_country: string;
+  risk_score: number;
+  eta: string;
+}
 
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      setError(undefined);
-      try {
-        if (selectedLens === 'case') {
-          // Load shipments for case lens using CommandCenter-specific endpoint
-          // Fetch 500 records to allow searching across a substantial portion of the dataset
-          const response = await fetch('/api/command-center/shipments?limit=500&offset=0');
-          if (!response.ok) throw new Error('Failed to fetch shipments');
-          const data = await response.json();
-          setShipments(data.shipments || []);
-        }
-      } catch (err) {
-        setError(`Failed to load data: ${err}`);
-        console.error('Command Center data load error:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
+interface CommandCenterContentProps {
+  selectedLens: 'case' | 'commodity' | 'corridor';
+  shipments: Shipment[];
+  corridors: Corridor[];
+  vessels: Vessel[];
+  loading: boolean;
+  error?: string;
+}
 
-    loadData();
-  }, [selectedLens]);
-
-
+function CommandCenterContent({
+  selectedLens,
+  shipments,
+  corridors,
+  vessels,
+  loading,
+  error,
+}: CommandCenterContentProps) {
   return (
     <div className="command-center__content">
       {loading && (
@@ -106,17 +135,16 @@ function CommandCenterContent({ selectedLens }: CommandCenterContentProps) {
       )}
 
       {error && (
-        <div className="command-center__error">
-          <p>{error}</p>
-          <button onClick={() => window.location.reload()}>Retry</button>
+        <div className="alert-box alert-box--error">
+          <div className="alert-box__message">{error}</div>
         </div>
       )}
 
       {!loading && !error && (
         <>
           {selectedLens === 'case' && <CaseLens cases={shipments} />}
-          {selectedLens === 'commodity' && <CommodityLens />}
-          {selectedLens === 'corridor' && <CorridorLens />}
+          {selectedLens === 'commodity' && <CommodityLens corridors={corridors} />}
+          {selectedLens === 'corridor' && <CorridorLens vessels={vessels} />}
         </>
       )}
     </div>
@@ -125,8 +153,46 @@ function CommandCenterContent({ selectedLens }: CommandCenterContentProps) {
 
 export default function CommandCenterPage() {
   const [selectedLens, setSelectedLens] = useState<'case' | 'commodity' | 'corridor'>('case');
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [corridors, setCorridors] = useState<Corridor[]>([]);
+  const [vessels, setVessels] = useState<Vessel[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+
+  // Load data based on selected lens
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      setError(undefined);
+      try {
+        if (selectedLens === 'case') {
+          const response = await fetch('/api/command-center/shipments?limit=500&offset=0');
+          if (!response.ok) throw new Error('Failed to load cases');
+          const data = await response.json();
+          setShipments(data.shipments || []);
+        } else if (selectedLens === 'commodity') {
+          const response = await fetch('/api/risk-corridors');
+          if (!response.ok) throw new Error('Failed to load corridors');
+          const data = await response.json();
+          setCorridors(data.corridors || []);
+        } else if (selectedLens === 'corridor') {
+          const response = await fetch('/api/ports/LA/vessels-of-interest');
+          if (!response.ok) throw new Error('Failed to load vessels');
+          const data = await response.json();
+          setVessels(data.vessels || []);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+        console.error('Data load error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [selectedLens]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -136,7 +202,6 @@ export default function CommandCenterPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploading(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -147,17 +212,18 @@ export default function CommandCenterPage() {
       });
 
       if (response.ok) {
-        alert('Manifest uploaded and processed successfully!');
-        // Refresh the cases list
-        window.location.reload();
+        setUploadMessage('Manifest uploaded successfully! Refreshing data...');
+        setTimeout(() => {
+          setUploadMessage(null);
+          window.location.reload();
+        }, 2000);
       } else {
-        alert('Failed to upload manifest');
+        setError('Failed to upload manifest');
       }
-    } catch (error) {
-      console.error('Upload error:', error);
-      alert('Error uploading manifest');
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError('Error uploading manifest');
     } finally {
-      setUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -167,7 +233,8 @@ export default function CommandCenterPage() {
   return (
     <div className="command-center">
       <Header title="Sentry Command Center" />
-      <LensSelector selectedLens={selectedLens} onLensChange={setSelectedLens} onUploadClick={handleUploadClick} />
+      <PageTitleBar selectedLens={selectedLens} uploadMessage={uploadMessage} />
+      <TabBar selectedLens={selectedLens} onLensChange={setSelectedLens} onUploadClick={handleUploadClick} />
       <input
         ref={fileInputRef}
         type="file"
@@ -176,7 +243,14 @@ export default function CommandCenterPage() {
         style={{ display: 'none' }}
         aria-label="Upload Excel manifest file"
       />
-      <CommandCenterContent selectedLens={selectedLens} />
+      <CommandCenterContent
+        selectedLens={selectedLens}
+        shipments={shipments}
+        corridors={corridors}
+        vessels={vessels}
+        loading={loading}
+        error={error}
+      />
     </div>
   );
 }

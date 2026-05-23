@@ -4,7 +4,7 @@ import Header from '../components/layout/Header'
 import WorkflowSignalMap from '../components/cases/WorkflowSignalMap'
 import EntityChainViewer from '../components/cases/EntityChainViewer'
 import FederalReferralDocument from '../components/cases/FederalReferralDocument'
-import { AlertCircle, ChevronLeft } from 'lucide-react'
+import { AlertCircle, ChevronLeft, LayoutDashboard, GitBranch, Share2, FileText, Bot, CheckCircle, AlertCircle as AlertRed } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { scoringApi, type ScoringResponse } from '../services/scoringApi'
 import { cordApi, type SearchFirstInvestigateResponse, type EntityChain, type RiskFlag } from '../services/cordApi'
@@ -145,8 +145,8 @@ export default function CaseViewerPage() {
         <div className="case-viewer-error">
           <AlertCircle size={32} />
           <h2>Case Not Found</h2>
-          <button onClick={() => navigate('/dashboard')} className="btn-primary">
-            Back to Dashboard
+          <button onClick={() => navigate('/command-center')} className="btn-primary">
+            Back to Command Center
           </button>
         </div>
       </div>
@@ -195,7 +195,7 @@ export default function CaseViewerPage() {
       <div className="case-viewer-container">
         {/* Back Button & Case Header */}
         <div className="case-header">
-          <button onClick={() => navigate('/dashboard')} className="btn-back">
+          <button onClick={() => navigate('/command-center')} className="btn-back">
             <ChevronLeft size={20} />
             Back to Cases
           </button>
@@ -222,12 +222,12 @@ export default function CaseViewerPage() {
 
         {/* Workflow Signal Header - Sticky at Top */}
         <div className="workflow-header-sticky">
-          <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-            <h3 style={{ margin: '0 0 16px 0', fontSize: '14px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div>
+            <h3 className="workflow-header-title">
               Investigation Workflow Status
             </h3>
             {/* Compact Workflow Status */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div className="workflow-status-grid">
               {[
                 { step: 'Manifest', status: 'completed', signal: '✓' },
                 { step: 'H1 Corridor', status: 'completed', signal: `${scoringData?.h1.score || 0} pts` },
@@ -238,39 +238,33 @@ export default function CaseViewerPage() {
               ].map((item, idx) => (
                 <div
                   key={idx}
-                  style={{
-                    padding: '12px',
-                    borderRadius: '6px',
-                    background: item.status === 'completed' ? '#f0fdf4' : item.status === 'active' ? '#eff6ff' : '#fafafa',
-                    border: `1px solid ${item.status === 'completed' ? '#16a34a' : item.status === 'active' ? '#3b82f6' : '#d1d5db'}`,
-                    textAlign: 'center',
-                  }}
+                  className={`workflow-status-item ${item.status}`}
                 >
-                  <div style={{ fontSize: '12px', fontWeight: '600', color: item.status === 'completed' ? '#16a34a' : item.status === 'active' ? '#3b82f6' : '#6b7280' }}>
+                  <div className="workflow-status-item-title">
                     {item.step}
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#1f2937', marginTop: '4px' }}>
+                  <div className="workflow-status-item-signal">
                     {item.signal}
                   </div>
                 </div>
               ))}
             </div>
             {/* Signal Health Indicators */}
-            <div style={{ display: 'flex', gap: '16px', padding: '12px', background: '#fafafa', borderRadius: '6px', fontSize: '13px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#16a34a' }}></span>
+            <div className="signal-health-indicators">
+              <div className="signal-health-item">
+                <span className="signal-health-circle" style={{ background: '#16a34a' }}></span>
                 <span>Good (Green)</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#eab308' }}></span>
+              <div className="signal-health-item">
+                <span className="signal-health-circle" style={{ background: '#eab308' }}></span>
                 <span>Fine (Yellow)</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#dc2626' }}></span>
+              <div className="signal-health-item">
+                <span className="signal-health-circle" style={{ background: '#dc2626' }}></span>
                 <span>Bad (Red)</span>
               </div>
-              <div style={{ marginLeft: 'auto', fontWeight: '600', color: currentScore >= 70 ? '#dc2626' : currentScore >= 40 ? '#f97316' : '#16a34a' }}>
-                {Math.round(currentScore)}/100 {currentScore >= 70 ? '🔴 HIGH' : currentScore >= 40 ? '🟡 MEDIUM' : '🟢 LOW'}
+              <div className="signal-health-score" style={{ color: currentScore >= 70 ? '#dc2626' : currentScore >= 40 ? '#f97316' : '#16a34a' }}>
+                {Math.round(currentScore)}/100 {currentScore >= 70 ? 'HIGH' : currentScore >= 40 ? 'MEDIUM' : 'LOW'}
               </div>
             </div>
           </div>
@@ -286,7 +280,7 @@ export default function CaseViewerPage() {
                 onClick={() => setActiveTab('overview')}
                 title="Shipment information"
               >
-                <span>📋</span>
+                <LayoutDashboard size={20} />
                 <span className="tab-label">Overview</span>
               </button>
               <button
@@ -294,7 +288,7 @@ export default function CaseViewerPage() {
                 onClick={() => setActiveTab('workflow')}
                 title="Investigation workflow and signals"
               >
-                <span>🔄</span>
+                <GitBranch size={20} />
                 <span className="tab-label">Workflow</span>
               </button>
               <button
@@ -302,7 +296,7 @@ export default function CaseViewerPage() {
                 onClick={() => setActiveTab('entity-chain')}
                 title="Entity ownership chain"
               >
-                <span>🔗</span>
+                <Share2 size={20} />
                 <span className="tab-label">Entities</span>
               </button>
               <button
@@ -310,7 +304,7 @@ export default function CaseViewerPage() {
                 onClick={() => setActiveTab('referral')}
                 title="Full referral package"
               >
-                <span>📦</span>
+                <FileText size={20} />
                 <span className="tab-label">Referral</span>
               </button>
             </nav>
@@ -318,7 +312,7 @@ export default function CaseViewerPage() {
             {/* Officer Action Section */}
             <div className="action-buttons">
               <h3>Officer Action</h3>
-              <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
+              <p>
                 Score {Math.round(currentScore)}/100
               </p>
               {viableActions.map(btn => (
@@ -338,18 +332,19 @@ export default function CaseViewerPage() {
           <div className="case-content-main">
               {activeTab === 'overview' && (
                 <div className="tab-panel">
-                  <div style={{ marginBottom: '24px', padding: '16px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px' }}>
-                    <h3 style={{ margin: '0 0 12px 0', fontSize: '15px', fontWeight: '600', color: '#1e40af' }}>
-                      🤖 AI Investigation Summary
+                  <div className="ai-summary">
+                    <h3 className="ai-summary-title">
+                      <Bot size={18} style={{ display: 'inline-block', marginRight: '8px', verticalAlign: 'text-bottom' }} />
+                      AI Investigation Summary
                     </h3>
-                    <p style={{ margin: 0, fontSize: '14px', color: '#1f2937', lineHeight: '1.6' }}>
+                    <p className="ai-summary-text">
                       {shipment.shipper_name} is a {scoringData?.h1.score ? `${scoringData.h1.score > 20 ? 'high-risk' : 'moderate-risk'}` : ''} shipper in the {shipment.origin_country}→{shipment.destination_country} corridor.
                       Analysis shows {riskFlags.length > 0 ? `${riskFlags.length} risk flag(s) detected` : 'no major flags'}.
                       The shipment has {entityChains.length > 0 ? `a ${entityChains.reduce((sum, c) => sum + (c.entities?.length || 0), 0)}-entity ownership chain` : 'direct ownership'}.
                       Recommended action: <strong>{currentScore >= 90 ? 'TRLED Referral' : currentScore >= 70 ? 'Examine on Arrival' : currentScore >= 40 ? 'CF-28 Exam' : 'Clear to Release'}</strong>
                     </p>
                   </div>
-                  <h3 style={{ marginBottom: '12px', fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>Shipment Details</h3>
+                  <h3>Shipment Details</h3>
                   <table className="overview-table">
                     <tbody>
                       <tr>
@@ -402,8 +397,8 @@ export default function CaseViewerPage() {
                   />
 
                   {/* Score Trend Chart */}
-                  <div style={{ marginTop: '32px' }}>
-                    <h3 style={{ marginBottom: '16px', color: '#1f2937', fontSize: '18px', fontWeight: '600' }}>
+                  <div className="score-accumulation-chart">
+                    <h3 className="score-chart-title">
                       Score Accumulation Through Workflow
                     </h3>
                     <ResponsiveContainer width="100%" height={300}>
@@ -434,7 +429,8 @@ export default function CaseViewerPage() {
                             backgroundColor: '#ffffff',
                             border: '1px solid #e5e7eb',
                             borderRadius: '6px',
-                            padding: '8px'
+                            padding: '8px',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)'
                           }}
                           formatter={(value: number) => Math.round(value)}
                         />

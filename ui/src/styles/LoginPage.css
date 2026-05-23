@@ -1,209 +1,426 @@
+@import './design-tokens.css';
+
+/* ===== LOGIN PAGE — USWDS ENTERPRISE FEDERAL DESIGN ===== */
+
 .login-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f9fafb;
+  font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.gov-banner {
+  background-color: #f5f5f5;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 10px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+/* ===== HEADER — FEDERAL NAVY WITH GRADIENT & TEAL ACCENT ===== */
+
+.login-header {
+  background: linear-gradient(135deg, #013060 0%, #0d4a6f 100%);
+  color: white;
+  padding: 64px 48px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  box-shadow: 0 10px 15px rgba(1, 48, 96, 0.15), 0 4px 6px rgba(1, 48, 96, 0.1);
+}
+
+.login-header__icon {
+  color: #1a5f7a;
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  opacity: 0.95;
+}
+
+.login-header__text h1 {
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0;
+  color: white;
+  letter-spacing: -0.5px;
+  line-height: 1.3;
+}
+
+.login-header__text p {
+  font-size: 18px;
+  margin: 8px 0 0 0;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.5;
+  font-weight: 400;
+  max-width: 600px;
+}
+
+/* ===== LOGIN CONTAINER — CENTER CONTENT ===== */
+
+.login-container {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #013060 0%, #1a5f7a 50%, #2a7f9a 100%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  padding: 48px 16px;
 }
 
-.login-container {
-  width: 100%;
-  max-width: 500px;
-  padding: 1.5rem;
-}
+/* ===== LOGIN CARD — PROFESSIONAL ELEVATION ===== */
 
 .login-card {
-  background: white;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
   border-radius: 12px;
-  padding: 3rem 2rem;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 48px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07), 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
 }
 
-.login-header {
-  text-align: center;
-  margin-bottom: 2rem;
+.login-card:hover {
+  box-shadow: 0 10px 15px rgba(1, 48, 96, 0.08), 0 4px 6px rgba(0, 0, 0, 0.05);
+  border-color: #0284c7;
 }
 
-.logo {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 1rem;
-  color: #013060;
-}
-
-.login-header h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #013060;
-  margin: 0 0 0.5rem 0;
-  letter-spacing: -0.5px;
-}
-
-.login-header .subtitle {
-  font-size: 0.95rem;
-  color: #666;
-  margin: 0;
-}
-
-.login-form {
+.login-card form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 32px;
 }
+
+/* ===== FORM ELEMENTS — PROPER SPACING & TYPOGRAPHY ===== */
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 8px;
 }
 
-.form-group label {
-  font-size: 0.9rem;
+.form-label {
+  display: block;
+  font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: #013060;
+  margin: 0;
+  letter-spacing: -0.2px;
 }
 
-.form-group input {
-  padding: 0.75rem;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.95rem;
+.form-label.required::after {
+  content: ' *';
+  color: #ef4444;
+}
+
+.form-input {
+  padding: 12px 16px;
+  font-size: 16px;
+  font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #1e293b;
   transition: all 0.2s ease;
+  line-height: 1.5;
 }
 
-.form-group input:focus {
+.form-input:hover:not(:focus) {
+  border-color: #0284c7;
+  background-color: #f9fafb;
+}
+
+.form-input:focus {
   outline: none;
-  border-color: #013060;
-  box-shadow: 0 0 0 3px rgba(1, 48, 96, 0.1);
+  border-color: #0284c7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
 }
 
-.btn-next,
-.btn-login {
-  padding: 0.875rem;
-  background: linear-gradient(135deg, #013060 0%, #1a5f7a 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.form-input::placeholder {
+  color: #999;
 }
 
-.btn-next:hover,
-.btn-login:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(1, 48, 96, 0.25);
+.form-input:disabled {
+  background-color: #f9fafb;
+  color: #666;
+  cursor: not-allowed;
 }
 
-.btn-next:active,
-.btn-login:active {
-  transform: translateY(0);
-}
+/* ===== ROLE OPTIONS — CUSTOM RADIO BUTTONS ===== */
 
-.role-select {
+.role-options {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 12px;
 }
 
-.role-select h2 {
-  font-size: 1.3rem;
-  color: #333;
-  margin: 0 0 1rem 0;
-  text-align: center;
+.role-options > .form-label {
+  margin-bottom: 4px;
 }
 
-.role-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.role-card {
-  padding: 1.5rem;
-  border: 2px solid #e5e5e5;
+.radio-option {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  border: 2px solid #e5e7eb;
   border-radius: 8px;
-  background: white;
+  background-color: #ffffff;
   cursor: pointer;
   transition: all 0.2s ease;
-  text-align: left;
 }
 
-.role-card:hover {
+.radio-option:hover {
+  border-color: #0284c7;
+  background-color: rgba(2, 132, 199, 0.02);
+}
+
+.radio-option:has(input:checked) {
   border-color: #013060;
-  background: #f0f9ff;
+  background-color: rgba(1, 48, 96, 0.03);
 }
 
-.role-card.selected {
+.radio-option input[type='radio'] {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border: 2px solid #e5e7eb;
+  border-radius: 50%;
+  background-color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.radio-option input[type='radio']:hover {
+  border-color: #0284c7;
+  background-color: rgba(2, 132, 199, 0.04);
+}
+
+.radio-option input[type='radio']:checked {
+  background-color: #013060;
   border-color: #013060;
-  background: #f0f9ff;
-  box-shadow: inset 0 0 0 2px #013060;
+  box-shadow: inset 0 0 0 3px #ffffff;
 }
 
-.role-icon {
-  font-size: 2rem;
-  margin-bottom: 0.75rem;
+.radio-option input[type='radio']:focus-visible {
+  outline: 3px solid #0284c7;
+  outline-offset: 2px;
 }
 
-.role-card h3 {
-  font-size: 1rem;
-  color: #333;
-  margin: 0 0 0.5rem 0;
-  font-weight: 600;
-}
-
-.role-card p {
-  font-size: 0.85rem;
-  color: #666;
+.radio-option label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
   margin: 0;
-  line-height: 1.4;
 }
 
-.btn-back {
-  padding: 0.75rem;
-  background: white;
+.radio-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #013060;
+}
+
+.radio-desc {
+  font-size: 14px;
   color: #666;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 500;
+  line-height: 1.5;
+}
+
+/* ===== BUTTON — USWDS PRIMARY STYLE ===== */
+
+.usa-button--full {
+  width: 100%;
+  padding: 14px 24px;
+  background-color: #013060;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  text-align: center;
+  letter-spacing: -0.2px;
+  font-family: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-.btn-back:hover {
-  border-color: #999;
-  color: #333;
+.usa-button--full:hover:not(:disabled) {
+  background-color: #0a225b;
+  box-shadow: 0 4px 6px rgba(1, 48, 96, 0.15);
 }
 
-.login-footer {
-  margin-top: 2rem;
+.usa-button--full:active:not(:disabled) {
+  background-color: #061a3a;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.usa-button--full:focus-visible {
+  outline: 3px solid #0284c7;
+  outline-offset: 2px;
+}
+
+.usa-button--full:disabled {
+  background-color: #999;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ===== LEGAL DISCLAIMER ===== */
+
+.login-disclaimer {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #e5e7eb;
   text-align: center;
 }
 
-.demo-note {
-  font-size: 0.85rem;
-  color: #999;
-  margin: 0;
+.login-disclaimer p {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 8px 0;
+  line-height: 1.5;
 }
 
-@media (max-width: 480px) {
-  .login-container {
-    padding: 1rem;
+.login-disclaimer small {
+  display: block;
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+
+@media (max-width: 1024px) {
+  .login-header {
+    padding: 48px 32px;
+  }
+
+  .login-header__text h1 {
+    font-size: 24px;
   }
 
   .login-card {
-    padding: 2rem 1.5rem;
+    padding: 40px;
+    max-width: 520px;
+  }
+}
+
+@media (max-width: 768px) {
+  .login-header {
+    padding: 32px 24px;
   }
 
-  .login-header h1 {
-    font-size: 1.5rem;
+  .login-header__icon {
+    width: 56px;
+    height: 56px;
   }
 
-  .role-grid {
-    grid-template-columns: 1fr;
+  .login-header__text h1 {
+    font-size: 24px;
+  }
+
+  .login-header__text p {
+    font-size: 16px;
+  }
+
+  .login-container {
+    padding: 32px 16px;
+  }
+
+  .login-card {
+    padding: 32px;
+    max-width: 100%;
+  }
+
+  .login-card form {
+    gap: 24px;
+  }
+
+  .form-group {
+    gap: 8px;
+  }
+
+  .radio-option {
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .radio-option input[type='radio'] {
+    width: 18px;
+    height: 18px;
+    margin-top: 1px;
+  }
+
+  .radio-title {
+    font-size: 15px;
+  }
+
+  .radio-desc {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 480px) {
+  .login-page {
+    min-height: auto;
+  }
+
+  .login-header {
+    padding: 24px 16px;
+  }
+
+  .login-header__icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .login-header__text h1 {
+    font-size: 20px;
+  }
+
+  .login-header__text p {
+    font-size: 14px;
+  }
+
+  .login-container {
+    padding: 16px;
+  }
+
+  .login-card {
+    padding: 24px;
+  }
+
+  .login-card form {
+    gap: 20px;
+  }
+
+  .form-label {
+    font-size: 15px;
+  }
+
+  .form-input {
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+
+  .usa-button--full {
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+
+  .login-disclaimer {
+    margin-top: 24px;
+    padding-top: 24px;
+  }
+
+  .login-disclaimer p {
+    font-size: 12px;
   }
 }

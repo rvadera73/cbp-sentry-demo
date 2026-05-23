@@ -162,6 +162,28 @@
   --z-modal: 1002;
   --z-tooltip: 1003;
   --z-notification: 1004;
+
+  /* ============================================================================
+     SEMANTIC COLOR ALIASES — Consistent Naming for Component Usage
+     ============================================================================ */
+  --color-primary-navy: #013060;       /* Primary navy for headers and focus */
+  --color-primary-teal: #1a5f7a;       /* Secondary teal accent */
+  --color-primary-sky: #0284c7;        /* Interactive sky blue */
+
+  --color-bg-light: #f9fafb;           /* Light page background */
+  --color-bg-white: #ffffff;           /* White card background */
+  --color-border: #e5e7eb;             /* Standard border color */
+
+  --color-text-primary: #1e293b;       /* Primary body text */
+  --color-text-secondary: #666666;     /* Secondary/hint text */
+
+  --color-risk-high: #d9381e;          /* High risk red */
+  --color-risk-medium: #e6a100;        /* Medium risk orange */
+  --color-risk-low: #2e8540;           /* Low risk green */
+
+  --color-error: #ef4444;              /* Error state */
+  --color-success: #10b981;            /* Success state */
+  --color-warning: #f59e0b;            /* Warning state */
 }
 
 /* ============================================================================

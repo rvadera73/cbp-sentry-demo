@@ -394,6 +394,32 @@ class SentryAPI {
     }
   }
 
+  /**
+   * Generate AI case synopsis — POST /api/gemini/synopsis
+   */
+  async generateSynopsis(payload: any): Promise<any> {
+    try {
+      const response = await this.client.post('/gemini/synopsis', payload)
+      return response.data
+    } catch (error) {
+      console.error('Error generating synopsis:', error)
+      return { synopsis: 'Unable to generate synopsis' }
+    }
+  }
+
+  /**
+   * Generate draft referral narrative — POST /api/gemini/draft-referral
+   */
+  async generateDraftReferral(payload: any): Promise<any> {
+    try {
+      const response = await this.client.post('/gemini/draft-referral', payload)
+      return response.data
+    } catch (error) {
+      console.error('Error generating draft referral:', error)
+      return { narrative: 'Unable to generate narrative' }
+    }
+  }
+
   // ============== CORD ENTITY RESOLUTION ==============
 
   /**

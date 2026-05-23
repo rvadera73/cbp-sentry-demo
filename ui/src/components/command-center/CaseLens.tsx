@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Search } from 'lucide-react';
+import { getRiskLevel, getRiskBackgroundColor, getRiskBorderColor } from '../../utils/risk';
 import '../../styles/command-center/CaseLens.css';
 
 interface Case {
@@ -9,8 +11,8 @@ interface Case {
   consignee_name: string;
   origin_country: string;
   destination_country: string;
-  hs_code: string;
-  declared_value_usd: number;
+  commodity_code: string;
+  declared_value: number;
   risk_score: number;
   status: string;
 }
@@ -26,22 +28,9 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
   const [riskFilter, setRiskFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [sortBy, setSortBy] = useState<'risk' | 'value'>('risk');
 
-  const getRiskColor = (riskScore: number) => {
-    if (riskScore >= 80) return '#D9381E';
-    if (riskScore >= 60) return '#E6A100';
-    return '#2E8540';
-  };
-
   const getRiskBadge = (riskScore: number) => {
-    if (riskScore >= 80) return '🔴 HIGH';
-    if (riskScore >= 60) return '🟡 MEDIUM';
-    return '🟢 LOW';
-  };
-
-  const getRiskLevel = (score: number): 'high' | 'medium' | 'low' => {
-    if (score >= 80) return 'high';
-    if (score >= 60) return 'medium';
-    return 'low';
+    const level = getRiskLevel(riskScore);
+    return level.toUpperCase();
   };
 
   // Filter and sort cases
@@ -51,9 +40,10 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
         c.shipper_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.consignee_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.manifest_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.hs_code.includes(searchQuery);
+        c.commodity_code.includes(searchQuery);
 
-      const matchesRisk = riskFilter === 'all' || getRiskLevel(c.risk_score || 0) === riskFilter;
+      const riskLevel = getRiskLevel(c.risk_score || 0).toLowerCase() as 'high' | 'medium' | 'low';
+      const matchesRisk = riskFilter === 'all' || riskLevel === riskFilter;
 
       return matchesSearch && matchesRisk;
     });
@@ -62,7 +52,7 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
     if (sortBy === 'risk') {
       filtered.sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0));
     } else {
-      filtered.sort((a, b) => (b.declared_value_usd || 0) - (a.declared_value_usd || 0));
+      filtered.sort((a, b) => (b.declared_value || 0) - (a.declared_value || 0));
     }
 
     return filtered;
@@ -72,7 +62,7 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
     navigate(`/cases/${caseItem.id}`);
   };
 
-  const highRiskCount = cases.filter(c => (c.risk_score || 0) >= 80).length;
+  const highRiskCount = cases.filter(c => (c.risk_score || 0) >= 70).length;
 
   return (
     <div className="case-lens">
@@ -93,7 +83,7 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
             <input
               type="text"
               className="case-lens__search"
-              placeholder="🔍 Search by Shipper, Consignee, ID, or HTS code..."
+              placeholder="Search by Shipper, Consignee, ID, or HTS code..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search cases"
@@ -107,9 +97,9 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
                 aria-label="Filter by risk level"
               >
                 <option value="all">All Risk Levels</option>
-                <option value="high">🔴 High Risk (80+)</option>
-                <option value="medium">🟡 Medium Risk (60-79)</option>
-                <option value="low">🟢 Low Risk (&lt;60)</option>
+                <option value="high">High Risk (70+)</option>
+                <option value="medium">Medium Risk (40-69)</option>
+                <option value="low">Low Risk (&lt;40)</option>
               </select>
 
               <select
@@ -165,11 +155,8 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
                     }}
                     aria-label={`Click to view case ${caseItem.manifest_id}`}
                   >
-                    <div className="cases-table__cell cases-table__cell--risk">
-                      <span
-                        className="risk-badge"
-                        style={{ color: getRiskColor(caseItem.risk_score || 0) }}
-                      >
+                    <div className={`cases-table__cell cases-table__cell--risk risk-${getRiskLevel(caseItem.risk_score || 0).toLowerCase()}`}>
+                      <span className="risk-badge">
                         {getRiskBadge(caseItem.risk_score || 0)}
                       </span>
                       <span className="risk-score">{(caseItem.risk_score || 0).toFixed(0)}</span>
@@ -184,10 +171,10 @@ export default function CaseLens({ cases = [], loading = false }: CaseLensProps)
                       {caseItem.origin_country}→{caseItem.destination_country}
                     </div>
                     <div className="cases-table__cell cases-table__cell--hs">
-                      <code>{caseItem.hs_code}</code>
+                      <code>{caseItem.commodity_code}</code>
                     </div>
                     <div className="cases-table__cell cases-table__cell--value">
-                      ${(caseItem.declared_value_usd / 1000).toFixed(1)}K
+                      ${(caseItem.declared_value / 1000).toFixed(1)}K
                     </div>
                     <div className="cases-table__cell cases-table__cell--status">
                       {caseItem.status}

@@ -111,6 +111,64 @@ DEMO_ENTITIES: List[Dict[str, Any]] = [
             "CAPACITY_MT": 75000
         }
     },
+
+    # ============ CANADIAN ALUMINUM CASE (TEST SHIPMENT) ============
+    # Level 1: Canadian shipper (direct shipper of semiconductors via transshipment)
+    {
+        "DATA_SOURCE": "CBP-DEMO",
+        "RECORD_TYPE": "ORGANIZATION",
+        "RECORD_ID": "canadian-aluminum-ca",
+        "NAMES": [{"NAME_TYPE": "PRIMARY", "NAME_ORG": "Canadian Aluminum Inc."}],
+        "ADDRESSES": [{"ADDR_FULL": "2847 Industrial Park Road, Toronto, Ontario, Canada"}],
+        "COUNTRIES": [{"REGISTRATION_COUNTRY": "CA"}],
+        "ATTRIBUTES": {
+            "SHIPPER_AGE_MONTHS": 6,
+            "INCORPORATION_DATE": "2025-11-15",
+            "BUSINESS_TYPE": "TRADING_COMPANY",
+            "RISK_LEVEL": "HIGH",
+            "RISK_JUSTIFICATION": "NEW_ENTITY_RULE: Age <2 years (H1 Rule 1-003). HIDDEN_PARENT: Beneficial owner obscurity detected via corporate structure analysis (H3 Rule 3-003). OFAC_WATCHLIST: Matched to OFAC SDN List on 2026-03-15."
+        },
+        "OFAC_STATUS": "WATCH",
+        "OFAC_MATCHED_DATE": "2026-03-15",
+        "OPEN_SANCTIONS": ["Office of Foreign Assets Control - Watchlist"]
+    },
+    # Level 2: Chinese hidden parent (Element 9 mismatch)
+    {
+        "DATA_SOURCE": "CBP-DEMO",
+        "RECORD_TYPE": "ORGANIZATION",
+        "RECORD_ID": "chinese-semiconductor-cn",
+        "NAMES": [{"NAME_TYPE": "PRIMARY", "NAME_ORG": "Shenzhen Semiconductor Manufacturing Co., Ltd."}],
+        "ADDRESSES": [{"ADDR_FULL": "789 Tech Park Road, Shenzhen, Guangdong, China"}],
+        "COUNTRIES": [{"REGISTRATION_COUNTRY": "CN"}],
+        "ATTRIBUTES": {
+            "SHIPPER_AGE_MONTHS": 24,
+            "INCORPORATION_DATE": "2024-05-10",
+            "BUSINESS_TYPE": "SEMICONDUCTOR_MANUFACTURER",
+            "CAPACITY_UNITS": 100000,
+            "RISK_LEVEL": "CRITICAL",
+            "RISK_JUSTIFICATION": "OFAC_BLOCKED_ENTITY: Matched to Unverified End-User (UEL) list (Department of Commerce BIS) on 2025-08-22. EXPORT_CONTROL_VIOLATION: Listed in Commerce Control List (EAR Part 774) — semiconductor manufacturing equipment controlled for China. SANCTIONS_EXPOSURE: Entity subject to OFAC Iran Sanctions Program (OP-ICP) for indirect Iran supply chain involvement detected 2025-10-01. CRITICAL_COUNTRY: China origin (CN) with sensitive technology category (HS 8541 semiconductors). RECOMMENDED_ACTION: ENTRY DENIAL per 19 USC § 1581."
+        },
+        "OFAC_STATUS": "BLOCKED",
+        "OFAC_MATCHED_DATE": "2025-08-22",
+        "BIS_MATCHED_DATE": "2025-08-22",
+        "OFAC_PROGRAMS": ["Iran Sanctions Program (OP-ICP)", "Entity List"],
+        "OPEN_SANCTIONS": ["Unverified End-User List (BIS)", "Commerce Control List (EAR)", "Iran Sanctions Program"]
+    },
+    # Consignee: US distributor (Gulf Coast Industrial)
+    {
+        "DATA_SOURCE": "CBP-DEMO",
+        "RECORD_TYPE": "ORGANIZATION",
+        "RECORD_ID": "gulf-coast-industrial-us",
+        "NAMES": [{"NAME_TYPE": "PRIMARY", "NAME_ORG": "Gulf Coast Industrial"}],
+        "ADDRESSES": [{"ADDR_FULL": "4201 Port Avenue, Newark, New Jersey 07114, USA"}],
+        "COUNTRIES": [{"REGISTRATION_COUNTRY": "US"}],
+        "ATTRIBUTES": {
+            "IMPORTER": True,
+            "DISTRIBUTOR": True,
+            "BUSINESS_TYPE": "ELECTRONICS_IMPORTER"
+        },
+        "OFAC_STATUS": "CLEAR"
+    },
 ]
 
 
@@ -136,6 +194,10 @@ def get_demo_relationships() -> List[Dict[str, str]]:
         ("solaria-my-001", "sunpath-energy-nj", "SHIPS_TO"),  # Same consignee!
 
         # VIETNAM ALUMINUM (no parent - established independent company)
+
+        # CANADIAN ALUMINUM CHAIN (TEST SHIPMENT SHP-000731)
+        ("canadian-aluminum-ca", "chinese-semiconductor-cn", "OWNED_BY"),  # Hidden Chinese parent
+        ("canadian-aluminum-ca", "gulf-coast-industrial-us", "SHIPS_TO"),   # Direct consignee
     ]
 
 

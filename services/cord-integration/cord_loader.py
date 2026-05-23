@@ -48,55 +48,55 @@ class CORDDataLoader:
             self._ensure_schema()
 
             cord_dir = Path(self.cord_data_dir)
-            if not cord_dir.exists():
-                logger.warning(f"CORD data directory not found: {cord_dir}")
-                return {"status": "failed", "reason": "directory_not_found"}
-
-            jsonl_files = sorted(cord_dir.glob("*.jsonl"))
-            logger.info(f"Found {len(jsonl_files)} JSONL files in {cord_dir}")
-
             total_records = 0
             failed_records = 0
             sources_count = {}
 
-            for jsonl_file in jsonl_files:
-                logger.info(f"Loading {jsonl_file.name}...")
+            # Try to load CORD JSONL files if directory exists
+            if cord_dir.exists():
+                jsonl_files = sorted(cord_dir.glob("*.jsonl"))
+                logger.info(f"Found {len(jsonl_files)} JSONL files in {cord_dir}")
 
-                try:
-                    with open(jsonl_file, 'r', encoding='utf-8') as f:
-                        batch = []
-                        batch_size = 500
+                for jsonl_file in jsonl_files:
+                    logger.info(f"Loading {jsonl_file.name}...")
 
-                        for line_num, line in enumerate(f, 1):
-                            if not line.strip():
-                                continue
+                    try:
+                        with open(jsonl_file, 'r', encoding='utf-8') as f:
+                            batch = []
+                            batch_size = 500
 
-                            try:
-                                record = json.loads(line)
-                                batch.append(record)
-                                total_records += 1
+                            for line_num, line in enumerate(f, 1):
+                                if not line.strip():
+                                    continue
 
-                                # Log progress every 1000 records
-                                if total_records % 1000 == 0:
-                                    logger.info(f"  Processed {total_records:,} records")
+                                try:
+                                    record = json.loads(line)
+                                    batch.append(record)
+                                    total_records += 1
 
-                                # Batch insert when batch size reached
-                                if len(batch) >= batch_size:
-                                    self._batch_insert(batch, sources_count)
-                                    batch = []
+                                    # Log progress every 1000 records
+                                    if total_records % 1000 == 0:
+                                        logger.info(f"  Processed {total_records:,} records")
 
-                            except json.JSONDecodeError as e:
-                                logger.warning(f"  Line {line_num}: Malformed JSON, skipping")
-                                failed_records += 1
-                                continue
+                                    # Batch insert when batch size reached
+                                    if len(batch) >= batch_size:
+                                        self._batch_insert(batch, sources_count)
+                                        batch = []
 
-                        # Insert remaining records
-                        if batch:
-                            self._batch_insert(batch, sources_count)
+                                except json.JSONDecodeError as e:
+                                    logger.warning(f"  Line {line_num}: Malformed JSON, skipping")
+                                    failed_records += 1
+                                    continue
 
-                except Exception as e:
-                    logger.error(f"Error loading {jsonl_file.name}: {e}")
-                    continue
+                            # Insert remaining records
+                            if batch:
+                                self._batch_insert(batch, sources_count)
+
+                    except Exception as e:
+                        logger.error(f"Error loading {jsonl_file.name}: {e}")
+                        continue
+            else:
+                logger.info(f"CORD data directory not found: {cord_dir}, will seed demo entities only")
 
             # Seed demo entities for case examples (after CORD data loaded)
             logger.info("Seeding demo entities for CBP Sentry cases...")

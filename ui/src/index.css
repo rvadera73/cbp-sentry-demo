@@ -1,6 +1,13 @@
+/* Import Fonts */
+@import '@fontsource/public-sans/400.css';
+@import '@fontsource/public-sans/600.css';
+@import '@fontsource/public-sans/700.css';
+
 /* Import Design Tokens & Global Styles (must come before Tailwind directives) */
 @import './styles/design-tokens.css';
+@import './styles/uswds-components.css';
 @import './styles/forms.css';
+@import './styles/components.css';
 
 /* Tailwind CSS Directives */
 @tailwind base;
@@ -15,13 +22,13 @@
   --color-primary-teal: #1a5f7a;
   --color-primary-sky: #0284c7;
 
-  /* Risk Colors */
-  --color-risk-high: #dc2626;
-  --color-risk-high-light: #fee2e2;
-  --color-risk-medium: #f97316;
-  --color-risk-medium-light: #fed7aa;
-  --color-risk-low: #16a34a;
-  --color-risk-low-light: #dcfce7;
+  /* Risk Colors — USWDS standard values */
+  --color-risk-high: #d9381e;
+  --color-risk-high-light: #fdf0f0;
+  --color-risk-medium: #e6a100;
+  --color-risk-medium-light: #fff8e6;
+  --color-risk-low: #2e8540;
+  --color-risk-low-light: #ecf3ec;
 
   /* Neutral Colors */
   --color-bg-light: #f9fafb;
@@ -37,7 +44,7 @@
   --color-info: #3b82f6;
 
   /* Typography */
-  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-base: 'Public Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-size-sm: 0.875rem;
   --font-size-base: 1rem;
   --font-size-lg: 1.125rem;

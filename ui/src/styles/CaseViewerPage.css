@@ -14,7 +14,7 @@
   flex-direction: column;
   padding: 1.5rem;
   gap: 1.5rem;
-  max-width: 2000px;
+  max-width: 1440px;
   margin: 0 auto;
   width: 100%;
 }
@@ -29,6 +29,97 @@
   padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   margin-bottom: 12px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.workflow-header-sticky > div {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.workflow-header-title {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.workflow-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.workflow-status-item {
+  padding: 12px;
+  border-radius: 6px;
+  text-align: center;
+  border: 1px solid #d1d5db;
+  background: #fafafa;
+}
+
+.workflow-status-item.completed {
+  background: #f0fdf4;
+  border-color: #16a34a;
+}
+
+.workflow-status-item.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+.workflow-status-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 0;
+}
+
+.workflow-status-item.completed .workflow-status-item-title {
+  color: #16a34a;
+}
+
+.workflow-status-item.active .workflow-status-item-title {
+  color: #3b82f6;
+}
+
+.workflow-status-item-signal {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1f2937;
+  margin-top: 4px;
+}
+
+.signal-health-indicators {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.signal-health-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.signal-health-circle {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.signal-health-score {
+  margin-left: auto;
+  font-weight: 600;
 }
 
 .case-viewer-loading,
@@ -321,8 +412,10 @@
   font-weight: 600;
 }
 
-.sidebar-tab-btn span:first-child {
-  font-size: 1.25rem;
+.sidebar-tab-btn svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
 .sidebar-tab-btn .tab-label {
@@ -399,6 +492,13 @@
   font-size: 0.95rem;
   color: #333;
   font-weight: 600;
+}
+
+.action-buttons > p {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 12px;
+  margin-top: 0;
 }
 
 .action-btn {
@@ -526,6 +626,59 @@
 
 .tab-panel > * + * {
   margin-top: 1.5rem;
+}
+
+.tab-panel h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 12px;
+}
+
+.ai-summary {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+}
+
+.ai-summary-title {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e40af;
+}
+
+.ai-summary-text {
+  margin: 0;
+  font-size: 14px;
+  color: #1f2937;
+  line-height: 1.6;
+}
+
+.score-accumulation-chart {
+  margin-top: 32px;
+}
+
+.score-chart-title {
+  margin-bottom: 16px;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+/* Recharts tooltip custom styling */
+.recharts-tooltip-wrapper {
+  outline: none;
+}
+
+.recharts-default-tooltip {
+  background-color: #ffffff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 6px !important;
+  padding: 8px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 @keyframes fadeIn {
@@ -875,8 +1028,9 @@
     gap: 0.25rem;
   }
 
-  .sidebar-tab-btn span:first-child {
-    font-size: 0.9rem;
+  .sidebar-tab-btn svg {
+    width: 18px;
+    height: 18px;
   }
 
   .sidebar-tab-btn .tab-label {

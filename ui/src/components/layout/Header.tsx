@@ -59,9 +59,6 @@ export default function Header({
           <nav className="header-nav">
             {role === 'cbp_officer' && (
               <>
-                <a href="/dashboard" className="nav-link">
-                  Cases
-                </a>
                 {showUploadButton && (
                   <button
                     onClick={onUploadClick}
