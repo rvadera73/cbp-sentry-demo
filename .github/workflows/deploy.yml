@@ -82,6 +82,30 @@ jobs:
           cd ui
           npx tsc --noEmit || true
 
+  bootstrap-bucket:
+    name: Bootstrap GCS data bucket
+    runs-on: ubuntu-latest
+    needs: [setup]
+    if: github.event_name == 'push'
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Create bucket if not exists
+        run: |
+          if ! gcloud storage buckets describe gs://cbp-sentry-appdata --project=${{ env.PROJECT_ID }} 2>/dev/null; then
+            echo "Creating GCS bucket gs://cbp-sentry-appdata..."
+            gcloud storage buckets create gs://cbp-sentry-appdata \
+              --project=${{ env.PROJECT_ID }} --location=${{ env.REGION }}
+          else
+            echo "GCS bucket already exists"
+          fi
+          SA="$(gcloud projects describe ${{ env.PROJECT_ID }} --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
+          echo "Granting $SA access to bucket..."
+          gcloud storage buckets add-iam-policy-binding gs://cbp-sentry-appdata \
+            --member=serviceAccount:$SA --role=roles/storage.objectAdmin 2>/dev/null || true
+
   build-api:
     name: Build sentry-api
     runs-on: ubuntu-latest
@@ -118,6 +142,24 @@ jobs:
           docker build -t "$IMG" services/data/
           docker push "$IMG"
 
+  build-cord:
+    name: Build sentry-cord-integration
+    runs-on: ubuntu-latest
+    needs: [setup, test]
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+      - run: |
+          set -ex
+          IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-cord:${{ github.sha }}"
+          docker build -t "$IMG" services/cord-integration/
+          docker push "$IMG"
+
   build-ui:
     name: Build sentry-ui
     runs-on: ubuntu-latest
@@ -146,7 +188,7 @@ jobs:
   deploy-api:
     name: Deploy sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, build-api]
+    needs: [setup, build-api, deploy-data, deploy-cord]
     if: github.event_name == 'push'
     environment:
       name: ${{ needs.setup.outputs.environment }}
@@ -170,41 +212,90 @@ jobs:
             --timeout=300 \
             --min-instances=1 \
             --max-instances=10 \
-            --set-env-vars API_MODE=fixture \
+            --set-env-vars API_MODE=live \
             --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
-            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --set-env-vars DATA_SERVICE_URL=${{ needs.deploy-data.outputs.url }} \
+            --set-env-vars CORD_SERVICE_URL=${{ needs.deploy-cord.outputs.url }} \
             --set-env-vars VESSELAPI_KEY="${{ secrets.VESSELAPI_KEY }}" \
             --set-env-vars OFAC_API_KEY="${{ secrets.OFAC_API_KEY }}"
 
   deploy-data:
     name: Deploy sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, build-data]
+    needs: [setup, build-data, bootstrap-bucket]
     if: github.event_name == 'push'
     environment:
       name: ${{ needs.setup.outputs.environment }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
       - name: Deploy to Cloud Run
+        id: deploy
         run: |
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-data:${{ github.sha }}"
           gcloud run deploy sentry-data \
             --image="$IMAGE" \
             --region=${{ env.REGION }} \
             --platform=managed \
+            --execution-environment=gen2 \
             --allow-unauthenticated \
             --port=8005 \
             --memory=1Gi \
             --cpu=1 \
             --concurrency=20 \
-            --timeout=300 \
+            --timeout=900 \
             --min-instances=1 \
-            --max-instances=5 \
-            --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
-            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}"
+            --max-instances=1 \
+            --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
+            --add-volume-mount volume=appdata,mount-path=/app/data \
+            --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }}
+          URL=$(gcloud run services describe sentry-data --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "sentry-data deployed to $URL"
+
+  deploy-cord:
+    name: Deploy sentry-cord-integration
+    runs-on: ubuntu-latest
+    needs: [setup, build-cord, deploy-data, bootstrap-bucket]
+    if: github.event_name == 'push'
+    environment:
+      name: ${{ needs.setup.outputs.environment }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy to Cloud Run
+        id: deploy
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-cord:${{ github.sha }}"
+          gcloud run deploy sentry-cord-integration \
+            --image="$IMAGE" \
+            --region=${{ env.REGION }} \
+            --platform=managed \
+            --execution-environment=gen2 \
+            --allow-unauthenticated \
+            --port=8004 \
+            --memory=2Gi \
+            --cpu=2 \
+            --concurrency=20 \
+            --timeout=900 \
+            --min-instances=1 \
+            --max-instances=1 \
+            --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
+            --add-volume-mount volume=appdata,mount-path=/app/data \
+            --set-env-vars CORD_DATA_DIR=/app/cord-data \
+            --set-env-vars DATA_SERVICE_URL=${{ needs.deploy-data.outputs.url }} \
+            --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }}
+          URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "sentry-cord-integration deployed to $URL"
 
   deploy-ui:
     name: Deploy sentry-ui
@@ -253,18 +344,25 @@ jobs:
         run: |
           curl -f "${{ steps.urls.outputs.api_url }}/health" || exit 1
           echo "✅ API health check passed"
+      - name: Test CORD health
+        run: |
+          CORD_URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
+          curl -f "$CORD_URL/health" || exit 1
+          echo "✅ CORD health check passed"
       - name: Get service summary
         run: |
           API=$(gcloud run services describe sentry-api --region ${{ env.REGION }} --format 'value(status.url)')
           DATA=$(gcloud run services describe sentry-data --region ${{ env.REGION }} --format 'value(status.url)')
+          CORD=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
           UI=$(gcloud run services describe sentry-ui --region ${{ env.REGION }} --format 'value(status.url)')
           echo ""
           echo "✅ Deployment Complete"
-          echo "========================"
-          echo "🔵 API:  $API"
-          echo "📊 Data: $DATA"
-          echo "🎨 UI:   $UI"
-          echo "========================"
+          echo "===================================="
+          echo "🔵 API:   $API"
+          echo "📊 Data:  $DATA"
+          echo "🔗 CORD:  $CORD"
+          echo "🎨 UI:    $UI"
+          echo "===================================="
 
   notify:
     name: Notify
