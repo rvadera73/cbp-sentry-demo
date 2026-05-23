@@ -162,31 +162,60 @@ docker compose down -v    # Stop and remove volumes (full clean)
 
 **All Cloud Run deployments are automatic via GitHub Actions. Do NOT manually deploy to Cloud Run.**
 
-### 4.1 Automatic Deployment Flow
+### 4.1 Automatic Deployment Flow (Selective Build+Deploy)
+
+As of May 2026, the workflow uses intelligent path-based change detection to skip building unchanged services:
 
 ```
 Your local commit
-  ↓ (git push)
-  ↓ GitHub
-  ↓ .github/workflows/deploy.yml triggered
-  ├─ Test: pytest + TypeScript check
-  ├─ Build: Docker images for sentry-api, sentry-data, sentry-ui
+  ↓ (git push origin dev/main)
+  ↓ GitHub Actions: deploy.yml triggered
+  ├─ Setup: Determine branch (dev/staging or main/prod)
+  ├─ Changes: Detect which service directories changed (dorny/paths-filter)
+  ├─ Test: pytest + TypeScript check (always)
+  ├─ Build (conditional, only if changed):
+  │  ├─ sentry-api (if services/api/** changed)
+  │  ├─ sentry-data (if services/data/** changed)
+  │  ├─ sentry-cord-integration (if services/cord-integration/** changed)
+  │  └─ sentry-ui (if ui/** or services/api/** changed)
   ├─ Push: Images to Artifact Registry (us-central1-docker.pkg.dev)
-  ├─ Deploy: gcloud run deploy (all 3 services)
-  ├─ Health: curl /health checks
-  └─ Notify: Slack webhook
+  ├─ Deploy (conditional, only if built):
+  │  ├─ sentry-data (GCS FUSE mount, gen2 execution)
+  │  ├─ sentry-cord-integration (GCS FUSE mount, dynamic data URL)
+  │  ├─ sentry-api (resolves data + cord URLs dynamically)
+  │  └─ sentry-ui (gets fresh API URL)
+  ├─ Smoke Tests: Health checks for all 4 services
+  └─ Notify: Slack webhook with deployment status
   ↓
-Cloud Run services updated (5-10 minutes)
+Cloud Run services updated (5-10 minutes, less if unchanged services skipped)
 ```
 
+**Selective Deployment Rules:**
+- **dev branch (staging)**: Only changed services are built/deployed (faster feedback)
+- **main branch (production)**: Always deploy all 4 services (consistency + safety)
+- **Workflow file change**: Triggers all 4 services regardless of branch
+
+**Services & Change Paths:**
+| Service | Build if Changed | Redeploy if Built |
+|---|---|---|
+| sentry-api | `services/api/**` | Yes |
+| sentry-data | `services/data/**` | Yes |
+| sentry-cord-integration | `services/cord-integration/**` | Yes |
+| sentry-ui | `ui/**` or `services/api/**` changed | Yes |
+
 ### 4.2 How to Deploy
+
+Deployment is fully automated on push. Just commit to the appropriate branch:
 
 **Staging (dev branch):**
 ```bash
 git checkout dev
 git commit -m "feature: your changes"
 git push origin dev
-# → Auto-deploys to staging
+# → GitHub Actions auto-triggers
+# → Detects changed services
+# → Builds only changed services
+# → Deploys to staging (5-8 minutes)
 ```
 
 **Production (main branch):**
@@ -194,8 +223,16 @@ git push origin dev
 git checkout main
 git commit -m "release: version bump"
 git push origin main
-# → Auto-deploys to production
+# → GitHub Actions auto-triggers
+# → Full deploy of all 4 services (regardless of changes)
+# → Deploys to production (8-10 minutes)
 ```
+
+**Example deployment times (staging):**
+- UI only changed: ~5 minutes (skip api/data/cord builds)
+- API changed: ~7 minutes (rebuild api + ui, redeploy both)
+- Data changed: ~6 minutes (rebuild data, redeploy all dependents)
+- Workflow changed: ~8 minutes (full rebuild like main branch)
 
 ### 4.3 Monitor Deployment
 
@@ -242,13 +279,20 @@ xdg-open ${UI_URL}  # Linux
 
 ### 4.5 Deployed Service Configuration
 
-| Service | Memory | CPU | Min Instances | Max Instances |
-|---|---|---|---|---|
-| **sentry-api** | 2Gi | 2 | 1 | 10 |
-| **sentry-data** | 1Gi | 1 | 1 | 5 |
-| **sentry-ui** | 512Mi | 1 | 0 | 10 |
+| Service | Memory | CPU | Min Instances | Max Instances | Persistence | Env Variables |
+|---|---|---|---|---|---|---|
+| **sentry-api** | 2Gi | 2 | 1 | 10 | None | API_MODE=live, DATA_SERVICE_URL, CORD_SERVICE_URL, VESSELAPI_KEY, OFAC_API_KEY |
+| **sentry-data** | 1Gi | 1 | 1 | 1 | GCS FUSE `/app/data/cbp_sentry.db` | DEPLOYMENT_ENV |
+| **sentry-cord-integration** | 2Gi | 2 | 1 | 1 | GCS FUSE `/app/data/senzing.db` | CORD_DATA_DIR, DATA_SERVICE_URL, DEPLOYMENT_ENV |
+| **sentry-ui** | 512Mi | 1 | 0 | 10 | None (static) | None (baked at build) |
 
-Configuration defined in `.github/workflows/deploy.yml` (lines 154-228).
+**Persistence Details:**
+- **GCS FUSE**: sentry-data and sentry-cord-integration both mount `gs://cbp-sentry-appdata` as `/app/data`
+- **Execution**: data and cord use gen2 execution environment (required for GCS FUSE)
+- **Single Writer**: Both data and cord have max-instances=1 to avoid SQLite write contention
+- **Bucket Creation**: Automatic via `bootstrap-bucket` job; reused across deployments
+
+Configuration defined in `.github/workflows/deploy.yml` (jobs: deploy-api, deploy-data, deploy-cord, deploy-ui).
 
 ---
 
@@ -486,6 +530,76 @@ gcloud run services describe sentry-data --region us-central1 | grep max-instanc
 ```bash
 # Increase timeout (default 900s)
 gcloud run services update sentry-api --timeout 1800 --region us-central1
+```
+
+### Entity Resolution Not Working (Empty Results)
+
+**Symptom:** UI shows "No entities found" when searching shipment entities (works in local, not in staging)
+
+**Root Cause:** sentry-cord-integration service not deployed or not initialized with demo entities
+
+**Fix - Check if service is deployed:**
+```bash
+# List all Cloud Run services
+gcloud run services list --region us-central1
+
+# If sentry-cord-integration is missing:
+# → Run full deployment (push to main branch)
+# OR manually trigger GitHub Actions workflow
+```
+
+**Fix - Check service health:**
+```bash
+# Get service URL
+CORD_URL=$(gcloud run services describe sentry-cord-integration --region us-central1 --format 'value(status.url)')
+
+# Test health endpoint
+curl -f "$CORD_URL/health"
+
+# Should return JSON with entity_count > 0
+# If entity_count is 0, service didn't load demo entities
+```
+
+**Fix - Check service logs for initialization errors:**
+```bash
+# Stream latest logs
+gcloud run logs read sentry-cord-integration --region us-central1 --follow --limit 50
+
+# Look for these log lines:
+# ✓ Senzing engine initialized
+# Loading CORD data...
+# Seeding demo entities...
+# ✓ Senzing engine ready with N entities
+
+# If you see errors (✗):
+# 1. Check GCS FUSE mount is working
+# 2. Check /app/data/senzing.db file permissions
+# 3. Redeploy the service
+```
+
+**Fix - Verify GCS FUSE persistence is working:**
+```bash
+# Check if data service has shipments (prerequisite for cord augmentation)
+DATA_URL=$(gcloud run services describe sentry-data --region us-central1 --format 'value(status.url)')
+curl "$DATA_URL/shipments/meta/count"
+
+# Should return {"total": N} with N > 0
+# If N is 0, sentry-data didn't load manifest → check its logs
+
+# Then check if cord service is calling data service correctly
+# Look in cord logs for: "Augmenting with CBP shipment data..."
+```
+
+**Fix - Force redeployment of cord service:**
+```bash
+# Change something in services/cord-integration/ (e.g., add a comment)
+# Then push to dev
+git add services/cord-integration/
+git commit -m "fix: trigger cord redeployment"
+git push origin dev
+
+# GitHub Actions will rebuild and deploy only sentry-cord-integration
+# Wait for workflow to complete
 ```
 
 ---
