@@ -188,7 +188,7 @@ jobs:
   deploy-api:
     name: Deploy sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, build-api, deploy-data, deploy-cord]
+    needs: [setup, build-api]
     if: github.event_name == 'push'
     environment:
       name: ${{ needs.setup.outputs.environment }}
@@ -197,6 +197,16 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
+      - name: Resolve service URLs
+        id: urls
+        run: |
+          DATA_URL=$(gcloud run services describe sentry-data --region ${{ env.REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
+          CORD_URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
+          echo "data_url=${DATA_URL:-http://sentry-data:8005}" >> $GITHUB_OUTPUT
+          echo "cord_url=${CORD_URL:-http://sentry-cord-integration:8004}" >> $GITHUB_OUTPUT
+          echo "Resolved URLs:"
+          echo "  Data: ${DATA_URL:-http://sentry-data:8005}"
+          echo "  CORD: ${CORD_URL:-http://sentry-cord-integration:8004}"
       - name: Deploy to Cloud Run
         run: |
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/cbp-sentry/sentry-api:${{ github.sha }}"
@@ -214,8 +224,8 @@ jobs:
             --max-instances=10 \
             --set-env-vars API_MODE=live \
             --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
-            --set-env-vars DATA_SERVICE_URL=${{ needs.deploy-data.outputs.url }} \
-            --set-env-vars CORD_SERVICE_URL=${{ needs.deploy-cord.outputs.url }} \
+            --set-env-vars DATA_SERVICE_URL=${{ steps.urls.outputs.data_url }} \
+            --set-env-vars CORD_SERVICE_URL=${{ steps.urls.outputs.cord_url }} \
             --set-env-vars VESSELAPI_KEY="${{ secrets.VESSELAPI_KEY }}" \
             --set-env-vars OFAC_API_KEY="${{ secrets.OFAC_API_KEY }}"
 
