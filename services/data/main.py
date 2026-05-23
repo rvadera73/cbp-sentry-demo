@@ -38,15 +38,20 @@ def seed_demo_data():
         conn.close()
         return
 
-    # Load FULL manifest (1500+ cases) as primary data source
-    full_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
-    # Load DEMO cases to enrich/override with showcase examples
+    # Determine which manifest to load (priority: demo > full)
     demo_file = Path("/app/seed_data/manifest_demo_cases.json")
+    full_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
 
-    manifest_file = full_file
+    # Priority: 1) Demo cases (30 showcase cases with good risk distribution)
+    #           2) Full manifest (1500+ real cases)
+    if demo_file.exists():
+        manifest_file = demo_file
+        logger.info(f"📦 INITIALIZING DATABASE from DEMO manifest (30 showcase cases)")
+    else:
+        manifest_file = full_file
+        logger.info(f"📦 INITIALIZING DATABASE from FULL manifest (1500+ cases)")
 
-    logger.info(f"📦 INITIALIZING DATABASE from manifest JSON")
-    logger.info(f"   Looking for: {manifest_file}")
+    logger.info(f"   File: {manifest_file}")
 
     if not manifest_file.exists():
         error_msg = (
