@@ -83,6 +83,74 @@ def init_db(db_path: str = "/app/data/cbp_sentry.db") -> None:
         )
     """)
 
+    # Corridor definitions table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS corridors (
+            id TEXT PRIMARY KEY,
+            display_name TEXT,
+            origin_country TEXT,
+            destination_country TEXT,
+            risk_level TEXT DEFAULT 'MEDIUM',
+            primary_hs_chapters TEXT,
+            risk_profile TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_refreshed_at TIMESTAMP
+        )
+    """)
+
+    # Corridor duties table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS corridor_duties (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            corridor_id TEXT REFERENCES corridors(id),
+            case_number TEXT,
+            duty_type TEXT,
+            product_description TEXT,
+            hs_prefix TEXT,
+            rate_pct REAL,
+            status TEXT DEFAULT 'ACTIVE',
+            source_url TEXT,
+            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Corridor enforcement actions table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS corridor_enforcement_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            corridor_id TEXT REFERENCES corridors(id),
+            case_id TEXT,
+            entity_name TEXT,
+            case_status TEXT,
+            case_year INTEGER,
+            duty_evaded_usd REAL,
+            source_description TEXT,
+            source_url TEXT,
+            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Pre-manifest vessels table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pre_manifest_vessels (
+            vessel_imo TEXT PRIMARY KEY,
+            vessel_name TEXT,
+            mmsi TEXT,
+            flag_state TEXT,
+            origin_port TEXT,
+            origin_country TEXT,
+            destination_port TEXT,
+            destination_country TEXT,
+            corridor_id TEXT,
+            eta_us TIMESTAMP,
+            ais_status TEXT,
+            current_lat REAL,
+            current_lon REAL,
+            speed_knots REAL,
+            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     # Idempotent column additions for new schema fields
     cursor.execute("PRAGMA table_info(shipments)")
     columns = {row[1] for row in cursor.fetchall()}
@@ -363,3 +431,239 @@ def search_shipments(
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def get_corridors(db_path: str = "/app/data/cbp_sentry.db") -> List[Dict[str, Any]]:
+    """Fetch all corridors with computed shipment statistics"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM corridors ORDER BY risk_level DESC, id ASC")
+    corridors = [dict(row) for row in cursor.fetchall()]
+
+    # Compute stats for each corridor
+    for corridor in corridors:
+        origin = corridor["origin_country"]
+        dest = corridor["destination_country"]
+
+        cursor.execute("""
+            SELECT
+                COUNT(*) as shipment_count,
+                AVG(risk_score) as avg_risk_score,
+                COUNT(CASE WHEN element9_is_mismatch = 1 THEN 1 END) as mismatch_count,
+                AVG(shipper_age_months) as avg_shipper_age,
+                COUNT(DISTINCT shipper_name) as unique_shippers
+            FROM shipments
+            WHERE origin_country = ? AND destination_country = ?
+        """, (origin, dest))
+
+        stats = cursor.fetchone()
+        if stats:
+            total = stats["shipment_count"]
+            mismatch_rate = (stats["mismatch_count"] / total * 100) if total > 0 else 0
+            corridor["computed_stats"] = {
+                "shipment_count": total,
+                "avg_risk_score": round(stats["avg_risk_score"], 2) if stats["avg_risk_score"] else 0,
+                "element9_mismatch_rate_pct": round(mismatch_rate, 1),
+                "avg_shipper_age_months": round(stats["avg_shipper_age"], 1) if stats["avg_shipper_age"] else 0,
+                "unique_shippers": stats["unique_shippers"] or 0,
+            }
+        else:
+            corridor["computed_stats"] = {
+                "shipment_count": 0,
+                "avg_risk_score": 0,
+                "element9_mismatch_rate_pct": 0,
+                "avg_shipper_age_months": 0,
+                "unique_shippers": 0,
+            }
+
+    conn.close()
+    return corridors
+
+
+def get_corridor_detail(corridor_id: str, db_path: str = "/app/data/cbp_sentry.db") -> Optional[Dict[str, Any]]:
+    """Fetch single corridor with duties, enforcement actions, and shipment statistics"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM corridors WHERE id = ?", (corridor_id,))
+    corridor = cursor.fetchone()
+    if not corridor:
+        conn.close()
+        return None
+
+    corridor = dict(corridor)
+
+    # Get duties
+    cursor.execute("SELECT * FROM corridor_duties WHERE corridor_id = ? AND status = 'ACTIVE'", (corridor_id,))
+    corridor["duties"] = [dict(row) for row in cursor.fetchall()]
+
+    # Get enforcement actions
+    cursor.execute("SELECT * FROM corridor_enforcement_actions WHERE corridor_id = ?", (corridor_id,))
+    corridor["enforcement_actions"] = [dict(row) for row in cursor.fetchall()]
+
+    # Compute pattern stats from shipments
+    origin = corridor["origin_country"]
+    dest = corridor["destination_country"]
+
+    cursor.execute("""
+        SELECT
+            COUNT(*) as shipment_count,
+            AVG(risk_score) as avg_risk_score,
+            COUNT(CASE WHEN element9_is_mismatch = 1 THEN 1 END) as mismatch_count,
+            AVG(shipper_age_months) as avg_shipper_age,
+            COUNT(DISTINCT shipper_name) as unique_shippers,
+            SUM(declared_value_usd) as total_value_usd
+        FROM shipments
+        WHERE origin_country = ? AND destination_country = ?
+    """, (origin, dest))
+
+    stats = cursor.fetchone()
+    if stats:
+        total = stats["shipment_count"]
+        mismatch_rate = (stats["mismatch_count"] / total * 100) if total > 0 else 0
+        corridor["pattern_indicators"] = {
+            "shipment_count": total,
+            "avg_risk_score": round(stats["avg_risk_score"], 2) if stats["avg_risk_score"] else 0,
+            "element9_mismatch_rate_pct": round(mismatch_rate, 1),
+            "avg_shipper_age_months": round(stats["avg_shipper_age"], 1) if stats["avg_shipper_age"] else 0,
+            "unique_shippers": stats["unique_shippers"] or 0,
+            "total_value_usd": int(stats["total_value_usd"]) if stats["total_value_usd"] else 0,
+        }
+    else:
+        corridor["pattern_indicators"] = {}
+
+    conn.close()
+    return corridor
+
+
+def create_or_update_corridor(
+    corridor_id: str,
+    display_name: str,
+    origin_country: str,
+    destination_country: str,
+    risk_level: str = "MEDIUM",
+    primary_hs_chapters: Optional[str] = None,
+    risk_profile: Optional[str] = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> bool:
+    """Create or update a corridor"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO corridors
+        (id, display_name, origin_country, destination_country, risk_level, primary_hs_chapters, risk_profile, last_refreshed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """, (corridor_id, display_name, origin_country, destination_country, risk_level, primary_hs_chapters, risk_profile, datetime.utcnow().isoformat()))
+
+    conn.commit()
+    conn.close()
+    return True
+
+
+def create_corridor_duty(
+    corridor_id: str,
+    case_number: str,
+    duty_type: str,
+    product_description: Optional[str] = None,
+    hs_prefix: Optional[str] = None,
+    rate_pct: Optional[float] = None,
+    status: str = "ACTIVE",
+    source_url: Optional[str] = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> int:
+    """Create a corridor duty record"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO corridor_duties
+        (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, last_refreshed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, datetime.utcnow().isoformat()))
+
+    duty_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return duty_id
+
+
+def create_enforcement_action(
+    corridor_id: str,
+    case_id: str,
+    entity_name: str,
+    case_status: str,
+    case_year: int,
+    duty_evaded_usd: Optional[float] = None,
+    source_description: Optional[str] = None,
+    source_url: Optional[str] = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> int:
+    """Create a corridor enforcement action record"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO corridor_enforcement_actions
+        (corridor_id, case_id, entity_name, case_status, case_year, duty_evaded_usd, source_description, source_url, last_refreshed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (corridor_id, case_id, entity_name, case_status, case_year, duty_evaded_usd, source_description, source_url, datetime.utcnow().isoformat()))
+
+    action_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return action_id
+
+
+def get_pre_manifest_vessels(db_path: str = "/app/data/cbp_sentry.db") -> List[Dict[str, Any]]:
+    """Fetch all pre-manifest vessels"""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT * FROM pre_manifest_vessels
+        WHERE destination_country = 'US'
+        ORDER BY last_refreshed_at DESC
+    """)
+
+    vessels = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return vessels
+
+
+def create_or_update_pre_manifest_vessel(
+    vessel_imo: str,
+    vessel_name: str,
+    mmsi: Optional[str] = None,
+    flag_state: Optional[str] = None,
+    origin_port: Optional[str] = None,
+    origin_country: Optional[str] = None,
+    destination_port: Optional[str] = None,
+    destination_country: Optional[str] = None,
+    corridor_id: Optional[str] = None,
+    eta_us: Optional[str] = None,
+    ais_status: Optional[str] = None,
+    current_lat: Optional[float] = None,
+    current_lon: Optional[float] = None,
+    speed_knots: Optional[float] = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> bool:
+    """Create or update a pre-manifest vessel"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT OR REPLACE INTO pre_manifest_vessels
+        (vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country, destination_port, destination_country,
+         corridor_id, eta_us, ais_status, current_lat, current_lon, speed_knots, last_refreshed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country, destination_port, destination_country,
+          corridor_id, eta_us, ais_status, current_lat, current_lon, speed_knots, datetime.utcnow().isoformat()))
+
+    conn.commit()
+    conn.close()
+    return True

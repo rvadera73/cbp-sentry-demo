@@ -165,6 +165,41 @@ async def lifespan(app: FastAPI):
     else:
         logger.info(f"CORD data directory not found at {cord_data_dir} — continuing without CORD engine")
 
+    # Initialize background scheduler for data refresh jobs
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from refresh_jobs import refresh_pre_manifest_vessels, refresh_corridor_duties, log_refresh_status
+
+        scheduler = AsyncIOScheduler()
+
+        # Schedule pre-manifest vessel refresh every 30 minutes
+        scheduler.add_job(
+            refresh_pre_manifest_vessels,
+            'interval',
+            minutes=30,
+            id='refresh_pre_manifest_vessels',
+            name='Refresh pre-manifest vessels from VesselFinder API',
+            replace_existing=True
+        )
+        logger.info("✓ Scheduled: Pre-manifest vessel refresh every 30 minutes")
+
+        # Schedule corridor duty rate refresh daily
+        scheduler.add_job(
+            refresh_corridor_duties,
+            'interval',
+            hours=24,
+            id='refresh_corridor_duties',
+            name='Refresh corridor duty rates from trade.gov API',
+            replace_existing=True
+        )
+        logger.info("✓ Scheduled: Corridor duty refresh daily")
+
+        scheduler.start()
+        logger.info("✓ Background scheduler started")
+
+    except Exception as e:
+        logger.warning(f"Background scheduler initialization failed (continuing anyway): {e}")
+
     yield
     logger.info("Sentry API shutdown")
 
@@ -3377,6 +3412,86 @@ async def save_rule_configuration(request: Dict[str, Any]) -> Dict[str, Any]:
             "message": f"Error saving rules: {str(e)}",
             "error": str(e)
         }
+
+
+# ============= CORRIDOR & PRE-MANIFEST PROXY ROUTES =============
+
+@app.get("/api/corridors")
+async def list_corridors_proxy() -> Dict[str, Any]:
+    """Proxy to data service: list all corridors with computed statistics"""
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"{DATA_SERVICE_URL}/corridors")
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(status_code=resp.status_code, detail="Data service error")
+    except Exception as e:
+        logger.error(f"Corridors proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/corridors/{corridor_id}")
+async def get_corridor_proxy(corridor_id: str) -> Dict[str, Any]:
+    """Proxy to data service: get single corridor detail with duties and enforcement actions"""
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"{DATA_SERVICE_URL}/corridors/{corridor_id}")
+            if resp.status_code == 200:
+                return resp.json()
+            elif resp.status_code == 404:
+                raise HTTPException(status_code=404, detail="Corridor not found")
+            raise HTTPException(status_code=resp.status_code, detail="Data service error")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Corridor detail proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/corridors")
+async def create_corridor_proxy(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Proxy to data service: create or update a corridor with duties and enforcement actions"""
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.post(f"{DATA_SERVICE_URL}/corridors", json=payload)
+            if resp.status_code in [200, 201]:
+                return resp.json()
+            raise HTTPException(status_code=resp.status_code, detail="Data service error")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create corridor proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pre-manifest/vessels")
+async def list_pre_manifest_vessels_proxy() -> Dict[str, Any]:
+    """Proxy to data service: list all pre-manifest vessels inbound to US"""
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"{DATA_SERVICE_URL}/pre-manifest/vessels")
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(status_code=resp.status_code, detail="Data service error")
+    except Exception as e:
+        logger.error(f"Pre-manifest vessels proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pre-manifest/vessels")
+async def create_pre_manifest_vessel_proxy(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Proxy to data service: create or update a pre-manifest vessel"""
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.post(f"{DATA_SERVICE_URL}/pre-manifest/vessels", json=payload)
+            if resp.status_code in [200, 201]:
+                return resp.json()
+            raise HTTPException(status_code=resp.status_code, detail="Data service error")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Create pre-manifest vessel proxy error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

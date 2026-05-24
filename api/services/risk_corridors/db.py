@@ -101,12 +101,12 @@ def get_risk_corridors(
     # Get current period shipments
     query = """
         SELECT
-            commodity_code as hts_6digit,
-            shipper_country as origin_country,
-            consignee_country as destination_country,
+            hs_code as hts_6digit,
+            origin_country,
+            destination_country,
             shipper_name as supplier_entity,
             COUNT(*) as shipment_count,
-            SUM(declared_value) as aggregate_value_usd,
+            SUM(declared_value_usd) as aggregate_value_usd,
             AVG(risk_score) as avg_risk_score,
             COUNT(DISTINCT shipper_name) as active_vessels
         FROM shipments
@@ -117,11 +117,11 @@ def get_risk_corridors(
     if industry_filter:
         # Create HTS filter (first 4 digits for industry segment)
         for prefix in industry_filter:
-            query += " AND commodity_code LIKE ?"
+            query += " AND hs_code LIKE ?"
             params.append(prefix + "%")
 
     query += """
-        GROUP BY commodity_code, shipper_country, consignee_country, shipper_name
+        GROUP BY hs_code, origin_country, destination_country, shipper_name
         ORDER BY aggregate_value_usd DESC
     """
 
@@ -131,12 +131,12 @@ def get_risk_corridors(
     # Get prior period for YoY calculation
     prior_query = """
         SELECT
-            commodity_code as hts_6digit,
-            shipper_country as origin_country,
-            consignee_country as destination_country,
+            hs_code as hts_6digit,
+            origin_country,
+            destination_country,
             shipper_name as supplier_entity,
             COUNT(*) as shipment_count,
-            SUM(declared_value) as aggregate_value_usd
+            SUM(declared_value_usd) as aggregate_value_usd
         FROM shipments
         WHERE created_at >= datetime('now', '-' || (? * 2) || ' days')
         AND created_at < datetime('now', '-' || ? || ' days')
@@ -145,11 +145,11 @@ def get_risk_corridors(
 
     if industry_filter:
         for prefix in industry_filter:
-            prior_query += " AND commodity_code LIKE ?"
+            prior_query += " AND hs_code LIKE ?"
             prior_params.append(prefix + "%")
 
     prior_query += """
-        GROUP BY commodity_code, shipper_country, consignee_country, shipper_name
+        GROUP BY hs_code, origin_country, destination_country, shipper_name
     """
 
     cursor.execute(prior_query, prior_params)
@@ -252,15 +252,15 @@ def get_corridor_detail(corridor_id: str, include_params: Optional[List[str]] = 
     # Get corridor shipments
     cursor.execute("""
         SELECT DISTINCT
-            commodity_code,
-            shipper_country,
-            consignee_country,
+            hs_code,
+            origin_country,
+            destination_country,
             shipper_name,
             risk_score
         FROM shipments
-        WHERE commodity_code LIKE ?
-        AND shipper_country = ?
-        AND consignee_country = ?
+        WHERE hs_code LIKE ?
+        AND origin_country = ?
+        AND destination_country = ?
         LIMIT 1
     """, (hts_chapter + "%", origin, destination))
 
@@ -271,7 +271,7 @@ def get_corridor_detail(corridor_id: str, include_params: Optional[List[str]] = 
     # Get active entities (using shipper as proxy for vessel routes)
     cursor.execute("""
         SELECT DISTINCT shipper_name FROM shipments
-        WHERE shipper_country = ? AND consignee_country = ?
+        WHERE origin_country = ? AND destination_country = ?
     """, (origin, destination))
 
     shipper_rows = cursor.fetchall()
@@ -349,13 +349,13 @@ def get_vessels_by_port(
     cursor.execute("""
         SELECT DISTINCT
             shipper_name,
-            commodity_code,
-            shipper_country,
-            SUM(declared_value) as total_value,
+            hs_code,
+            origin_country,
+            SUM(declared_value_usd) as total_value,
             COUNT(*) as manifest_count,
             AVG(risk_score) as avg_risk_score
         FROM shipments
-        WHERE consignee_country = 'US'
+        WHERE destination_country = 'US'
         AND created_at >= datetime('now', '-' || ? || ' days')
     """, (time_window_days,))
 
@@ -391,8 +391,8 @@ def get_vessels_by_port(
             "status": "INBOUND",
             "cargo_risk_level": cargo_risk,
             "cargo_summary": {
-                "primary_hts_chapter": vrow["commodity_code"][:2],
-                "industry_segment": _get_industry_segment(vrow["commodity_code"]),
+                "primary_hts_chapter": vrow["hs_code"][:2],
+                "industry_segment": _get_industry_segment(vrow["hs_code"]),
                 "total_manifest_value_usd": int(vrow["total_value"]),
                 "manifest_count": vrow["manifest_count"],
             },
@@ -453,12 +453,12 @@ def get_corridor_timeline(
         cursor.execute("""
             SELECT
                 COUNT(*) as shipment_count,
-                SUM(declared_value) as aggregate_value,
+                SUM(declared_value_usd) as aggregate_value,
                 COUNT(DISTINCT shipper_name) as entity_count
             FROM shipments
-            WHERE commodity_code LIKE ?
-            AND shipper_country = ?
-            AND consignee_country = ?
+            WHERE hs_code LIKE ?
+            AND origin_country = ?
+            AND destination_country = ?
             AND DATE(created_at) = ?
         """, (hts_chapter + "%", origin, destination, date_str))
 
@@ -476,9 +476,9 @@ def get_corridor_timeline(
         if snapshot["shipment_count"] > 0:
             cursor.execute("""
                 SELECT DISTINCT shipper_name FROM shipments
-                WHERE commodity_code LIKE ?
-                AND shipper_country = ?
-                AND consignee_country = ?
+                WHERE hs_code LIKE ?
+                AND origin_country = ?
+                AND destination_country = ?
                 AND DATE(created_at) = ?
             """, (hts_chapter + "%", origin, destination, date_str))
 
@@ -486,9 +486,9 @@ def get_corridor_timeline(
 
             cursor.execute("""
                 SELECT DISTINCT shipper_name FROM shipments
-                WHERE commodity_code LIKE ?
-                AND shipper_country = ?
-                AND consignee_country = ?
+                WHERE hs_code LIKE ?
+                AND origin_country = ?
+                AND destination_country = ?
                 AND DATE(created_at) = ?
             """, (hts_chapter + "%", origin, destination, date_str))
 
@@ -506,9 +506,9 @@ def get_corridor_timeline(
     cursor.execute("""
         SELECT DISTINCT shipper_name, MIN(DATE(created_at)) as first_date
         FROM shipments
-        WHERE commodity_code LIKE ?
-        AND shipper_country = ?
-        AND consignee_country = ?
+        WHERE hs_code LIKE ?
+        AND origin_country = ?
+        AND destination_country = ?
         GROUP BY shipper_name
     """, (hts_chapter + "%", origin, destination))
 

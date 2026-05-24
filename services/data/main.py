@@ -6,12 +6,108 @@ import logging
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
+from datetime import datetime
 
-from db import init_db, create_shipment, get_shipment, get_all_shipments, get_shipments_count, update_shipment, get_shipments_stats, search_shipments
+from db import (
+    init_db, create_shipment, get_shipment, get_all_shipments, get_shipments_count, update_shipment,
+    get_shipments_stats, search_shipments, get_corridors, get_corridor_detail, create_or_update_corridor,
+    create_corridor_duty, create_enforcement_action, get_pre_manifest_vessels, create_or_update_pre_manifest_vessel
+)
 from models import Shipment, ShipmentCreate, ShipmentUpdate
 import sqlite3
 
 logger = logging.getLogger(__name__)
+
+
+def seed_corridors():
+    """Load corridor definitions, duties, and enforcement actions from seed JSON"""
+    import sqlite3
+
+    try:
+        seed_file = Path("/app/seed_data/corridors_seed.json")
+        if not seed_file.exists():
+            logger.warning(f"📋 Corridors seed file not found at {seed_file}, skipping corridor seeding")
+            return
+
+        with open(seed_file) as f:
+            corridors_data = json.load(f)
+
+        conn = sqlite3.connect("/app/data/cbp_sentry.db")
+        cursor = conn.cursor()
+
+        # Check if corridors already exist
+        cursor.execute("SELECT COUNT(*) FROM corridors")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            logger.info(f"✅ Corridors already seeded ({count} records), skipping")
+            conn.close()
+            return
+
+        logger.info(f"📦 INITIALIZING CORRIDORS from seed data ({len(corridors_data)} corridors)")
+
+        for corridor_data in corridors_data:
+            corridor_id = corridor_data["id"]
+            logger.info(f"   Loading corridor: {corridor_id}")
+
+            # Insert corridor
+            cursor.execute("""
+                INSERT OR IGNORE INTO corridors
+                (id, display_name, origin_country, destination_country, risk_level, primary_hs_chapters, risk_profile, last_refreshed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                corridor_id,
+                corridor_data.get("display_name"),
+                corridor_data.get("origin_country"),
+                corridor_data.get("destination_country"),
+                corridor_data.get("risk_level", "MEDIUM"),
+                corridor_data.get("primary_hs_chapters"),
+                corridor_data.get("risk_profile"),
+                datetime.utcnow().isoformat()
+            ))
+
+            # Insert duties
+            for duty in corridor_data.get("duties", []):
+                cursor.execute("""
+                    INSERT INTO corridor_duties
+                    (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, last_refreshed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    corridor_id,
+                    duty.get("case_number"),
+                    duty.get("duty_type"),
+                    duty.get("product_description"),
+                    duty.get("hs_prefix"),
+                    duty.get("rate_pct"),
+                    duty.get("status", "ACTIVE"),
+                    duty.get("source_url"),
+                    datetime.utcnow().isoformat()
+                ))
+
+            # Insert enforcement actions
+            for action in corridor_data.get("enforcement_actions", []):
+                cursor.execute("""
+                    INSERT INTO corridor_enforcement_actions
+                    (corridor_id, case_id, entity_name, case_status, case_year, duty_evaded_usd, source_description, source_url, last_refreshed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    corridor_id,
+                    action.get("case_id"),
+                    action.get("entity_name"),
+                    action.get("case_status"),
+                    action.get("case_year"),
+                    action.get("duty_evaded_usd"),
+                    action.get("source_description"),
+                    action.get("source_url"),
+                    datetime.utcnow().isoformat()
+                ))
+
+        conn.commit()
+        logger.info(f"✅ Corridors initialized: {len(corridors_data)} corridors with duties and enforcement actions")
+        conn.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to seed corridors: {e}")
+        raise
 
 
 def seed_demo_data():
@@ -174,6 +270,7 @@ async def lifespan(app: FastAPI):
     # Startup
     init_db()
     seed_demo_data()
+    seed_corridors()
     logger.info("Data service initialized")
     yield
     # Shutdown
@@ -287,6 +384,159 @@ async def create_manifest_endpoint(data: dict) -> dict:
     except Exception as e:
         logger.error(f"Create manifest failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/corridors", response_model=dict)
+async def list_corridors() -> dict:
+    """List all corridors with computed shipment statistics"""
+    try:
+        corridors = get_corridors()
+        return {
+            "data": corridors,
+            "count": len(corridors),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Get corridors failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/corridors/{corridor_id}", response_model=dict)
+async def get_corridor_endpoint(corridor_id: str) -> dict:
+    """Get single corridor with duties, enforcement actions, and pattern indicators"""
+    try:
+        corridor = get_corridor_detail(corridor_id)
+        if not corridor:
+            raise HTTPException(status_code=404, detail="Corridor not found")
+        return {
+            "data": corridor,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get corridor detail failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/corridors", response_model=dict)
+async def create_corridor_endpoint(data: dict) -> dict:
+    """Create or update a corridor"""
+    try:
+        corridor_id = data.get('id')
+        if not corridor_id:
+            raise ValueError("corridor id required")
+
+        create_or_update_corridor(
+            corridor_id=corridor_id,
+            display_name=data.get('display_name', ''),
+            origin_country=data.get('origin_country', ''),
+            destination_country=data.get('destination_country', ''),
+            risk_level=data.get('risk_level', 'MEDIUM'),
+            primary_hs_chapters=data.get('primary_hs_chapters'),
+            risk_profile=data.get('risk_profile')
+        )
+
+        # Create duties if provided
+        duties = data.get('duties', [])
+        for duty in duties:
+            create_corridor_duty(
+                corridor_id=corridor_id,
+                case_number=duty.get('case_number', ''),
+                duty_type=duty.get('duty_type', ''),
+                product_description=duty.get('product_description'),
+                hs_prefix=duty.get('hs_prefix'),
+                rate_pct=duty.get('rate_pct'),
+                status=duty.get('status', 'ACTIVE'),
+                source_url=duty.get('source_url')
+            )
+
+        # Create enforcement actions if provided
+        actions = data.get('enforcement_actions', [])
+        for action in actions:
+            create_enforcement_action(
+                corridor_id=corridor_id,
+                case_id=action.get('case_id', ''),
+                entity_name=action.get('entity_name', ''),
+                case_status=action.get('case_status', ''),
+                case_year=action.get('case_year', 0),
+                duty_evaded_usd=action.get('duty_evaded_usd'),
+                source_description=action.get('source_description'),
+                source_url=action.get('source_url')
+            )
+
+        corridor = get_corridor_detail(corridor_id)
+        return {
+            "data": corridor,
+            "message": "Corridor created/updated",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Create corridor failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/pre-manifest/vessels", response_model=dict)
+async def list_pre_manifest_vessels() -> dict:
+    """List all pre-manifest vessels inbound to US"""
+    try:
+        vessels = get_pre_manifest_vessels()
+        return {
+            "data": vessels,
+            "count": len(vessels),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Get pre-manifest vessels failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/pre-manifest/vessels", response_model=dict)
+async def create_pre_manifest_vessel_endpoint(data: dict) -> dict:
+    """Create or update a pre-manifest vessel"""
+    try:
+        vessel_imo = data.get('vessel_imo')
+        if not vessel_imo:
+            raise ValueError("vessel_imo required")
+
+        create_or_update_pre_manifest_vessel(
+            vessel_imo=vessel_imo,
+            vessel_name=data.get('vessel_name', ''),
+            mmsi=data.get('mmsi'),
+            flag_state=data.get('flag_state'),
+            origin_port=data.get('origin_port'),
+            origin_country=data.get('origin_country'),
+            destination_port=data.get('destination_port'),
+            destination_country=data.get('destination_country'),
+            corridor_id=data.get('corridor_id'),
+            eta_us=data.get('eta_us'),
+            ais_status=data.get('ais_status'),
+            current_lat=data.get('current_lat'),
+            current_lon=data.get('current_lon'),
+            speed_knots=data.get('speed_knots')
+        )
+
+        vessels = get_pre_manifest_vessels()
+        return {
+            "data": vessels,
+            "message": "Vessel created/updated",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Create pre-manifest vessel failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/corridors/refresh/status", response_model=dict)
+async def refresh_status() -> dict:
+    """Get last refresh timestamps for corridor data"""
+    return {
+        "corridors_last_refreshed": None,
+        "duties_last_refreshed": None,
+        "enforcement_actions_last_refreshed": None,
+        "pre_manifest_vessels_last_refreshed": None,
+        "note": "Refresh is performed by background scheduler every 30 minutes (vessels) and daily (duties)"
+    }
 
 
 if __name__ == "__main__":

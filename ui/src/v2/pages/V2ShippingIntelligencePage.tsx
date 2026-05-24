@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MapPin, Ship, FileText, DollarSign, AlertTriangle, TrendingDown, Calendar, CheckCircle } from 'lucide-react';
 import { useV2Cases } from '../hooks/useV2Cases';
-import { useShippingIntelligence, CBP_CORRIDORS, US_PORTS_OF_ENTRY } from '../hooks/useShippingIntelligence';
+import { useShippingIntelligence, computeShippingIntelligence, CBP_CORRIDORS, US_PORTS_OF_ENTRY } from '../hooks/useShippingIntelligence';
 
 export default function V2ShippingIntelligencePage() {
   const { shipments } = useV2Cases();
@@ -56,7 +56,7 @@ export default function V2ShippingIntelligencePage() {
           {/* Shipment List */}
           <div className="flex-1 overflow-y-auto">
             {filteredShipments.map((shipment) => {
-              const intel = useShippingIntelligence(shipment);
+              const intel = computeShippingIntelligence(shipment);
               const originCountry = shipment.origin_country?.slice(0, 2).toUpperCase() || 'XX';
               const destCountry = shipment.destination_country?.slice(0, 2).toUpperCase() || 'XX';
               return (

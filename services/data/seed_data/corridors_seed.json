@@ -1,0 +1,225 @@
+[
+  {
+    "id": "VN→US",
+    "display_name": "Vietnam to United States",
+    "origin_country": "VN",
+    "destination_country": "US",
+    "risk_level": "HIGH",
+    "risk_profile": "TARIFF_EVASION",
+    "primary_hs_chapters": "[\"7604\", \"7210\", \"7308\"]",
+    "duties": [
+      {
+        "case_number": "A-552-824",
+        "duty_type": "AD/CVD",
+        "product_description": "Aluminum Extrusions from Vietnam",
+        "hs_prefix": "7604",
+        "rate_pct": 150.5,
+        "status": "ACTIVE",
+        "source_url": "https://usitc.gov/cases/a-552-824"
+      },
+      {
+        "case_number": "USTR-301-2018-007",
+        "duty_type": "Section 301 Tariffs",
+        "product_description": "Steel and Aluminum Products",
+        "hs_prefix": "72*",
+        "rate_pct": 25.0,
+        "status": "ACTIVE",
+        "source_url": "https://ustr.gov/301-tariffs"
+      }
+    ],
+    "enforcement_actions": [
+      {
+        "case_id": "EAPA-7358",
+        "entity_name": "Vietnam Aluminum Manufacturing LLC",
+        "case_status": "AFFIRMATIVE",
+        "case_year": 2021,
+        "duty_evaded_usd": 2800000,
+        "source_description": "CBP Press Release 2023-04-12",
+        "source_url": "https://cbp.gov/newsroom/press-releases/2023/04/12/cbp-enforcement"
+      }
+    ]
+  },
+  {
+    "id": "MY→US",
+    "display_name": "Malaysia to United States",
+    "origin_country": "MY",
+    "destination_country": "US",
+    "risk_level": "HIGH",
+    "risk_profile": "FORCED_LABOR",
+    "primary_hs_chapters": "[\"8541\", \"8473\", \"7804\"]",
+    "duties": [
+      {
+        "case_number": "UFLPA-2022",
+        "duty_type": "UFLPA",
+        "product_description": "Products with Forced Labor Concerns - Xinjiang Uyghur Autonomous Region",
+        "hs_prefix": "*",
+        "rate_pct": 0,
+        "status": "ACTIVE",
+        "source_url": "https://cbp.gov/uflpa"
+      },
+      {
+        "case_number": "A-556-701",
+        "duty_type": "Anti-Dumping",
+        "product_description": "Crystalline Silicon Photovoltaic Cells from Malaysia",
+        "hs_prefix": "8541",
+        "rate_pct": 252.18,
+        "status": "ACTIVE",
+        "source_url": "https://usitc.gov/cases/a-556-701"
+      }
+    ],
+    "enforcement_actions": [
+      {
+        "case_id": "EAPA-7102",
+        "entity_name": "Malaysia Semiconductor Traders Ltd",
+        "case_status": "AFFIRMATIVE",
+        "case_year": 2020,
+        "duty_evaded_usd": 1500000,
+        "source_description": "CBP Press Release 2022-08-15",
+        "source_url": "https://cbp.gov/newsroom/press-releases/2022/08/15"
+      }
+    ]
+  },
+  {
+    "id": "CN→US",
+    "display_name": "China to United States",
+    "origin_country": "CN",
+    "destination_country": "US",
+    "risk_level": "CRITICAL",
+    "risk_profile": "ORIGIN_CONCEALMENT",
+    "primary_hs_chapters": "[\"8541\", \"2933\", \"3926\"]",
+    "duties": [
+      {
+        "case_number": "USTR-301-2018-001",
+        "duty_type": "Section 301 Tariffs",
+        "product_description": "Chinese Goods - Trade War Tranche 1-4",
+        "hs_prefix": "*",
+        "rate_pct": 25.0,
+        "status": "ACTIVE",
+        "source_url": "https://ustr.gov/301-tariffs"
+      },
+      {
+        "case_number": "UFLPA-2022",
+        "duty_type": "UFLPA",
+        "product_description": "Products with Xinjiang Forced Labor Concerns",
+        "hs_prefix": "*",
+        "rate_pct": 0,
+        "status": "ACTIVE",
+        "source_url": "https://cbp.gov/uflpa"
+      },
+      {
+        "case_number": "EAR-China",
+        "duty_type": "Export Control (EAR)",
+        "product_description": "Semiconductor Manufacturing Equipment",
+        "hs_prefix": "903*",
+        "rate_pct": 0,
+        "status": "ACTIVE",
+        "source_url": "https://bis.doc.gov/ear"
+      }
+    ],
+    "enforcement_actions": [
+      {
+        "case_id": "EAPA-6956",
+        "entity_name": "Guangdong Electronics Manufacturing Co., Ltd.",
+        "case_status": "AFFIRMATIVE",
+        "case_year": 2019,
+        "duty_evaded_usd": 4200000,
+        "source_description": "CBP Press Release 2021-06-22",
+        "source_url": "https://cbp.gov/newsroom/press-releases/2021/06/22"
+      }
+    ]
+  },
+  {
+    "id": "HK→US",
+    "display_name": "Hong Kong to United States",
+    "origin_country": "HK",
+    "destination_country": "US",
+    "risk_level": "HIGH",
+    "risk_profile": "TRANSSHIPMENT_HUB",
+    "primary_hs_chapters": "[\"8541\", \"7104\", \"2933\"]",
+    "duties": [
+      {
+        "case_number": "USTR-301-2018-001",
+        "duty_type": "Section 301 Tariffs",
+        "product_description": "Chinese-origin Goods Transshipped via Hong Kong",
+        "hs_prefix": "*",
+        "rate_pct": 25.0,
+        "status": "ACTIVE",
+        "source_url": "https://ustr.gov/301-tariffs"
+      }
+    ],
+    "enforcement_actions": [
+      {
+        "case_id": "EAPA-7001",
+        "entity_name": "Hong Kong Trade Limited",
+        "case_status": "AFFIRMATIVE",
+        "case_year": 2020,
+        "duty_evaded_usd": 3100000,
+        "source_description": "CBP Press Release 2023-01-30",
+        "source_url": "https://cbp.gov/newsroom/press-releases/2023/01/30"
+      }
+    ]
+  },
+  {
+    "id": "TH→US",
+    "display_name": "Thailand to United States",
+    "origin_country": "TH",
+    "destination_country": "US",
+    "risk_level": "MEDIUM",
+    "risk_profile": "SOURCING_RISK",
+    "primary_hs_chapters": "[\"1511\", \"2208\", \"7404\"]",
+    "duties": [
+      {
+        "case_number": "UFLPA-2022",
+        "duty_type": "UFLPA",
+        "product_description": "Seafood Products - Forced Labor Concerns",
+        "hs_prefix": "0306",
+        "rate_pct": 0,
+        "status": "ACTIVE",
+        "source_url": "https://cbp.gov/uflpa"
+      }
+    ],
+    "enforcement_actions": []
+  },
+  {
+    "id": "SG→US",
+    "display_name": "Singapore to United States",
+    "origin_country": "SG",
+    "destination_country": "US",
+    "risk_level": "LOW",
+    "risk_profile": "COMPLIANT_TRADE",
+    "primary_hs_chapters": "[\"2707\", \"2709\", \"8471\"]",
+    "duties": [],
+    "enforcement_actions": []
+  },
+  {
+    "id": "IN→US",
+    "display_name": "India to United States",
+    "origin_country": "IN",
+    "destination_country": "US",
+    "risk_level": "MEDIUM",
+    "risk_profile": "PHARMA_IP_RISK",
+    "primary_hs_chapters": "[\"2933\", \"2932\", \"3004\"]",
+    "duties": [
+      {
+        "case_number": "CVD-2018",
+        "duty_type": "Countervailing Duty",
+        "product_description": "Pharmaceutical Active Ingredients from India",
+        "hs_prefix": "2933",
+        "rate_pct": 12.5,
+        "status": "ACTIVE",
+        "source_url": "https://usitc.gov/pharmaceutical-duties"
+      }
+    ],
+    "enforcement_actions": [
+      {
+        "case_id": "EAPA-7245",
+        "entity_name": "Indian Pharma Exports Ltd",
+        "case_status": "AFFIRMATIVE",
+        "case_year": 2022,
+        "duty_evaded_usd": 890000,
+        "source_description": "CBP Press Release 2023-09-18",
+        "source_url": "https://cbp.gov/newsroom/press-releases/2023/09/18"
+      }
+    ]
+  }
+]
