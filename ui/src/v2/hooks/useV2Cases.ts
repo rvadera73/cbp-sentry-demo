@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Case, Shipment } from '../types/v2.types';
 import { api } from '../../services/api';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 interface UseV2CasesReturn {
   cases: Case[];
@@ -67,7 +68,7 @@ export function useV2Cases(): UseV2CasesReturn {
         offset: '0'
       });
 
-      const url = `/api/shipments?${params}`;
+      const url = `${API_BASE_URL}/shipments?${params}`;
       console.log('[useV2Cases] Fetching from:', url);
 
       const response = await fetch(url);
