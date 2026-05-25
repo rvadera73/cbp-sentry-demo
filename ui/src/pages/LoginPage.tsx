@@ -14,7 +14,7 @@ export default function LoginPage() {
       setRole(selectedRole);
       localStorage.setItem('user_email', email);
       localStorage.setItem('user_role', selectedRole);
-      window.location.href = '/command-center';
+      window.location.href = '/dashboard';
     }
   };
 

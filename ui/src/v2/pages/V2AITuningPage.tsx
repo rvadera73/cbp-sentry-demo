@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { CheckCircle, AlertCircle, Loader, Info } from 'lucide-react';
+import { CheckCircle, AlertCircle, Loader, Info, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { TabNavigation, TabConfig } from '../components/TabNavigation';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+type TabType = 'Model Weights' | 'Screening Rules' | 'Configuration' | 'Performance Metrics';
 
 interface ModelWeights {
   DOCUMENTATION_RISK: number;
@@ -64,6 +67,7 @@ const CORRIDOR_MULTIPLIERS = [
 ];
 
 export default function V2AITuningPage() {
+  const [activeTab, setActiveTab] = useState<TabType>('Model Weights');
   const [weights, setWeights] = useState<ModelWeights>({
     DOCUMENTATION_RISK: 25,
     CORRIDOR_RISK: 20,
@@ -198,23 +202,64 @@ export default function V2AITuningPage() {
   }
 
   return (
-    <div className="flex-1 space-y-5 p-5 overflow-y-auto bg-[#F7F9FC]">
-      {/* Header */}
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-xl font-bold text-[#0B1F33]">AI Model Configuration & Performance</h1>
-          <p className="text-xs text-slate-600 mt-1">
-            Adjust factor weights, review validation metrics, and manage screening rules
-          </p>
-        </div>
-        <div className="text-right text-[9px] font-mono text-slate-500">
-          Model v{metrics?.model_version} • Last trained: {metrics?.last_run.split('T')[0]}
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC]">
+      {/* Page Title Header */}
+      <div className="bg-white border-b border-[#D0D7DE] px-6 py-4 shadow-sm">
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-xl font-bold text-[#0B1F33]">AI Model Configuration & Performance</h1>
+            <p className="text-xs text-slate-600 mt-1">
+              Adjust factor weights, review validation metrics, and manage screening rules
+            </p>
+          </div>
+          <div className="text-right text-[9px] font-mono text-slate-500">
+            Model v{metrics?.model_version} • Last trained: {metrics?.last_run.split('T')[0]}
+          </div>
         </div>
       </div>
 
+      {/* Summary Card - Key Metrics */}
+      <div className="bg-white border-b border-[#D0D7DE] px-6 py-4 shadow-sm">
+        <div className="grid grid-cols-4 gap-6">
+          <div>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Model Status</p>
+            <p className="text-sm font-bold text-[#0B1F33]">
+              {saveStatus === 'saved' ? '✓ Active' : saveStatus === 'saving' ? 'Updating...' : 'Ready'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Total Weight</p>
+            <p className={`text-lg font-bold font-mono ${isWeightValid ? 'text-[#07A41E]' : 'text-[#D83933]'}`}>
+              {totalWeight}%
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Performance (F1)</p>
+            <p className="text-sm font-bold text-[#0B1F33]">{metrics?.f1_score.toFixed(3) || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[9px] font-bold text-slate-500 uppercase mb-1">Rules Active</p>
+            <p className="text-sm font-bold text-[#0B1F33]">{Object.values(rules).filter(Boolean).length} of 3</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tab Navigation Component - Horizontal */}
+      <TabNavigation
+        tabs={[
+          { id: 'Model Weights', label: 'Model Weights' },
+          { id: 'Screening Rules', label: 'Screening Rules' },
+          { id: 'Configuration', label: 'Configuration' },
+          { id: 'Performance Metrics', label: 'Performance Metrics' },
+        ]}
+        activeTab={activeTab}
+        onTabChange={(tabId) => setActiveTab(tabId as TabType)}
+        orientation="horizontal"
+      />
+
       {/* Error Banner */}
       {errorMessage && (
-        <div className="flex items-start space-x-3 p-4 bg-red-50 border border-red-200 rounded-sm">
+        <div className="mx-5 mt-4 flex items-start space-x-3 p-4 bg-red-50 border border-red-200 rounded-sm">
           <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-bold text-red-900">Error</p>
@@ -223,248 +268,226 @@ export default function V2AITuningPage() {
         </div>
       )}
 
-      {/* Top Row: Weights + Metrics */}
-      <div className="grid grid-cols-3 gap-5">
-        {/* Left: Factor Weight Sliders (2/3 width) */}
-        <div className="col-span-2 bg-white rounded-sm border border-[#D0D7DE] p-5 shadow-sm space-y-6">
-          <div>
-            <h2 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
-              Factor Weight Controls
-            </h2>
-            <div className="space-y-5">
-              {Object.entries(weights).map(([factor, value]) => {
-                const meta = FACTOR_META[factor as keyof typeof FACTOR_META];
-                return (
-                  <div key={factor}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <label className={`text-xs font-bold uppercase tracking-wide font-mono ${meta.color}`}>
-                          {meta.label}
-                        </label>
-                      </div>
-                      <span className={`text-lg font-bold font-mono ${meta.color} whitespace-nowrap ml-2`}>
-                        {value.toFixed(1)}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="50"
-                      step="0.1"
-                      value={value}
-                      onChange={(e) => setWeights({ ...weights, [factor]: parseFloat(e.target.value) })}
-                      className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer"
-                    />
-                  </div>
-                );
-              })}
-            </div>
+      {/* Content Pane - Full Width */}
+      <div className="flex-1 overflow-y-auto bg-[#F7F9FC] p-6">
+        <div className="max-w-4xl">
+          {activeTab === 'Model Weights' && (
+            <ModelWeightsTab
+              weights={weights}
+              setWeights={setWeights}
+              config={config}
+              totalWeight={totalWeight}
+              isWeightValid={isWeightValid}
+              previewScore={previewScore}
+            />
+          )}
 
-            {/* Total Weight Indicator */}
-            <div className="mt-6 p-3 rounded-sm bg-slate-50 border border-slate-200">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-[#112E51] uppercase font-mono">Total Weight</span>
-                <span
-                  className={`text-lg font-bold font-mono ${
-                    isWeightValid ? 'text-green-600' : 'text-red-600'
-                  }`}
-                >
-                  {totalWeight.toFixed(1)}%
-                </span>
-              </div>
-              {!isWeightValid && <p className="text-[9px] text-red-600 mt-1">⚠ Weights must sum to 100%</p>}
-            </div>
+          {activeTab === 'Screening Rules' && (
+            <ScreeningRulesTab rules={rules} setRules={setRules} corridors={CORRIDOR_MULTIPLIERS} />
+          )}
 
-            {/* Score Impact Preview */}
-            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-sm">
-              <div className="text-[10px] font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-3">
-                Score Impact Preview
-              </div>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-xs text-slate-600">Adjusted Score (typical high-risk):</span>
-                <span className={`text-2xl font-bold font-mono ${previewScore >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}`}>
-                  {previewScore.toFixed(1)}
-                </span>
-                <span className="text-xs text-slate-600">/100</span>
-              </div>
-              <p className="text-[9px] text-slate-600 mt-2">
-                Based on sample component scores with {config.calibration_multiplier.toFixed(2)}x calibration
-              </p>
-            </div>
+          {activeTab === 'Configuration' && (
+            <ConfigurationTab config={config} setConfig={setConfig} />
+          )}
 
-            {/* Apply Button */}
-            <button
-              onClick={handleSave}
-              disabled={!isWeightValid || saveStatus === 'saving'}
-              className={`w-full mt-6 px-4 py-3 font-bold rounded-sm cursor-pointer transition-all flex items-center justify-center space-x-2 ${
-                !isWeightValid
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : saveStatus === 'saved'
-                    ? 'bg-green-600 hover:bg-green-700 text-white'
-                    : saveStatus === 'error'
-                      ? 'bg-red-600 hover:bg-red-700 text-white'
-                      : 'bg-[#005EA2] hover:bg-[#0076D6] text-white disabled:opacity-50'
-              }`}
-            >
-              {saveStatus === 'saving' && <Loader className="w-4 h-4 animate-spin" />}
-              {saveStatus === 'saved' && <CheckCircle className="w-4 h-4" />}
-              {saveStatus === 'error' && <AlertCircle className="w-4 h-4" />}
-              <span>
-                {saveStatus === 'saving'
-                  ? 'Saving...'
-                  : saveStatus === 'saved'
-                    ? 'Weights Saved ✓'
-                    : 'Apply Weights & Rules'}
-              </span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right: Live Validation Metrics (1/3 width) */}
-        <div className="bg-white rounded-sm border border-[#D0D7DE] p-5 shadow-sm space-y-4">
-          <h2 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono">
-            Live Validation Metrics
-          </h2>
-
-          {/* Metric Cards */}
-          <div className="space-y-2">
-            {metrics && [
-              { label: 'AUC-ROC', value: metrics.auc_roc, target: 0.75, format: '.4f' },
-              { label: 'Precision', value: metrics.precision, target: 0.70, format: '.2f' },
-              { label: 'Recall', value: metrics.recall, target: 0.65, format: '.2f' },
-              { label: 'F1 Score', value: metrics.f1_score, target: 0.67, format: '.2f' },
-            ].map((metric) => {
-              const passed = metric.value >= metric.target;
-              return (
-                <div key={metric.label} className="flex justify-between items-center">
-                  <span className="text-[10px] font-bold text-slate-700 uppercase font-mono">
-                    {metric.label}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-bold text-slate-900 font-mono">
-                      {metric.value.toFixed(4)}
-                    </span>
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${
-                        passed
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {passed ? 'PASS' : 'FAIL'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Confusion Matrix */}
-          <div className="mt-4 p-3 bg-slate-50 rounded-sm border border-slate-200">
-            <p className="text-[9px] font-bold text-slate-700 uppercase font-mono mb-2">Confusion Matrix</p>
-            {metrics && (
-              <div className="grid grid-cols-2 gap-1 text-[9px]">
-                <div className="bg-green-100 p-2 rounded text-center">
-                  <div className="font-bold">TP</div>
-                  <div className="text-green-900">{metrics.true_positives.toLocaleString()}</div>
-                </div>
-                <div className="bg-red-100 p-2 rounded text-center">
-                  <div className="font-bold">FP</div>
-                  <div className="text-red-900">{metrics.false_positives.toLocaleString()}</div>
-                </div>
-                <div className="bg-green-100 p-2 rounded text-center">
-                  <div className="font-bold">TN</div>
-                  <div className="text-green-900">{metrics.true_negatives.toLocaleString()}</div>
-                </div>
-                <div className="bg-red-100 p-2 rounded text-center">
-                  <div className="font-bold">FN</div>
-                  <div className="text-red-900">{metrics.false_negatives.toLocaleString()}</div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Metadata */}
-          <div className="text-[9px] text-slate-600 space-y-1 pt-3 border-t border-slate-200">
-            <p>
-              <strong>Validated:</strong> {metrics?.total_validated.toLocaleString()} shipments
-            </p>
-            <p>
-              <strong>Threshold:</strong> Risk Score ≥ {metrics?.threshold}
-            </p>
-          </div>
+          {activeTab === 'Performance Metrics' && <PerformanceMetricsTab metrics={metrics} />}
         </div>
       </div>
 
-      {/* Bottom Row: Rules + Corridors + Calibration */}
-      <div className="grid grid-cols-3 gap-5">
-        {/* Screening Rules */}
-        <div className="bg-white rounded-sm border border-[#D0D7DE] p-5 shadow-sm">
-          <h2 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
-            Screening Rules
-          </h2>
-          <div className="space-y-3">
+      {/* Action Bar - Apply Changes Button */}
+      <div className="bg-white border-t border-[#D0D7DE] px-6 py-4 shadow-sm">
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={!isWeightValid || saveStatus === 'saving'}
+            className={`px-6 py-2 font-bold rounded-sm cursor-pointer transition-all flex items-center space-x-2 text-[10px] ${
+              !isWeightValid
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : saveStatus === 'saved'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : saveStatus === 'error'
+                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                    : 'bg-[#005EA2] hover:bg-[#0076D6] text-white disabled:opacity-50'
+            }`}
+          >
+            {saveStatus === 'saving' && <Loader className="w-4 h-4 animate-spin" />}
+            {saveStatus === 'saved' && <CheckCircle className="w-4 h-4" />}
+            {saveStatus === 'error' && <AlertCircle className="w-4 h-4" />}
+            <span>
+              {saveStatus === 'saving'
+                ? 'Saving Changes...'
+                : saveStatus === 'saved'
+                  ? 'Changes Saved ✓'
+                  : 'Apply Changes'}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// MODEL WEIGHTS TAB
+function ModelWeightsTab({
+  weights,
+  setWeights,
+  config,
+  totalWeight,
+  isWeightValid,
+  previewScore,
+}: any) {
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-lg font-bold text-[#0B1F33] mb-1">Risk Factor Weights</h2>
+        <p className="text-xs text-slate-600 mb-4">
+          Adjust the relative importance of each risk factor. Total weight must equal 100%.
+        </p>
+
+        <div className="space-y-5">
+          {(Object.entries(weights) as Array<[string, number]>).map(([factor, value]) => {
+            const numValue = value as number;
+            const meta = FACTOR_META[factor as keyof typeof FACTOR_META];
+            return (
+              <div key={factor} className="bg-white rounded-sm border border-[#D0D7DE] p-4">
+                <div className="flex justify-between items-start mb-3">
+                  <div className="flex-1">
+                    <label className={`text-xs font-bold uppercase tracking-wide font-mono ${meta.color}`}>
+                      {meta.label}
+                    </label>
+                  </div>
+                  <span className={`text-lg font-bold font-mono ${meta.color} whitespace-nowrap ml-2`}>
+                    {numValue.toFixed(1)}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="0.1"
+                  value={numValue}
+                  onChange={(e) => setWeights({ ...weights, [factor]: parseFloat(e.target.value) })}
+                  className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer"
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Total Weight Indicator */}
+        <div className="mt-6 p-4 rounded-sm bg-slate-50 border border-slate-200">
+          <div className="flex justify-between items-center">
+            <span className="text-xs font-bold text-[#112E51] uppercase font-mono">Total Weight</span>
+            <span
+              className={`text-lg font-bold font-mono ${
+                isWeightValid ? 'text-green-600' : 'text-red-600'
+              }`}
+            >
+              {totalWeight.toFixed(1)}%
+            </span>
+          </div>
+          {!isWeightValid && <p className="text-[9px] text-red-600 mt-2">⚠ Weights must sum to 100%</p>}
+        </div>
+
+        {/* Score Impact Preview */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-sm">
+          <div className="text-[10px] font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-3">
+            Score Impact Preview
+          </div>
+          <div className="flex items-baseline space-x-2">
+            <span className="text-xs text-slate-600">Adjusted Score (typical high-risk):</span>
+            <span className={`text-2xl font-bold font-mono ${previewScore >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}`}>
+              {previewScore.toFixed(1)}
+            </span>
+            <span className="text-xs text-slate-600">/100</span>
+          </div>
+          <p className="text-[9px] text-slate-600 mt-2">
+            Based on sample component scores with {config.calibration_multiplier.toFixed(2)}x calibration
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// SCREENING RULES TAB
+function ScreeningRulesTab({ rules, setRules, corridors }: any) {
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-lg font-bold text-[#0B1F33] mb-4">Screening Rules</h2>
+
+        <div className="grid grid-cols-2 gap-6">
+          {/* Rules */}
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-4 space-y-3">
+            <h3 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono">
+              Mandatory Rules
+            </h3>
             {[
-              { id: 'W-121', label: 'W-121', desc: 'MANDATORY HOLD UNVERIFIED RELEGATED IMPORTER' },
-              { id: 'W-822', label: 'W-822', desc: 'AIS SILENT COORDINATE PATTERN ANOMALY' },
-              { id: 'UFLPA-301', label: 'UFLPA-301', desc: 'SILICON AD/CVD RECLASSIFICATION RATE (244.5%)' },
+              { id: 'W-121', label: 'W-121', desc: 'UNVERIFIED RELEGATED IMPORTER' },
+              { id: 'W-822', label: 'W-822', desc: 'AIS SILENT PATTERN ANOMALY' },
+              { id: 'UFLPA-301', label: 'UFLPA-301', desc: 'AD/CVD RECLASSIFICATION' },
             ].map((rule) => (
               <label
                 key={rule.id}
-                className={`flex items-start space-x-3 p-2 rounded cursor-pointer transition-colors ${
-                  rule.id === 'UFLPA-301' && rules[rule.id as keyof typeof rules]
-                    ? 'border-2 border-red-200 bg-red-50 hover:bg-red-100'
-                    : 'hover:bg-slate-50'
+                className={`flex items-start space-x-3 p-3 rounded cursor-pointer transition-colors border ${
+                  rules[rule.id as keyof typeof rules]
+                    ? 'border-blue-200 bg-blue-50'
+                    : 'border-transparent hover:bg-slate-50'
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={rules[rule.id as keyof typeof rules]}
                   onChange={(e) => setRules({ ...rules, [rule.id]: e.target.checked })}
-                  className="w-4 h-4 border border-gray-300 rounded mt-0.5"
+                  className="w-4 h-4 border border-gray-300 rounded mt-0.5 cursor-pointer"
                 />
                 <div className="text-xs flex-1">
                   <p className="font-bold text-[#0B1F33]">{rule.label}</p>
-                  <p className={`text-[#5C5C5C] ${rule.id === 'UFLPA-301' ? 'text-red-700 font-bold' : ''}`}>
-                    {rule.desc}
-                  </p>
+                  <p className="text-[#5C5C5C] text-[9px]">{rule.desc}</p>
                 </div>
               </label>
             ))}
           </div>
-        </div>
 
-        {/* Corridor Risk Factors */}
-        <div className="bg-white rounded-sm border border-[#D0D7DE] p-5 shadow-sm">
-          <h2 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
-            Corridor Risk Multipliers
-          </h2>
-          <div className="space-y-2">
-            {CORRIDOR_MULTIPLIERS.map((c) => (
-              <div key={c.corridor} className="flex justify-between items-center text-sm">
-                <span className="font-mono text-slate-700">{c.corridor}</span>
-                <span className="font-bold text-amber-600 font-mono">{c.multiplier.toFixed(2)}x</span>
-              </div>
-            ))}
+          {/* Corridors */}
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
+            <h3 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
+              Corridor Risk Multipliers
+            </h3>
+            <div className="space-y-3">
+              {corridors.map((c: any) => (
+                <div key={c.corridor} className="flex justify-between items-center p-2 bg-slate-50 rounded">
+                  <span className="font-mono text-sm text-slate-700">{c.corridor}</span>
+                  <span className="font-bold text-amber-600 font-mono text-lg">{c.multiplier.toFixed(2)}x</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[9px] text-slate-500 mt-4">
+              These multipliers are applied to base scores based on origin-destination corridor risk.
+            </p>
           </div>
-          <p className="text-[9px] text-slate-500 mt-4 italic">
-            Read-only. Configured in risk model.
-          </p>
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Calibration Settings */}
-        <div className="bg-white rounded-sm border border-[#D0D7DE] p-5 shadow-sm space-y-4">
-          <h2 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono">
-            Calibration Settings
-          </h2>
+// CONFIGURATION TAB
+function ConfigurationTab({ config, setConfig }: any) {
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-lg font-bold text-[#0B1F33] mb-4">Model Settings</h2>
 
+        <div className="grid grid-cols-2 gap-6">
           {/* Calibration Multiplier */}
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-bold text-[#112E51] uppercase font-mono">
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+            <div className="flex justify-between items-center mb-4">
+              <label className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono">
                 Calibration Multiplier
               </label>
-              <span className="text-lg font-bold text-blue-600 font-mono">
+              <span className="text-xl font-bold text-blue-600 font-mono">
                 {config.calibration_multiplier.toFixed(2)}x
               </span>
             </div>
@@ -477,17 +500,19 @@ export default function V2AITuningPage() {
               onChange={(e) => setConfig({ ...config, calibration_multiplier: parseFloat(e.target.value) })}
               className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer"
             />
-            <p className="text-[9px] text-slate-500 mt-2">Applied to all scores before final ranking</p>
+            <p className="text-[9px] text-slate-600 mt-3">
+              Applied to all component scores before final ranking. Higher values increase overall risk scores.
+            </p>
           </div>
 
           {/* Auto-Hold Threshold */}
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <label className="text-xs font-bold text-[#112E51] uppercase font-mono">
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+            <div className="flex justify-between items-center mb-4">
+              <label className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono">
                 Auto-Hold Threshold
               </label>
               <span
-                className={`text-lg font-bold font-mono ${
+                className={`text-xl font-bold font-mono ${
                   config.auto_hold_threshold >= 80 ? 'text-[#D83933]' : 'text-slate-600'
                 }`}
               >
@@ -503,18 +528,148 @@ export default function V2AITuningPage() {
               onChange={(e) => setConfig({ ...config, auto_hold_threshold: parseInt(e.target.value) })}
               className="w-full h-2 bg-gray-200 rounded-full appearance-none cursor-pointer"
             />
-            <p className="text-[9px] text-slate-500 mt-2">Shipments ≥ this score auto-flagged</p>
+            <p className="text-[9px] text-slate-600 mt-3">
+              Shipments with scores ≥ this value are automatically flagged for review.
+            </p>
+          </div>
+        </div>
+
+        {/* Info Box */}
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-sm flex items-start space-x-3">
+          <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <p className="text-[9px] text-blue-800">
+            Configuration changes apply immediately to all future shipment evaluations. Previously scored shipments retain their original scores.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// PERFORMANCE METRICS TAB
+function PerformanceMetricsTab({ metrics }: any) {
+  if (!metrics) {
+    return (
+      <div className="flex items-center justify-center p-12 text-slate-500">
+        No metrics data available
+      </div>
+    );
+  }
+
+  const chartData = [
+    { name: 'AUC-ROC', value: metrics.auc_roc },
+    { name: 'Precision', value: metrics.precision },
+    { name: 'Recall', value: metrics.recall },
+    { name: 'F1 Score', value: metrics.f1_score },
+  ];
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div>
+        <h2 className="text-lg font-bold text-[#0B1F33] mb-1">Model Performance</h2>
+        <p className="text-xs text-slate-600 mb-6">
+          Live metrics from the latest model validation run
+        </p>
+
+        <div className="grid grid-cols-2 gap-6">
+          {/* Metrics Table */}
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+            <h3 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
+              Validation Metrics
+            </h3>
+            <div className="space-y-3">
+              {[
+                { label: 'AUC-ROC', value: metrics.auc_roc, target: 0.75 },
+                { label: 'Precision', value: metrics.precision, target: 0.70 },
+                { label: 'Recall', value: metrics.recall, target: 0.65 },
+                { label: 'F1 Score', value: metrics.f1_score, target: 0.67 },
+              ].map((metric) => {
+                const passed = metric.value >= metric.target;
+                return (
+                  <div key={metric.label} className="flex justify-between items-center p-2 bg-slate-50 rounded">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-700 uppercase font-mono">
+                        {metric.label}
+                      </p>
+                      <p className="text-[9px] text-slate-500">Target: {metric.target.toFixed(2)}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-lg font-bold text-slate-900 font-mono">
+                        {metric.value.toFixed(4)}
+                      </span>
+                      <span
+                        className={`px-2 py-1 rounded text-[9px] font-bold ${
+                          passed
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {passed ? 'PASS' : 'FAIL'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Info */}
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-sm">
-            <div className="flex items-start space-x-2">
-              <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-[9px] text-blue-800">
-                Changes apply to all future shipment evaluations immediately.
+          {/* Confusion Matrix */}
+          <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+            <h3 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
+              Confusion Matrix
+            </h3>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <div className="bg-green-100 p-3 rounded text-center">
+                <div className="text-[9px] font-bold text-green-900">True Positives</div>
+                <div className="text-2xl font-bold text-green-700 font-mono">
+                  {metrics.true_positives.toLocaleString()}
+                </div>
+              </div>
+              <div className="bg-red-100 p-3 rounded text-center">
+                <div className="text-[9px] font-bold text-red-900">False Positives</div>
+                <div className="text-2xl font-bold text-red-700 font-mono">
+                  {metrics.false_positives.toLocaleString()}
+                </div>
+              </div>
+              <div className="bg-green-100 p-3 rounded text-center">
+                <div className="text-[9px] font-bold text-green-900">True Negatives</div>
+                <div className="text-2xl font-bold text-green-700 font-mono">
+                  {metrics.true_negatives.toLocaleString()}
+                </div>
+              </div>
+              <div className="bg-red-100 p-3 rounded text-center">
+                <div className="text-[9px] font-bold text-red-900">False Negatives</div>
+                <div className="text-2xl font-bold text-red-700 font-mono">
+                  {metrics.false_negatives.toLocaleString()}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[9px] text-slate-600 space-y-1 pt-4 border-t border-slate-200">
+              <p>
+                <strong>Total Validated:</strong> {metrics.total_validated.toLocaleString()} shipments
+              </p>
+              <p>
+                <strong>Decision Threshold:</strong> Risk Score ≥ {metrics.threshold}
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Performance Chart */}
+        <div className="mt-6 bg-white rounded-sm border border-[#D0D7DE] p-5">
+          <h3 className="text-sm font-bold text-[#0B1F33] uppercase tracking-wide font-mono mb-4">
+            Metric Performance
+          </h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" tick={{ fontSize: 9 }} />
+              <YAxis domain={[0, 1]} tick={{ fontSize: 9 }} />
+              <Tooltip formatter={(value: any) => typeof value === 'number' ? (value as number).toFixed(4) : String(value)} />
+              <Bar dataKey="value" fill="#005EA2" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     </div>

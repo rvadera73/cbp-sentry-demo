@@ -1,5 +1,5 @@
 """Data service — SQLite CRUD abstraction layer"""
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import logging
@@ -11,9 +11,10 @@ from datetime import datetime
 from db import (
     init_db, create_shipment, get_shipment, get_all_shipments, get_shipments_count, update_shipment,
     get_shipments_stats, search_shipments, get_corridors, get_corridor_detail, create_or_update_corridor,
-    create_corridor_duty, create_enforcement_action, get_pre_manifest_vessels, create_or_update_pre_manifest_vessel
+    create_corridor_duty, create_enforcement_action, get_pre_manifest_vessels, create_or_update_pre_manifest_vessel,
+    create_upload_job, get_upload_job, update_upload_job, batch_create_shipments, batch_update_risk_scores, find_existing_source_ids
 )
-from models import Shipment, ShipmentCreate, ShipmentUpdate
+from models import Shipment, ShipmentCreate, ShipmentUpdate, UploadJobCreate, UploadJobUpdate, UploadJobStatus
 import sqlite3
 
 logger = logging.getLogger(__name__)
@@ -112,16 +113,8 @@ def seed_corridors():
 
 def seed_demo_data():
     """
-    SINGLE SOURCE OF TRUTH: Load manifest JSON into database
-
-    The manifest JSON is the authoritative data source.
-    All shipment IDs come from manifest (SHP-000001, etc.)
-    Database is populated ONCE from manifest JSON on first startup.
-
-    Priority:
-    1. If manifest_demo_cases.json exists (CBP demo/fixture mode) → load it
-    2. Else if manifest_feb_march_2026_with_isf.json exists → load the full manifest
-    3. Else error
+    Load manifest JSON files into database
+    Loads BOTH demo cases (30) and full manifest (1191) for complete data
     """
     conn = sqlite3.connect("/app/data/cbp_sentry.db")
     cursor = conn.cursor()
@@ -134,135 +127,167 @@ def seed_demo_data():
         conn.close()
         return
 
-    # Determine which manifest to load (priority: demo > full)
     demo_file = Path("/app/seed_data/manifest_demo_cases.json")
     full_file = Path("/app/seed_data/manifest_feb_march_2026_with_isf.json")
 
-    # Priority: 1) Demo cases (30 showcase cases with good risk distribution)
-    #           2) Full manifest (1500+ real cases)
+    manifest_files = []
     if demo_file.exists():
-        manifest_file = demo_file
-        logger.info(f"📦 INITIALIZING DATABASE from DEMO manifest (30 showcase cases)")
-    else:
-        manifest_file = full_file
-        logger.info(f"📦 INITIALIZING DATABASE from FULL manifest (1500+ cases)")
+        manifest_files.append(demo_file)
+        print(f"📦 Will load DEMO manifest (30 showcase cases)", flush=True)
+        logger.info(f"📦 Will load DEMO manifest (30 showcase cases)")
+    if full_file.exists():
+        manifest_files.append(full_file)
+        print(f"📦 Will load FULL manifest (1191 cases)", flush=True)
+        logger.info(f"📦 Will load FULL manifest (1191 cases)")
 
-    logger.info(f"   File: {manifest_file}")
-
-    if not manifest_file.exists():
+    if not manifest_files:
         error_msg = (
-            f"\n\n❌ CRITICAL: Manifest file not found at {manifest_file}\n"
-            f"   This file MUST exist to populate the database.\n"
-            f"   All shipments in the system come from this manifest.\n\n"
-            f"   Fix:\n"
-            f"   1. Ensure one of these files exists:\n"
-            f"      - services/data/seed_data/manifest_demo_cases.json (CBP demo)\n"
-            f"      - services/data/seed_data/manifest_feb_march_2026_with_isf.json (full)\n"
-            f"   2. Run: docker-compose down -v && docker-compose up\n"
-            f"   3. OR: bash scripts/unified-setup.sh local\n\n"
+            f"\n\n❌ CRITICAL: No manifest files found\n"
+            f"   Expected files:\n"
+            f"      - services/data/seed_data/manifest_demo_cases.json\n"
+            f"      - services/data/seed_data/manifest_feb_march_2026_with_isf.json\n\n"
         )
         logger.error(error_msg)
         conn.close()
         raise FileNotFoundError(error_msg)
 
-    # Load and parse manifest
-    try:
-        with open(manifest_file) as f:
-            manifest_records = json.load(f)
-        logger.info(f"✅ Loaded {len(manifest_records)} records from manifest")
-    except Exception as e:
-        error_msg = f"\n❌ Failed to parse manifest JSON: {e}\n"
-        logger.error(error_msg)
-        conn.close()
-        raise ValueError(error_msg)
+    total_loaded = 0
+    for manifest_file in manifest_files:
+        try:
+            print(f"Processing file: {manifest_file.name}", flush=True)
+            with open(manifest_file) as f:
+                manifest_records = json.load(f)
+            print(f"✅ Loaded {len(manifest_records)} records from {manifest_file.name}", flush=True)
+            logger.info(f"✅ Loaded {len(manifest_records)} records from {manifest_file.name}")
 
-    # Convert manifest to shipment records (preserve all IDs from manifest)
-    shipments = []
-    for m in manifest_records:
-        # Parse element_9 sub-object if present
-        element_9 = m.get("element_9", {})
-        port_calls = m.get("port_calls", [])
+            # Convert and insert records
+            for m in manifest_records:
+                element_9 = m.get("element_9", {})
+                port_calls = m.get("port_calls", [])
 
-        shipments.append({
-            "id": m.get("id", ""),
-            "manifest_id": m.get("manifest_id", ""),
-            "shipper_name": m.get("shipper_name", ""),
-            "consignee_name": m.get("consignee_name", ""),
-            "origin_country": m.get("origin_country", ""),
-            "destination_country": m.get("destination_country", ""),
-            "hs_code": m.get("hs_code", ""),
-            "declared_value_usd": m.get("declared_value_usd", 0),
-            "declared_weight_kg": m.get("declared_weight_kg", 0),
-            "vessel_name": m.get("vessel_name", ""),
-            "vessel_imo": m.get("vessel_imo"),
-            "vessel_flag": m.get("vessel_flag"),
-            "status": m.get("status", "filed"),
-            "risk_score": m.get("risk_score", 50),
-            "shipper_country": m.get("shipper_country") or m.get("origin_country", ""),
-            "consignee_country": m.get("consignee_country") or m.get("destination_country", ""),
-            "shipper_age_months": m.get("shipper_age_months"),
-            "dwell_days": m.get("dwell_days"),
-            "ais_stuffing_country": m.get("ais_stuffing_country"),
-            "port_calls": json.dumps(port_calls) if port_calls else None,
-            "element9_is_mismatch": 1 if element_9.get("is_mismatch") else 0,
-            "element9_confidence": element_9.get("confidence"),
-            "element9_declared_country": element_9.get("declared_country"),
-            "element9_actual_country": element_9.get("actual_stuffing_country"),
-            "ad_cvd_rate": m.get("ad_cvd_rate"),
-            "ad_cvd_applicable": 1 if m.get("ad_cvd_applicable") else 0,
-            "h1_score": m.get("h1_score"),
-            "h2_score": m.get("h2_score"),
-            "h3_score": m.get("h3_score"),
-        })
+                cursor.execute("""
+                    INSERT OR IGNORE INTO shipments (
+                        id, manifest_id, shipper_name, consignee_name, origin_country,
+                        destination_country, hs_code, declared_value_usd, declared_weight_kg,
+                        vessel_name, vessel_imo, vessel_flag, status, risk_score,
+                        shipper_country, consignee_country, shipper_age_months,
+                        dwell_days, ais_stuffing_country, port_calls,
+                        element9_is_mismatch, element9_confidence, element9_declared_country, element9_actual_country,
+                        ad_cvd_rate, ad_cvd_applicable, h1_score, h2_score, h3_score, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (
+                    m.get("id", ""),
+                    m.get("manifest_id", ""),
+                    m.get("shipper_name", ""),
+                    m.get("consignee_name", ""),
+                    m.get("origin_country", ""),
+                    m.get("destination_country", ""),
+                    m.get("hs_code", ""),
+                    m.get("declared_value_usd", 0),
+                    m.get("declared_weight_kg", 0),
+                    m.get("vessel_name", ""),
+                    m.get("vessel_imo"),
+                    m.get("vessel_flag"),
+                    m.get("status", "filed"),
+                    m.get("risk_score", 50),
+                    m.get("shipper_country") or m.get("origin_country", ""),
+                    m.get("consignee_country") or m.get("destination_country", ""),
+                    m.get("shipper_age_months"),
+                    m.get("dwell_days"),
+                    m.get("ais_stuffing_country"),
+                    json.dumps(port_calls) if port_calls else None,
+                    1 if element_9.get("is_mismatch") else 0,
+                    element_9.get("confidence"),
+                    element_9.get("declared_country"),
+                    element_9.get("actual_stuffing_country"),
+                    m.get("ad_cvd_rate"),
+                    1 if m.get("ad_cvd_applicable") else 0,
+                    m.get("h1_score"),
+                    m.get("h2_score"),
+                    m.get("h3_score")
+                ))
+            total_loaded += len(manifest_records)
 
-    # Insert into database
-    for shipment in shipments:
-        cursor.execute("""
-            INSERT OR IGNORE INTO shipments (
-                id, manifest_id, shipper_name, consignee_name, origin_country,
-                destination_country, hs_code, declared_value_usd, declared_weight_kg,
-                vessel_name, vessel_imo, vessel_flag, status, risk_score,
-                shipper_country, consignee_country, shipper_age_months,
-                dwell_days, ais_stuffing_country, port_calls,
-                element9_is_mismatch, element9_confidence, element9_declared_country, element9_actual_country,
-                ad_cvd_rate, ad_cvd_applicable, h1_score, h2_score, h3_score, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-        """, (
-            shipment["id"],
-            shipment["manifest_id"],
-            shipment["shipper_name"],
-            shipment["consignee_name"],
-            shipment["origin_country"],
-            shipment["destination_country"],
-            shipment["hs_code"],
-            shipment["declared_value_usd"],
-            shipment["declared_weight_kg"],
-            shipment["vessel_name"],
-            shipment["vessel_imo"],
-            shipment["vessel_flag"],
-            shipment["status"],
-            shipment["risk_score"],
-            shipment["shipper_country"],
-            shipment["consignee_country"],
-            shipment["shipper_age_months"],
-            shipment["dwell_days"],
-            shipment["ais_stuffing_country"],
-            shipment["port_calls"],
-            shipment["element9_is_mismatch"],
-            shipment["element9_confidence"],
-            shipment["element9_declared_country"],
-            shipment["element9_actual_country"],
-            shipment["ad_cvd_rate"],
-            shipment["ad_cvd_applicable"],
-            shipment["h1_score"],
-            shipment["h2_score"],
-            shipment["h3_score"]
-        ))
+        except Exception as e:
+            error_msg = f"\n❌ Failed to load {manifest_file.name}: {e}\n"
+            logger.error(error_msg)
+            conn.close()
+            raise ValueError(error_msg)
 
+    print(f"Committing {total_loaded} total records to database...", flush=True)
     conn.commit()
-    logger.info(f"✅ Database initialized: {len(shipments)} shipments with SHP-* IDs")
-    logger.info(f"   All shipments come from manifest JSON - single source of truth")
+    cursor.execute("SELECT COUNT(*) FROM shipments")
+    final_count = cursor.fetchone()[0]
+    print(f"✅ Database initialized: {final_count} total shipments loaded", flush=True)
+    logger.info(f"✅ Database initialized: {final_count} total shipments loaded from all manifests")
     conn.close()
+
+
+def seed_pre_manifest_vessels():
+    """Load pre-manifest vessel data from seed JSON"""
+    import sqlite3
+
+    try:
+        seed_file = Path("/app/seed_data/pre_manifest_vessels_seed.json")
+        if not seed_file.exists():
+            logger.warning(f"⚓ Pre-manifest vessels seed file not found at {seed_file}, skipping vessel seeding")
+            return
+
+        with open(seed_file) as f:
+            vessels_data = json.load(f)
+
+        conn = sqlite3.connect("/app/data/cbp_sentry.db")
+        cursor = conn.cursor()
+
+        # Check if pre-manifest vessels already exist
+        cursor.execute("SELECT COUNT(*) FROM pre_manifest_vessels")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            logger.info(f"✅ Pre-manifest vessels already seeded ({count} records), skipping")
+            conn.close()
+            return
+
+        logger.info(f"⚓ INITIALIZING PRE-MANIFEST VESSELS from seed data")
+
+        total_vessels = 0
+        for corridor_data in vessels_data:
+            corridor_id = corridor_data["corridor_id"]
+            vessels = corridor_data.get("vessels", [])
+            logger.info(f"   Loading {len(vessels)} vessels for corridor: {corridor_id}")
+
+            for vessel in vessels:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO pre_manifest_vessels
+                    (vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country,
+                     destination_port, destination_country, corridor_id, eta_us, ais_status,
+                     current_lat, current_lon, speed_knots, last_refreshed_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    vessel.get("vessel_imo"),
+                    vessel.get("vessel_name"),
+                    vessel.get("mmsi"),
+                    vessel.get("flag_state"),
+                    vessel.get("origin_port"),
+                    vessel.get("origin_country"),
+                    vessel.get("destination_port"),
+                    vessel.get("destination_country"),
+                    corridor_id,
+                    vessel.get("eta_us"),
+                    vessel.get("ais_status"),
+                    vessel.get("current_lat"),
+                    vessel.get("current_lon"),
+                    vessel.get("speed_knots"),
+                    datetime.utcnow().isoformat()
+                ))
+                total_vessels += 1
+
+        conn.commit()
+        logger.info(f"✅ Pre-manifest vessels initialized: {total_vessels} vessels across {len(vessels_data)} corridors")
+        conn.close()
+
+    except Exception as e:
+        logger.error(f"❌ Failed to seed pre-manifest vessels: {e}")
+        raise
 
 
 @asynccontextmanager
@@ -271,6 +296,7 @@ async def lifespan(app: FastAPI):
     init_db()
     seed_demo_data()
     seed_corridors()
+    seed_pre_manifest_vessels()
     logger.info("Data service initialized")
     yield
     # Shutdown
@@ -326,20 +352,56 @@ async def get_shipment_endpoint(shipment_id: str) -> dict:
 
 @app.get("/shipments", response_model=dict)
 async def list_shipments(
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    corridor_id: Optional[str] = None,
+    risk_min: Optional[float] = None,
+    risk_max: Optional[float] = None,
     status: Optional[str] = None
 ) -> dict:
-    """List all shipments with pagination"""
-    shipments = get_all_shipments(limit=limit, offset=offset, status=status)
-    return {"data": shipments, "count": len(shipments)}
+    """List shipments with server-side filtering by corridor and risk level.
+
+    Query params:
+    - limit: Results per page (default 100, max 100)
+    - offset: Pagination offset
+    - corridor_id: Filter by corridor (e.g. "VN→US")
+    - risk_min: Minimum risk score (e.g. 50 for elevated+critical)
+    - risk_max: Maximum risk score
+    - status: Filter by shipment status
+    """
+    shipments = get_all_shipments(
+        limit=limit,
+        offset=offset,
+        corridor_id=corridor_id,
+        risk_min=risk_min,
+        risk_max=risk_max,
+        status=status
+    )
+    # Get accurate count with same filters
+    total = get_shipments_count(
+        corridor_id=corridor_id,
+        risk_min=risk_min,
+        risk_max=risk_max,
+        status=status
+    )
+    return {"data": shipments, "count": total}
 
 
 @app.get("/shipments/meta/count")
-async def shipments_count(status: Optional[str] = None) -> dict:
-    """Get total count of manifest shipments"""
-    total = get_shipments_count(status=status)
-    return {"total": total}
+async def shipments_count(
+    corridor_id: Optional[str] = None,
+    risk_min: Optional[float] = None,
+    risk_max: Optional[float] = None,
+    status: Optional[str] = None
+) -> dict:
+    """Get total count of manifest shipments with optional filtering"""
+    total = get_shipments_count(
+        corridor_id=corridor_id,
+        risk_min=risk_min,
+        risk_max=risk_max,
+        status=status
+    )
+    return {"count": total}
 
 
 @app.patch("/shipments/{shipment_id}", response_model=Shipment)
@@ -477,10 +539,14 @@ async def create_corridor_endpoint(data: dict) -> dict:
 
 
 @app.get("/pre-manifest/vessels", response_model=dict)
-async def list_pre_manifest_vessels() -> dict:
-    """List all pre-manifest vessels inbound to US"""
+async def list_pre_manifest_vessels(corridor_id: Optional[str] = None) -> dict:
+    """List pre-manifest vessels, optionally filtered by corridor.
+
+    Query params:
+    - corridor_id: Filter by corridor (e.g. "VN→US")
+    """
     try:
-        vessels = get_pre_manifest_vessels()
+        vessels = get_pre_manifest_vessels(corridor_id=corridor_id)
         return {
             "data": vessels,
             "count": len(vessels),
@@ -537,6 +603,171 @@ async def refresh_status() -> dict:
         "pre_manifest_vessels_last_refreshed": None,
         "note": "Refresh is performed by background scheduler every 30 minutes (vessels) and daily (duties)"
     }
+
+
+@app.post("/data/reset-to-demo")
+async def reset_to_demo() -> dict:
+    """Reset database to demo state by removing user-uploaded shipments and keeping seed data"""
+    try:
+        db_path = "/app/data/cbp_sentry.db"
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Delete all non-seed shipments (seed data has IDs like SHP-XXXXX or MNF-xxxx format)
+        # User uploads will have manifest_source_id set, so we can delete those
+        cursor.execute("DELETE FROM shipments WHERE manifest_source_id IS NOT NULL")
+        deleted_count = cursor.rowcount
+
+        conn.commit()
+
+        # Get remaining seed shipment count
+        cursor.execute("SELECT COUNT(*) FROM shipments WHERE id LIKE 'SHP-%'")
+        seed_count = cursor.fetchone()[0]
+
+        conn.close()
+
+        logger.info(f"Database reset: deleted {deleted_count} user rows, {seed_count} seed rows remain")
+
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "seed_count": seed_count,
+            "message": "Database reset to demo state"
+        }
+    except Exception as e:
+        logger.error(f"Reset to demo error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============= MANIFEST UPLOAD JOBS =============
+
+@app.post("/upload-jobs", response_model=dict)
+async def create_upload_job_endpoint(job: UploadJobCreate) -> dict:
+    """Create a new manifest upload job"""
+    try:
+        from db import create_upload_job as db_create_upload_job
+        job_id = db_create_upload_job(job.id, job.filename, job.total_rows)
+        return {
+            "id": job_id,
+            "filename": job.filename,
+            "total_rows": job.total_rows,
+            "status": "pending"
+        }
+    except Exception as e:
+        logger.error(f"Create upload job failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/upload-jobs/{job_id}", response_model=dict)
+async def get_upload_job_endpoint(job_id: str) -> dict:
+    """Get upload job status"""
+    try:
+        from db import get_upload_job as db_get_upload_job
+        job = db_get_upload_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Calculate elapsed time
+        created_at = job.get('created_at')
+        completed_at = job.get('completed_at')
+        elapsed_seconds = None
+        if created_at and completed_at:
+            from datetime import datetime
+            created = datetime.fromisoformat(created_at.replace('Z', '+00:00')) if isinstance(created_at, str) else created_at
+            completed = datetime.fromisoformat(completed_at.replace('Z', '+00:00')) if isinstance(completed_at, str) else completed_at
+            elapsed_seconds = (completed - created).total_seconds()
+
+        return {
+            **job,
+            "elapsed_seconds": elapsed_seconds,
+            "progress_pct": int((job.get('processed_rows', 0) / max(job.get('total_rows', 1), 1)) * 100)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get upload job failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/upload-jobs/{job_id}", response_model=dict)
+async def update_upload_job_endpoint(job_id: str, update: UploadJobUpdate) -> dict:
+    """Update upload job progress"""
+    try:
+        from db import update_upload_job as db_update_upload_job, get_upload_job as db_get_upload_job
+
+        # Build update dict with only non-None fields
+        fields = {k: v for k, v in update.dict(exclude_unset=True).items() if v is not None}
+        if not fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        db_update_upload_job(job_id, **fields)
+
+        # Return updated job
+        job = db_get_upload_job(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        return job
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Update upload job failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/shipments/batch", response_model=dict)
+async def batch_create_shipments_endpoint(rows: List[dict]) -> dict:
+    """Batch create shipments"""
+    try:
+        from db import batch_create_shipments
+
+        if not rows:
+            return {"ids": []}
+
+        # All rows should have the same manifest_id
+        manifest_id = rows[0].get('manifest_id')
+        if not manifest_id:
+            raise HTTPException(status_code=400, detail="manifest_id required for all rows")
+
+        ids = batch_create_shipments(rows, manifest_id)
+        return {"ids": ids}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Batch create shipments failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/shipments/bulk-risk-update", response_model=dict)
+async def bulk_update_risk_scores_endpoint(updates: List[dict]) -> dict:
+    """Batch update risk scores for shipments"""
+    try:
+        from db import batch_update_risk_scores
+
+        if updates:
+            batch_update_risk_scores(updates)
+
+        return {"updated_count": len(updates)}
+    except Exception as e:
+        logger.error(f"Bulk update risk scores failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/shipments/check-duplicates", response_model=dict)
+async def check_duplicate_source_ids_endpoint(source_ids: List[str] = Body(...)) -> dict:
+    """Check which source IDs already exist"""
+    try:
+        from db import find_existing_source_ids
+
+        existing = find_existing_source_ids(source_ids)
+        return {
+            "total_checked": len(source_ids),
+            "duplicates": list(existing),
+            "duplicate_count": len(existing)
+        }
+    except Exception as e:
+        logger.error(f"Check duplicates failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

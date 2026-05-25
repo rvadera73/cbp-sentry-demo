@@ -58,41 +58,35 @@ export function useV2Cases(): UseV2CasesReturn {
       setLoading(true);
       setError(null);
 
-      const response = await api.getShipments(50, 0);
-      let shipmentData = response.shipments || [];
+      console.log('[useV2Cases] Starting fetch...');
 
-      // Enrich shipments with detailed risk breakdown via API endpoint
-      shipmentData = await Promise.all(
-        shipmentData.map(async (s: any) => {
-          try {
-            // Fetch detailed breakdown for each shipment using the api client
-            // The backend endpoint /api/data/shipments/{id}?include_breakdown=true returns enriched data
-            const response = await fetch(`/api/data/shipments/${s.id || s.shipment_id}?include_breakdown=true`, {
-              method: 'GET',
-              headers: { 'Content-Type': 'application/json' }
-            });
-            if (response.ok) {
-              const enrichedShipment = await response.json();
-              return {
-                ...s,
-                risk_breakdown: enrichedShipment.risk_breakdown,
-                audit_trail: enrichedShipment.audit_trail,
-                ai_synthesis: enrichedShipment.ai_synthesis,
-                // Update risk_score if refined by Altana
-                risk_score: enrichedShipment.risk_score || s.risk_score
-              };
-            }
-            return s;
-          } catch (e) {
-            // If breakdown fetch fails, return original shipment
-            console.warn(`Failed to fetch risk breakdown for shipment ${s.id}:`, e);
-            return s;
-          }
-        })
-      );
+      // Fetch elevated+critical risk shipments (risk >= 50)
+      const params = new URLSearchParams({
+        risk_min: '50',
+        limit: '100',
+        offset: '0'
+      });
+
+      const url = `/api/shipments?${params}`;
+      console.log('[useV2Cases] Fetching from:', url);
+
+      const response = await fetch(url);
+      console.log('[useV2Cases] Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch shipments: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[useV2Cases] Data received:', data.data?.length, 'items, count:', data.count);
+      const shipmentData = data.data || [];
 
       // Map shipments with all API fields
       const mappedShipments: Shipment[] = shipmentData.map((s: any): Shipment => {
+        // Use the correct country fields from API response
+        const originCountry = s.shipper_country || 'XX';
+        const destCountry = s.consignee_country || 'US';
+
         // Parse h2_signals
         const h2Signals = Array.isArray(s.h2_signals) ? s.h2_signals :
                          typeof s.h2_signals === 'string' ? JSON.parse(s.h2_signals) : [];
@@ -104,21 +98,22 @@ export function useV2Cases(): UseV2CasesReturn {
         }
 
         // Parse port_calls
-        let portCalls = [s.origin_country || 'XX', 'SG', s.destination_country || 'US'];
+        // (originCountry and destCountry are already defined above)
+        let portCalls = [originCountry, 'SG', destCountry];
         if (s.port_calls) {
           try {
             portCalls = typeof s.port_calls === 'string' ? JSON.parse(s.port_calls) : s.port_calls;
           } catch (e) {
-            portCalls = [s.origin_country || 'XX', 'SG', s.destination_country || 'US'];
+            portCalls = [originCountry, 'SG', destCountry];
           }
         }
 
         return {
           shipment_id: s.id?.toString() || `SH-${Math.random().toString(36).substring(7)}`,
-          origin_country: s.origin_country || 'XX',
-          destination_country: s.destination_country || 'US',
+          origin_country: originCountry,
+          destination_country: destCountry,
           declared_origin: s.element9_declared_country || s.shipper_country || 'XX',
-          suspected_origin: s.element9_actual_country || s.origin_country || 'XX',
+          suspected_origin: s.element9_actual_country || originCountry || 'XX',
           product_code: s.commodity_code || s.hs_code || '9999',
           product_description: s.commodity_name || getCommodityName(s.commodity_code || s.hs_code),
           route: portCalls,
@@ -227,11 +222,12 @@ export function useV2Cases(): UseV2CasesReturn {
         };
       });
 
+      console.log(`[useV2Cases] Successfully mapped ${mappedCases.length} cases`);
       setCases(mappedCases);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch cases';
       setError(message);
-      console.error('useV2Cases error:', err);
+      console.error('[useV2Cases] ERROR:', err);
     } finally {
       setLoading(false);
     }

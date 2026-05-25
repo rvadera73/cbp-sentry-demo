@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { ChevronDown, Download, Send, AlertCircle, CheckCircle2, Circle } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, RadarChart, Radar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import React, { useState, useRef, useMemo } from 'react';
+import { Download, Send, ChevronRight, FileText, AlertTriangle } from 'lucide-react';
+import { computeRiskBreakdown } from '../utils/riskBreakdown';
 
 interface ReferralPackageViewerProps {
   selectedReferral: any;
@@ -25,814 +25,507 @@ export function ReferralPackageViewer({
   selectedCaseShipments = [],
   onSubmit,
 }: ReferralPackageViewerProps) {
-  const [activeSection, setActiveSection] = useState('executive-summary');
-  const [referralStage, setReferralStage] = useState<'review' | 'narrative' | 'approve' | 'submitted'>('review');
-  const [visitedSections, setVisitedSections] = useState<Set<string>>(new Set(['executive-summary']));
+  const [selectedSectionId, setSelectedSectionId] = useState<string | null>(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const shipment = selectedCaseShipments?.[0];
 
-  const sections = [
-    { id: 'executive-summary', label: 'Executive Summary & Recommendation' },
-    { id: 'table-3-1', label: 'Table 3-1: Shipment Identification' },
-    { id: 'table-3-2', label: 'Table 3-2: Shipment Line-Item Detail' },
-    { id: 'table-3-3', label: 'Table 3-3: Routing History' },
-    { id: 'table-3-4', label: 'Table 3-4: Parties & Roles' },
-    { id: 'table-3-5', label: 'Table 3-5: Entity Ownership Chain' },
-    { id: 'table-3-6', label: 'Table 3-6: Historical Import Pattern' },
-    { id: 'table-3-7', label: 'Table 3-7: Trade Flow Intelligence' },
-    { id: 'table-3-8', label: 'Table 3-8: Document Review' },
-    { id: 'table-3-9', label: 'Table 3-9: Document Consistency' },
-    { id: 'table-3-10', label: 'Table 3-10: Manufacturing Verification' },
-    { id: 'table-3-11', label: 'Table 3-11: Risk Indicator Summary' },
-    { id: 'table-3-12', label: 'Table 3-12: Risk Score Breakdown' },
-    { id: 'table-3-13', label: 'Table 3-13: What-If Scenarios' },
-    { id: 'table-3-14', label: 'Table 3-14: Data Sources' },
-    { id: 'narrative', label: 'Officer Narrative & Submit' },
-  ];
+  const enrichedShipment = useMemo(() => {
+    if (!shipment) return null;
 
-  const handleSectionClick = (sectionId: string) => {
-    setActiveSection(sectionId);
-    setVisitedSections(prev => new Set(prev).add(sectionId));
+    let risk_breakdown = shipment.risk_breakdown || computeRiskBreakdown(shipment);
+
+    if (selectedReferral?.sections?.section_3_12_score_breakdown?.calculation_table) {
+      risk_breakdown = {
+        ...risk_breakdown,
+        calculation_table: selectedReferral.sections.section_3_12_score_breakdown.calculation_table,
+        confidence_interval: selectedReferral.sections.section_3_12_score_breakdown.confidence_interval || risk_breakdown?.confidence_interval,
+      };
+    }
+
+    return {
+      ...shipment,
+      risk_breakdown,
+      audit_trail: selectedReferral?.audit_trail || shipment.audit_trail,
+    };
+  }, [shipment, selectedReferral]);
+
+  // Get all sections from referral package
+  const sections = useMemo(() => {
+    if (!selectedReferral?.sections) return [];
+
+    const sectionOrder = [
+      'section_3_1_shipment_identification',
+      'section_3_2_line_items',
+      'section_3_3_routing_history',
+      'section_3_4_parties_and_roles',
+      'section_3_5_entity_ownership_chain',
+      'section_3_6_historical_import_pattern',
+      'section_3_7_trade_flow_intelligence',
+      'section_3_8_document_review',
+      'section_3_9_document_consistency',
+      'section_3_10_supplier_verification',
+      'section_3_11_risk_indicators',
+      'section_3_12_score_breakdown',
+      'section_3_13_what_if_scenarios',
+      'section_3_14_data_sources',
+    ];
+
+    return sectionOrder.map(id => ({
+      id,
+      title: selectedReferral.sections[id]?.title || 'Unknown Section',
+      data: selectedReferral.sections[id],
+    })).filter(s => s.data);
+  }, [selectedReferral]);
+
+  // Set default section on load
+  React.useEffect(() => {
+    if (!selectedSectionId && sections.length > 0) {
+      setSelectedSectionId(sections[0].id);
+    }
+  }, [sections, selectedSectionId]);
+
+  const selectedSection = sections.find(s => s.id === selectedSectionId);
+
+  const handleExportPDF = async () => {
+    setExportLoading(true);
+    try {
+      const recommendation = selectedCase?.risk_score >= 80
+        ? 'HOLD FOR EXAMINATION'
+        : selectedCase?.risk_score >= 50
+        ? 'EXAMINE'
+        : 'CLEAR';
+
+      const exportRequest = {
+        case_id: selectedCase?.case_id || 'unknown',
+        shipment_id: shipment?.shipment_id || 'unknown',
+        risk_score: selectedCase?.risk_score || 0,
+        recommendation: recommendation,
+        shipper_name: shipment?.shipper_name || 'Unknown',
+        commodity_name: shipment?.commodity_name || 'Unknown',
+        origin_country: shipment?.origin_country || 'Unknown',
+        destination_country: shipment?.destination_country || 'Unknown',
+        shipment_narrative: referralNarrative,
+      };
+
+      const response = await fetch('/api/referral/export-pdf-v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(exportRequest),
+      });
+
+      if (!response.ok) throw new Error(`PDF export failed: ${response.statusText}`);
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `CBP-EAPA-Referral-${selectedCase?.case_id || 'unknown'}-${Date.now()}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      alert(`Failed to export PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setExportLoading(false);
+    }
   };
 
-  const SectionButton = ({ section }: { section: typeof sections[0] }) => {
-    const isVisited = visitedSections.has(section.id);
-    return (
-      <button
-        onClick={() => handleSectionClick(section.id)}
-        className={`w-full text-left px-3 py-2 rounded-sm text-[9px] font-bold transition-colors border-l-2 flex items-center space-x-2 ${
-          activeSection === section.id
-            ? 'bg-[#005EA2] text-white border-[#005EA2]'
-            : 'text-slate-700 border-slate-300 hover:bg-slate-100'
-        }`}
-      >
-        <span className="flex-1">{section.label}</span>
-        {isVisited && <span className="text-[10px]">✓</span>}
-      </button>
-    );
+  const getRiskColor = (score: number) => {
+    if (score >= 85) return 'text-[#D83933] bg-[#FFECEB]';
+    if (score >= 70) return 'text-[#D83933] bg-[#FFECEB]';
+    if (score >= 50) return 'text-[#FFBE2E] bg-[#FFFBEA]';
+    return 'text-[#07A41E] bg-[#EAFCE4]';
   };
 
-  // Helper to derive recommendation
-  const recommendation = selectedCase?.risk_score >= 80
-    ? 'HOLD FOR EXAMINATION'
-    : selectedCase?.risk_score >= 50
-    ? 'EXAMINE'
-    : 'CLEAR';
-
-  const recommendationColor = selectedCase?.risk_score >= 80
-    ? 'bg-[#D83933]'
-    : selectedCase?.risk_score >= 50
-    ? 'bg-[#FFBE2E]'
-    : 'bg-[#07A41E]';
-
-  // Mock data for tables (derived from shipment)
-  const table38Data = [
-    { doc: 'Commercial Invoice', received: 'Yes', key: `Origin: ${shipment?.origin_country}`, match: 'Partial', concern: 'Needs production proof' },
-    { doc: 'Packing List', received: 'Yes', key: `${shipment?.weight_kg} kg`, match: 'Yes', concern: 'No factory lot mapping' },
-    { doc: 'Bill of Lading', received: 'Yes', key: `BOL-${shipment?.shipment_id?.slice(-5)}`, match: 'Yes', concern: 'Limited traceability' },
-    { doc: 'Certificate of Origin', received: 'Yes', key: `Origin: ${shipment?.origin_country}`, match: 'Partial', concern: 'Template-like' },
-    { doc: 'Purchase Order', received: 'Yes', key: 'Dated recently', match: 'Yes', concern: 'No source plant ID' },
-    { doc: 'Factory Production Record', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
-    { doc: 'Bill of Materials', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
-    { doc: 'Raw Material Invoice', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
-  ];
-
-  const table39Data = [
-    { element: 'Shipper name', invoice: '✓', packing: '✓', bol: '✓', coo: '✓', status: 'Consistent' },
-    { element: 'Country of origin', invoice: shipment?.origin_country, packing: shipment?.origin_country, bol: shipment?.origin_country, coo: shipment?.origin_country, status: 'Consistent' },
-    { element: 'Commodity', invoice: shipment?.commodity_name, packing: shipment?.commodity_name, bol: shipment?.commodity_name, coo: shipment?.commodity_name, status: 'Consistent' },
-    { element: 'Quantity', invoice: shipment?.weight_kg, packing: shipment?.weight_kg, bol: 'N/A', coo: 'N/A', status: 'Partial' },
-    { element: 'Manufacturing details', invoice: 'Missing', packing: 'Missing', bol: 'Missing', coo: 'Missing', status: 'Missing' },
-    { element: 'Plant location', invoice: 'Not stated', packing: 'Not stated', bol: 'Not stated', coo: 'Not stated', status: 'Missing' },
-  ];
-
-  const table310Data = [
-    { item: 'Factory address', response: 'Industrial Zone', evidence: 'No details', assessment: 'Weak' },
-    { item: 'Extrusion presses', response: 'Multiple units', evidence: 'No specs', assessment: 'Weak' },
-    { item: 'Production capacity', response: 'Sufficient', evidence: 'No report', assessment: 'Weak' },
-    { item: 'Raw aluminum source', response: 'Regional', evidence: 'No invoices', assessment: 'Weak' },
-    { item: 'QC and tests', response: 'Available', evidence: 'Not provided', assessment: 'Missing' },
-    { item: 'Work order linkage', response: 'Not provided', evidence: 'None', assessment: 'Missing' },
-  ];
-
-  const receivedCount = table38Data.filter(d => d.received === 'Yes').length;
-  const pie38Data = [
-    { name: 'Received', value: receivedCount, fill: '#22c55e' },
-    { name: 'Missing', value: table38Data.length - receivedCount, fill: '#ef4444' },
-  ];
-
-  const consistencyScores = table39Data.map(d => ({
-    name: d.element.substring(0, 10),
-    score: d.status === 'Consistent' ? 3 : d.status === 'Partial' ? 2 : 1,
-  }));
-
-  const riskIndicators = [
-    { indicator: 'Tariff/Duty Evasion Risk', evidence: shipment?.ad_cvd_applicable ? 'AD/CVD applicable' : 'Not flagged', level: 'High' },
-    { indicator: 'ISF/Manifest Mismatch', evidence: shipment?.element9_is_mismatch ? 'Element 9 mismatch' : 'No mismatch', level: shipment?.element9_is_mismatch ? 'High' : 'Low' },
-    { indicator: 'Dwell/AIS Anomaly', evidence: `${shipment?.dwell_days || 0} days`, level: (shipment?.dwell_days || 0) > 5 ? 'High' : 'Medium' },
-    { indicator: 'Route Transshipment', evidence: `Via ${shipment?.route?.[1] || 'SG'}`, level: 'Medium-High' },
-    { indicator: 'Country of Origin Shift', evidence: shipment?.origin_country, level: 'Medium-High' },
-  ];
-
-  const whatIfScenarios = [
-    { scenario: 'If Altana validates supplier', ifTrue: '+5 points (reduced risk)', ifFalse: '-8 points (major risk)', impact: 'Moderate' },
-    { scenario: 'If factory records received', ifTrue: 'Verification possible', ifFalse: 'Deny entry', impact: 'Critical' },
-    { scenario: 'If ISF corrected to China origin', ifTrue: '-15 points', ifFalse: 'Current score stands', impact: 'Moderate' },
-  ];
-
-  const dataSources = [
-    { source: 'Manifest Data (ISF)', usage: 'Shipper, commodity, quantity verification' },
-    { source: 'AIS/Vessel Tracking', usage: 'Routing, dwell time, transshipment detection' },
-    { source: 'Altana Supply Chain', usage: 'Supplier validation, origin verification' },
-    { source: 'CBP Targeting System', usage: 'Rule-hit detection, entry precedent' },
-    { source: 'Harmonized Tariff Schedule', usage: 'Commodity classification, AD/CVD rates' },
-    { source: 'Entity Risk Database', usage: 'Party reputation, nexus analysis' },
-    { source: 'Trade Activity History', usage: 'Pattern anomaly detection, corridor risk' },
-    { source: 'Port Authority Records', usage: 'Cargo receipt, warehouse tracking' },
-    { source: 'Customs Broker Licensing', usage: 'Party credentials, compliance history' },
-    { source: 'Financial Institution Data', usage: 'Payment flows, fund sourcing' },
-    { source: 'Document Metadata', usage: 'Digital signature, timestamp validation' },
-    { source: 'AI Model Scoring', usage: 'Multi-factor risk calculation' },
-    { source: 'Officer Field Observations', usage: 'Physical inspection findings' },
-    { source: 'Intelligence Networks', usage: 'Trade fraud indicators' },
-  ];
-
-  // Progress stages
-  const stages = ['review', 'narrative', 'approve', 'submitted'] as const;
-  const stageLabels = ['Review Tables', 'Write Narrative', 'Approve', 'Submitted'];
-  const currentStageIndex = stages.indexOf(referralStage);
+  const getRiskLevel = (score: number) => {
+    if (score >= 85) return '🔴🔴 EXTREME';
+    if (score >= 70) return '🔴 CRITICAL';
+    if (score >= 50) return '🟡 MEDIUM-ELEVATED';
+    return '🟢 LOW';
+  };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-[#F7F9FC]">
-      {/* Progress Bar */}
-      {referralStage !== 'submitted' && (
-        <div className="bg-white border-b border-[#D0D7DE] px-6 py-3">
-          <div className="flex items-center justify-center space-x-12">
-            {stageLabels.map((label, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                  idx < currentStageIndex ? 'bg-[#005EA2] text-white' :
-                  idx === currentStageIndex ? 'bg-[#005EA2] text-white' :
-                  'bg-slate-300 text-slate-600'
-                }`}>
-                  {idx < currentStageIndex ? '✓' : (idx + 1)}
+    <div className="flex flex-col h-full bg-[#F7F9FC]">
+      {/* Header */}
+      <div className="bg-white border-b border-[#D0D7DE] px-6 py-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-[#0B1F33]">CBP REFERRAL PACKAGE</h2>
+            <p className="text-xs text-slate-500 font-mono">
+              {selectedCase?.case_id} • {shipment?.shipment_id} • {shipment?.origin_country}→{shipment?.destination_country}
+            </p>
+          </div>
+          <div className={`px-4 py-2 rounded-sm text-sm font-bold ${getRiskColor(selectedCase?.risk_score || 0)}`}>
+            {selectedCase?.risk_score || 0}/100 • {getRiskLevel(selectedCase?.risk_score || 0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 overflow-hidden gap-4 p-4">
+        {/* LEFT SIDEBAR - Section Navigation */}
+        <div className="w-56 bg-white rounded-sm border border-[#D0D7DE] overflow-y-auto shadow-sm">
+          <div className="p-3 border-b border-[#D0D7DE] bg-slate-50">
+            <h3 className="text-[10px] font-bold uppercase text-slate-600">Contents</h3>
+            <p className="text-[8px] text-slate-500 mt-1">{sections.length} Sections</p>
+          </div>
+
+          <div className="divide-y divide-[#D0D7DE]">
+            {sections.map((section, idx) => (
+              <button
+                key={section.id}
+                onClick={() => setSelectedSectionId(section.id)}
+                className={`w-full text-left px-4 py-3 text-xs transition-colors ${
+                  selectedSectionId === section.id
+                    ? 'bg-[#005EA2] text-white font-bold'
+                    : 'bg-white text-[#0B1F33] hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <FileText className="w-3 h-3" />
+                  <div className="flex-1">
+                    <div className="font-bold text-[9px]">Table 3-{idx + 1}</div>
+                    <div className="text-[8px] text-slate-600 leading-tight line-clamp-2">
+                      {section.title.replace('Table 3-', '').replace(': ', '')}
+                    </div>
+                  </div>
+                  {selectedSectionId === section.id && <ChevronRight className="w-3 h-3" />}
                 </div>
-                <span className={`text-[10px] font-bold ${idx <= currentStageIndex ? 'text-[#0B1F33]' : 'text-slate-600'}`}>
-                  {label}
-                </span>
-                {idx < stageLabels.length - 1 && (
-                  <div className={`w-12 h-0.5 ${idx < currentStageIndex ? 'bg-[#005EA2]' : 'bg-slate-300'}`} />
-                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* RIGHT PANE - Section Content */}
+        <div ref={contentRef} className="flex-1 bg-white rounded-sm border border-[#D0D7DE] overflow-y-auto shadow-sm">
+          {selectedSection ? (
+            <div className="p-6 space-y-4">
+              {/* Section Title */}
+              <div className="border-b-2 border-[#005EA2] pb-4">
+                <h2 className="text-lg font-bold text-[#0B1F33]">{selectedSection.title}</h2>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Two-Panel Layout */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Sidebar: Section Navigator */}
-        <div className="w-56 border-r border-[#D0D7DE] bg-white flex flex-col shadow-sm">
-          <div className="p-4 border-b border-[#D0D7DE]">
-            <h3 className="text-[10px] font-bold text-[#0B1F33] uppercase">REFERRAL PACKAGE</h3>
-            <p className="text-[8px] text-slate-600 mt-1 font-mono">{sections.length} sections • {selectedCase?.case_id}</p>
-          </div>
-          <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sections.map(section => (
-              <SectionButton key={section.id} section={section} />
-            ))}
-          </nav>
-          <div className="p-3 border-t border-[#D0D7DE]">
-            <button
-              onClick={onCompile}
-              disabled={compileLoading}
-              className="w-full px-3 py-2 bg-[#005EA2] hover:bg-[#0076D6] disabled:opacity-50 text-white text-[9px] font-bold rounded-sm transition-colors"
-            >
-              {compileLoading ? 'COMPILING...' : 'COMPILE PACKAGE'}
-            </button>
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
-        {!selectedReferral && !shipment ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center text-slate-500">
-              <p className="text-sm font-bold mb-2">Select a case and click "COMPILE PACKAGE"</p>
-              <p className="text-[9px]">Referral sections will generate from live shipment data</p>
+              {/* Section Content - Render based on type */}
+              <SectionRenderer section={selectedSection.data} />
             </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-slate-500">
+              <p className="text-sm">Select a section to view</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer with Actions */}
+      <div className="bg-white border-t border-[#D0D7DE] px-6 py-4 flex items-center justify-between">
+        <div className="text-[8px] text-slate-500 font-mono">
+          CBP Referral Package • {selectedReferral?.created_at ? new Date(selectedReferral.created_at).toLocaleString() : 'Draft'}
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onCompile}
+            disabled={compileLoading}
+            className="px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:opacity-50 text-white text-[9px] font-bold rounded-sm"
+          >
+            {compileLoading ? 'COMPILING AI...' : 'COMPILE AI NARRATIVE'}
+          </button>
+          <button
+            onClick={handleExportPDF}
+            disabled={exportLoading}
+            className="px-4 py-2 bg-[#0076D6] hover:bg-[#005EA2] disabled:opacity-50 text-white text-[9px] font-bold rounded-sm flex items-center space-x-2"
+          >
+            <Download className="w-3 h-3" />
+            <span>{exportLoading ? 'EXPORTING...' : 'EXPORT PDF'}</span>
+          </button>
+          <button
+            onClick={() => {
+              if (onSubmit) onSubmit();
+            }}
+            className="px-4 py-2 bg-[#07A41E] hover:bg-[#06843E] text-white text-[9px] font-bold rounded-sm flex items-center space-x-2"
+          >
+            <Send className="w-3 h-3" />
+            <span>SUBMIT REFERRAL</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Helper component to render different section types
+function SectionRenderer({ section }: { section: any }) {
+  if (!section) return null;
+
+  const type = section.title?.toLowerCase();
+
+  // Table 3-1: Shipment Identification
+  if (type?.includes('shipment identification')) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Shipper</p>
+            <p className="text-sm text-[#0B1F33]">{section.shipper || 'N/A'}</p>
           </div>
-        ) : (
-          <div className="max-w-4xl space-y-4">
-            {/* SECTION: Executive Summary & Recommendation */}
-            {activeSection === 'executive-summary' && (
-              <div className="space-y-4">
-                <div className={`${recommendationColor} text-white rounded-sm p-4 border-l-4 border-white`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-bold uppercase">RECOMMENDATION</h3>
-                      <p className="text-xs mt-1">Based on comprehensive trade risk analysis</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-black font-mono">{recommendation}</p>
-                      <p className="text-[9px] mt-1">Risk Score: {selectedCase?.risk_score}/100</p>
-                    </div>
-                  </div>
-                </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Consignee</p>
+            <p className="text-sm text-[#0B1F33]">{section.consignee || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Commodity</p>
+            <p className="text-sm text-[#0B1F33]">{section.commodity || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Route</p>
+            <p className="text-sm text-[#0B1F33]">{section.route || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">HS Code</p>
+            <p className="text-sm font-mono text-[#0B1F33]">{section.hs_code || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Value (USD)</p>
+            <p className="text-sm text-[#0B1F33]">${section.value_usd?.toLocaleString() || '0'}</p>
+          </div>
+        </div>
+        <div className="p-3 bg-slate-50 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Summary</p>
+          <p className="text-xs text-slate-700">{section.summary || 'N/A'}</p>
+        </div>
+      </div>
+    );
+  }
 
-                <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3">CASE HEADER</h3>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div><span className="font-bold">Case ID:</span> {selectedCase?.case_id}</div>
-                    <div><span className="font-bold">Shipment ID:</span> {shipment?.shipment_id}</div>
-                    <div><span className="font-bold">Date:</span> {shipment?.date}</div>
-                    <div><span className="font-bold">Port:</span> {shipment?.destination_country}</div>
-                  </div>
-                </div>
+  // Table 3-2: Line Items
+  if (type?.includes('line items')) {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-slate-100 border-b-2 border-[#D0D7DE]">
+              <th className="text-left p-2 font-bold">HS Code</th>
+              <th className="text-left p-2 font-bold">Description</th>
+              <th className="text-center p-2 font-bold">Qty</th>
+              <th className="text-center p-2 font-bold">Unit</th>
+              <th className="text-right p-2 font-bold">Value (USD)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.items?.map((item: any, idx: number) => (
+              <tr key={idx} className="border-b border-[#D0D7DE]">
+                <td className="p-2 font-mono">{item.hs_code}</td>
+                <td className="p-2">{item.description}</td>
+                <td className="p-2 text-center">{item.quantity}</td>
+                <td className="p-2 text-center">{item.unit}</td>
+                <td className="p-2 text-right font-bold">${item.declared_value?.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
-                <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3">EXECUTIVE SUMMARY</h3>
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    Investigation of {shipment?.shipper_name} shipment {shipment?.shipment_id} reveals systematic trade compliance indicators.
-                    Multi-factor risk assessment (ML model) scored {selectedCase?.risk_score}/100 across 7 dimensions: documentation,
-                    commodity risk, routing anomaly, party profile, corridor risk, pattern anomaly, and time sensitivity.
-                    {shipment?.ad_cvd_applicable && ` AD/CVD duty rates apply at ${((shipment?.ad_cvd_rate ?? 0) * 100).toFixed(1)}%.`}
-                    Risk drivers include {shipment?.element9_is_mismatch ? 'ISF Element 9 mismatch' : 'manifest anomalies'} and
-                    transshipment via {shipment?.route?.[1] || 'Singapore'}. Recommend {recommendation} per 19 USC § 1516a.
-                  </p>
-                </div>
+  // Table 3-3: AIS Routing History
+  if (type?.includes('routing history')) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Vessel</p>
+            <p className="text-sm text-[#0B1F33]">{section.vessel || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">IMO</p>
+            <p className="text-sm font-mono text-[#0B1F33]">{section.vessel_imo || 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Dwell Days</p>
+            <p className="text-sm text-[#0B1F33]">{section.dwell_days?.toFixed(1) || 'N/A'} days</p>
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Dwell Anomaly</p>
+            <p className={`text-sm font-bold ${section.dwell_anomaly === 'HIGH' ? 'text-[#D83933]' : section.dwell_anomaly === 'MEDIUM' ? 'text-[#FFBE2E]' : 'text-[#07A41E]'}`}>
+              {section.dwell_anomaly || 'N/A'}
+            </p>
+          </div>
+        </div>
+        <div>
+          <p className="text-[8px] font-bold text-slate-500 uppercase mb-2">Port Calls</p>
+          <div className="flex flex-wrap gap-2">
+            {section.route?.map((port: string, idx: number) => (
+              <div key={idx} className="px-2 py-1 bg-slate-100 rounded text-[9px] font-mono">
+                {port}
               </div>
-            )}
+            ))}
+          </div>
+        </div>
+        <div className="p-3 bg-slate-50 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Summary</p>
+          <p className="text-xs text-slate-700">{section.summary || 'N/A'}</p>
+        </div>
+      </div>
+    );
+  }
 
-            {/* TABLE 3-1: Shipment Identification */}
-            {activeSection === 'table-3-1' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-1: SHIPMENT IDENTIFICATION</h3>
-                <div className="space-y-2 text-xs">
-                  {[
-                    ['Shipper Name', shipment?.shipper_name],
-                    ['Shipper Country', shipment?.origin_country],
-                    ['Consignee', shipment?.manifest_data?.consignee],
-                    ['Port of Lading', shipment?.origin_country],
-                    ['Port of Unlading', shipment?.destination_country],
-                    ['Cargo Description', shipment?.commodity_name],
-                    ['HTS Code', shipment?.hs_code],
-                    ['Bill of Lading', `BOL-${shipment?.shipment_id?.slice(-5)}`],
-                    ['Declared Country of Origin', shipment?.origin_country],
-                    ['Estimated Arrival', shipment?.date],
-                  ].map(([label, value], idx) => (
-                    <div key={idx} className={`grid grid-cols-2 gap-4 py-1 px-2 ${idx % 2 === 0 ? 'bg-slate-50' : ''}`}>
-                      <span className="font-bold">{label}</span>
-                      <span>{value || '—'}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+  // Table 3-12: Risk Score Breakdown (with calculation tables)
+  if (type?.includes('score breakdown')) {
+    const calc = section.calculation_table;
+    return (
+      <div className="space-y-6">
+        {/* Risk Score Summary */}
+        <div className="bg-blue-50 border border-[#005EA2] rounded p-4">
+          <div className="text-center">
+            <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Final Risk Score</p>
+            <p className="text-4xl font-black text-[#D83933]">{section.total_score?.toFixed(1) || 'N/A'}</p>
+            <p className="text-xs text-slate-700 mt-2">/100 • {section.total_score >= 70 ? 'CRITICAL' : section.total_score >= 50 ? 'ELEVATED' : 'LOW'} RISK</p>
+          </div>
+        </div>
 
-            {/* TABLE 3-2: Shipment Line-Item Detail */}
-            {activeSection === 'table-3-2' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-2: SHIPMENT LINE-ITEM DETAIL</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Line</th>
-                        <th className="text-left px-2 py-2">SKU</th>
-                        <th className="text-left px-2 py-2">Description</th>
-                        <th className="text-right px-2 py-2">Qty</th>
-                        <th className="text-left px-2 py-2">Unit</th>
-                        <th className="text-right px-2 py-2">Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="bg-slate-50">
-                        <td className="px-2 py-1">1</td>
-                        <td className="px-2 py-1">{shipment?.hs_code}</td>
-                        <td className="px-2 py-1">{shipment?.commodity_name}</td>
-                        <td className="text-right px-2 py-1">{shipment?.weight_kg}</td>
-                        <td className="px-2 py-1">kg</td>
-                        <td className="text-right px-2 py-1">${shipment?.manifest_data?.declared_value_usd || 0}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-3: Routing History */}
-            {activeSection === 'table-3-3' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-3: ROUTING HISTORY</h3>
-                <div className="space-y-2">
-                  {[
-                    ['Container Stuffed', shipment?.origin_country, shipment?.date, 'Loading terminal'],
-                    ['Gate Out', shipment?.origin_country, shipment?.date, 'Export customs clearance'],
-                    ['Vessel Departure', shipment?.origin_country, shipment?.date, `Via ${shipment?.route?.[1] || 'SG'}`],
-                    ['Transit Update', shipment?.route?.[1] || 'SG', shipment?.date, `Dwell: ${shipment?.dwell_days || 0}d`],
-                    ['Estimated Arrival', shipment?.destination_country, shipment?.date, 'Import port'],
-                  ].map(([event, location, date, notes], idx) => (
-                    <div key={idx} className={`grid grid-cols-4 gap-4 py-2 px-3 text-[9px] ${idx % 2 === 0 ? 'bg-slate-50' : ''}`}>
-                      <span className="font-bold">{event}</span>
-                      <span>{location}</span>
-                      <span>{date}</span>
-                      <span className="text-slate-600">{notes}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-4: Parties & Roles */}
-            {activeSection === 'table-3-4' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-4: PARTIES & ROLES</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Role</th>
-                        <th className="text-left px-2 py-2">Entity</th>
-                        <th className="text-left px-2 py-2">Country</th>
-                        <th className="text-left px-2 py-2">Risk Note</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        ['Shipper', shipment?.shipper_name, shipment?.origin_country, 'Primary suspect'],
-                        ['Consignee', shipment?.manifest_data?.consignee, shipment?.destination_country, 'Verify independence'],
-                        ['Freight Forwarder', 'TBD', 'TBD', 'Licensing check'],
-                        ['Carrier', 'TBD', 'TBD', 'Vessel owner verified'],
-                        ['Customs Broker', 'TBD', 'TBD', 'Entry filer'],
-                      ].map(([role, entity, country, risk], idx) => (
-                        <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{role}</td>
-                          <td className="px-2 py-1">{entity}</td>
-                          <td className="px-2 py-1">{country}</td>
-                          <td className="px-2 py-1 text-slate-600">{risk}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-5: Entity Ownership Chain */}
-            {activeSection === 'table-3-5' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-5: ENTITY OWNERSHIP CHAIN</h3>
-                <div className="space-y-3">
-                  {[
-                    { tier: '1 (Declared)', entity: shipment?.shipper_name, juris: shipment?.origin_country, evidence: 'ISF shipper record' },
-                    { tier: '2 (Intermediate)', entity: 'TBD - Shell Entity Analysis', juris: 'TBD', evidence: 'Senzing nexus' },
-                    { tier: '3 (Principal)', entity: 'Chinese Manufacturing Principal', juris: 'China', evidence: 'Supply chain nexus' },
-                  ].map((row, idx) => (
-                    <div key={idx} className="bg-slate-50 border-l-4 border-blue-500 p-3">
-                      <div className="grid grid-cols-3 gap-4 text-[9px]">
-                        <div><span className="font-bold">Tier {row.tier}:</span> {row.entity}</div>
-                        <div><span className="font-bold">Jurisdiction:</span> {row.juris}</div>
-                        <div><span className="font-bold">Evidence:</span> {row.evidence}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-6: Historical Import Pattern */}
-            {activeSection === 'table-3-6' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4 space-y-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-6: HISTORICAL IMPORT PATTERN</h3>
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={[
-                    { month: 'Jan', shipments: 2, weight: 15200, origin: shipment?.origin_country },
-                    { month: 'Feb', shipments: 3, weight: 22500, origin: shipment?.origin_country },
-                    { month: 'Mar', shipments: 2, weight: 18900, origin: shipment?.origin_country },
-                  ]}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis label={{ value: 'Weight (kg)', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="weight" stroke="#005EA2" />
-                  </LineChart>
-                </ResponsiveContainer>
-                <div className="text-[9px] text-slate-600">
-                  <p className="font-bold mb-2">Analysis:</p>
-                  <p>Shipper exhibits recurring import pattern with origin-shifting behavior. Three entries in Q1 2026 show declared origin consistency but vessel routing changes. Dwell periods inconsistent with normal transit times.</p>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-7: Trade Flow Intelligence */}
-            {activeSection === 'table-3-7' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-7: TRADE FLOW INTELLIGENCE</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Shipment ID</th>
-                        <th className="text-left px-2 py-2">Month</th>
-                        <th className="text-left px-2 py-2">Origin</th>
-                        <th className="text-left px-2 py-2">Export Port</th>
-                        <th className="text-right px-2 py-2">Transit Days</th>
-                        <th className="text-right px-2 py-2">Qty (kg)</th>
-                        <th className="text-right px-2 py-2">Unit Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        [shipment?.shipment_id, 'Mar', shipment?.origin_country, shipment?.route?.[0] || 'VN Port', '14', shipment?.weight_kg, '45/kg'],
-                        ['SHP-000730', 'Feb', shipment?.origin_country, shipment?.route?.[0] || 'VN Port', '13', '22,500', '43/kg'],
-                        ['SHP-000729', 'Jan', shipment?.origin_country, shipment?.route?.[0] || 'VN Port', '15', '15,200', '42/kg'],
-                      ].map((row, idx) => (
-                        <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          {row.map((cell, cidx) => (
-                            <td key={cidx} className={`px-2 py-1 ${cidx === 0 ? 'font-bold' : ''} ${cidx > 3 ? 'text-right' : ''}`}>
-                              {cell}
+        {/* Component Details Table */}
+        {calc?.component_details && calc.component_details.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold text-[#0B1F33] mb-2">Component Scoring Details (All Factors)</h4>
+            <div className="overflow-x-auto text-xs">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-[#D0D7DE]">
+                    <th className="text-left p-2 font-bold">Factor</th>
+                    <th className="text-left p-2 font-bold">Component</th>
+                    <th className="text-center p-2 font-bold">Score</th>
+                    <th className="text-center p-2 font-bold">Weight %</th>
+                    <th className="text-center p-2 font-bold">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.component_details.map((factor: any, fidx: number) => (
+                    <React.Fragment key={fidx}>
+                      {factor.components?.map((comp: any, cidx: number) => (
+                        <tr key={`${fidx}-${cidx}`} className="border-b border-[#D0D7DE]">
+                          {cidx === 0 && (
+                            <td rowSpan={factor.components.length} className="p-2 font-bold text-[#0B1F33] align-top bg-slate-50">
+                              {factor.factor}
                             </td>
-                          ))}
+                          )}
+                          <td className="p-2">{comp.name}</td>
+                          <td className="p-2 text-center font-bold text-[#D83933]">{comp.score?.toFixed(1)}</td>
+                          <td className="p-2 text-center">{comp.weight?.toFixed(1)}</td>
+                          <td className="p-2 text-center font-bold">{comp.weighted_result?.toFixed(2)}</td>
                         </tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-8: Document Review */}
-            {activeSection === 'table-3-8' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4 space-y-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-8: DOCUMENT REVIEW — CORE EVIDENCE SUPPORT</h3>
-                <div className="overflow-x-auto mb-4">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Document Type</th>
-                        <th className="text-center px-2 py-2">Received?</th>
-                        <th className="text-left px-2 py-2">Key Data Point</th>
-                        <th className="text-center px-2 py-2">Match</th>
-                        <th className="text-left px-2 py-2">Concern</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table38Data.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1">{row.doc}</td>
-                          <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.received === 'Yes' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{row.received}</span></td>
-                          <td className="px-2 py-1">{row.key}</td>
-                          <td className="text-center"><span className={`text-[8px] font-bold ${row.match === 'Yes' ? 'text-green-600' : 'text-amber-600'}`}>{row.match}</span></td>
-                          <td className={`px-2 py-1 ${row.concern.includes('MAJOR') ? 'text-red-600 font-bold' : 'text-slate-600'}`}>{row.concern}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex gap-4">
-                  <ResponsiveContainer width="50%" height={200}>
-                    <PieChart>
-                      <Pie data={pie38Data} cx="50%" cy="50%" labelLine={false} label={(d) => d.name} outerRadius={60} dataKey="value">
-                        {pie38Data.map((_, i) => <Cell key={i} fill={pie38Data[i].fill} />)}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="flex-1 text-[9px] text-slate-600">
-                    <p className="font-bold mb-2">Analysis:</p>
-                    <p>5 of 8 documents provided. Missing critical manufacturing verification: Factory Production Records, Bill of Materials, Raw Material Invoices. These gaps prevent independent verification of Vietnam origin claim.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-9: Document Consistency */}
-            {activeSection === 'table-3-9' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4 space-y-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-9: DOCUMENT CONSISTENCY ANALYSIS</h3>
-                <div className="overflow-x-auto mb-4">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Data Element</th>
-                        <th className="text-left px-2 py-2">Invoice</th>
-                        <th className="text-left px-2 py-2">Packing List</th>
-                        <th className="text-left px-2 py-2">BOL</th>
-                        <th className="text-left px-2 py-2">COO</th>
-                        <th className="text-center px-2 py-2">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table39Data.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{row.element}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.invoice}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.packing}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.bol}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.coo}</td>
-                          <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.status === 'Consistent' ? 'bg-green-100 text-green-800' : row.status === 'Partial' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>{row.status}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex gap-4">
-                  <ResponsiveContainer width="50%" height={200}>
-                    <BarChart data={consistencyScores}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 8 }} angle={-45} height={60} />
-                      <YAxis label={{ value: 'Score', angle: -90, position: 'insideLeft' }} />
-                      <Tooltip />
-                      <Bar dataKey="score" fill="#0076D6" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div className="flex-1 text-[9px] text-slate-600">
-                    <p className="font-bold mb-2">Analysis:</p>
-                    <p>Core shipment data (name, origin, commodity, quantity) is consistent across primary documents. Manufacturing details completely absent from all documents, creating unresolvable verification gap for country-of-origin claim.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-10: Manufacturing Verification */}
-            {activeSection === 'table-3-10' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-10: SUPPLIER MANUFACTURING VERIFICATION ASSESSMENT</h3>
-                <div className="overflow-x-auto mb-4">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Verification Item</th>
-                        <th className="text-left px-2 py-2">Supplier Response</th>
-                        <th className="text-left px-2 py-2">Supporting Evidence</th>
-                        <th className="text-center px-2 py-2">Assessment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table310Data.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{row.item}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.response}</td>
-                          <td className="px-2 py-1 text-[8px]">{row.evidence}</td>
-                          <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.assessment === 'Strong' ? 'bg-green-100 text-green-800' : row.assessment === 'Moderate' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`}>{row.assessment}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="text-[9px] text-slate-600 bg-slate-50 p-3 rounded">
-                  <p className="font-bold mb-2">Analysis:</p>
-                  <p>All supplier responses are vague or provide no supporting documentation. Factory address lacks street details. No capacity reports, equipment inventories, work orders, or QC records provided. Insufficient evidence to substantiate Vietnam manufacturing claim. Recommend HOLD pending factory facility verification.</p>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-11: Risk Indicator Summary */}
-            {activeSection === 'table-3-11' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-11: RISK INDICATOR SUMMARY</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Indicator</th>
-                        <th className="text-left px-2 py-2">Sample Evidence</th>
-                        <th className="text-center px-2 py-2">Risk Level</th>
-                        <th className="text-left px-2 py-2">Why It Matters</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {riskIndicators.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{row.indicator}</td>
-                          <td className="px-2 py-1">{row.evidence}</td>
-                          <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.level === 'High' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{row.level}</span></td>
-                          <td className="px-2 py-1 text-slate-600">Trigger for inspection</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-12: Risk Score Breakdown */}
-            {activeSection === 'table-3-12' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4 space-y-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-12: RISK SCORE BREAKDOWN (ML MODEL)</h3>
-                {shipment?.risk_breakdown?.components ? (
-                  <>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[10px] border-collapse">
-                        <thead className="bg-[#005EA2] text-white">
-                          <tr>
-                            <th className="text-left px-3 py-2">Risk Category</th>
-                            <th className="text-right px-3 py-2">Weight %</th>
-                            <th className="text-right px-3 py-2">Score (0-10)</th>
-                            <th className="text-right px-3 py-2">Weighted Result</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {shipment.risk_breakdown.components.map((comp: any, idx: number) => (
-                            <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                              <td className="text-left px-3 py-2 font-semibold">{comp.component}</td>
-                              <td className="text-right px-3 py-2">{comp.weight.toFixed(1)}</td>
-                              <td className="text-right px-3 py-2 font-bold">{comp.score.toFixed(1)}</td>
-                              <td className="text-right px-3 py-2 text-blue-600 font-bold">{comp.weighted_result.toFixed(1)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="bg-[#0B1F33] text-white p-4 rounded text-[10px] font-mono space-y-2">
-                      <div className="flex justify-between"><span>Subtotal (Pre-Adjustment)</span><span>{shipment.risk_breakdown.subtotal.toFixed(1)}</span></div>
-                      {shipment.audit_trail?.model_adjustment !== 0 && (
-                        <div className="flex justify-between text-cyan-300"><span>Altana Adjustment</span><span className="font-bold">{shipment.audit_trail.model_adjustment > 0 ? '+' : ''}{shipment.audit_trail.model_adjustment}</span></div>
-                      )}
-                      <div className="border-t border-slate-500 pt-2 flex justify-between font-bold text-lg"><span>FINAL RISK SCORE</span><span className={selectedCase?.risk_score >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}>{shipment.risk_breakdown.final_score.toFixed(1)}/100</span></div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-slate-600">Risk breakdown data not available. Check back in a moment.</p>
-                )}
-              </div>
-            )}
-
-            {/* TABLE 3-13: What-If Scenarios */}
-            {activeSection === 'table-3-13' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-13: WHAT-IF SCENARIOS</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Scenario</th>
-                        <th className="text-left px-2 py-2">If True</th>
-                        <th className="text-left px-2 py-2">If False</th>
-                        <th className="text-center px-2 py-2">Impact</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {whatIfScenarios.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{row.scenario}</td>
-                          <td className="px-2 py-1 text-green-700">{row.ifTrue}</td>
-                          <td className="px-2 py-1 text-red-700">{row.ifFalse}</td>
-                          <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.impact === 'Critical' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}`}>{row.impact}</span></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TABLE 3-14: Data Sources */}
-            {activeSection === 'table-3-14' && (
-              <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                <h3 className="text-sm font-bold text-[#0B1F33] mb-4">TABLE 3-14: DATA SOURCES & METHODOLOGY</h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-[9px] border-collapse">
-                    <thead className="bg-[#005EA2] text-white">
-                      <tr>
-                        <th className="text-left px-2 py-2">Data Source</th>
-                        <th className="text-left px-2 py-2">Use in Assessment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dataSources.map((row, i) => (
-                        <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
-                          <td className="px-2 py-1 font-bold">{row.source}</td>
-                          <td className="px-2 py-1">{row.usage}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* NARRATIVE & SUBMIT */}
-            {activeSection === 'narrative' && (
-              <div className="space-y-4">
-                <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3">OFFICER NARRATIVE & RECOMMENDATION</h3>
-                  <textarea
-                    value={referralNarrative}
-                    onChange={(e) => setReferralNarrative(e.target.value)}
-                    className="w-full h-64 bg-[#0B1F33] text-slate-100 font-mono text-[10px] p-3 rounded-sm border border-slate-600 focus:border-[#005EA2] focus:outline-none"
-                    placeholder="Enter officer narrative and final recommendation..."
-                  />
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={onCompile}
-                      disabled={compileLoading}
-                      className="px-4 py-2 bg-[#005EA2] hover:bg-[#0076D6] disabled:opacity-50 text-white text-[9px] font-bold rounded-sm"
-                    >
-                      {compileLoading ? 'GENERATING...' : 'COMPILE AI DRAFT'}
-                    </button>
-                    <button className="px-4 py-2 bg-[#07A41E] hover:bg-[#06843E] text-white text-[9px] font-bold rounded-sm flex items-center space-x-1">
-                      <Send className="w-3 h-3" />
-                      <span>SUBMIT REFERRAL</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-sm border border-[#D0D7DE] p-4">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3">FINAL REVIEW</h3>
-                  <div className={`${recommendationColor} text-white p-3 rounded-sm text-[10px] font-bold`}>
-                    RECOMMENDATION: {recommendation} | Risk Score: {selectedCase?.risk_score}/100
-                  </div>
-                  <div className="mt-3 text-[9px] text-slate-600">
-                    <p className="mb-2"><strong>DHS Trade Referral Summary:</strong></p>
-                    <p>This referral package includes all 14 statutory sections required for Import Safety Bureau review under 19 USC § 1516a. Evidence supports {recommendation.toLowerCase()} action. All supporting documentation, ML risk scoring methodology, and officer findings are included.</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Bottom Action Bar */}
-      <div className="bg-white border-t border-[#D0D7DE] px-6 py-4">
-        {referralStage === 'review' && (
-          <div className="flex justify-end">
-            <button
-              onClick={() => {
-                setReferralStage('narrative');
-                handleSectionClick('narrative');
-              }}
-              className="px-4 py-2 bg-[#005EA2] hover:bg-[#0076D6] text-white text-[10px] font-bold rounded-sm flex items-center space-x-2"
-            >
-              <span>Next: Write Narrative</span>
-              <span>→</span>
-            </button>
-          </div>
-        )}
-
-        {referralStage === 'narrative' && (
-          <div className="flex justify-between">
-            <button
-              onClick={() => setReferralStage('review')}
-              className="px-4 py-2 bg-slate-300 hover:bg-slate-400 text-slate-800 text-[10px] font-bold rounded-sm flex items-center space-x-2"
-            >
-              <span>←</span>
-              <span>Back to Review</span>
-            </button>
-            <button
-              onClick={() => setReferralStage('approve')}
-              disabled={referralNarrative.trim() === ''}
-              className="px-4 py-2 bg-[#005EA2] hover:bg-[#0076D6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-[10px] font-bold rounded-sm flex items-center space-x-2"
-            >
-              <span>Next: Approve</span>
-              <span>→</span>
-            </button>
-          </div>
-        )}
-
-        {referralStage === 'approve' && (
-          <div className="space-y-3">
-            <div className="bg-slate-50 border border-[#D0D7DE] p-3 rounded-sm">
-              <div className="grid grid-cols-3 gap-4 text-[9px]">
-                <div><span className="font-bold">Case ID:</span> {selectedCase?.case_id}</div>
-                <div><span className="font-bold">Risk Score:</span> {selectedCase?.risk_score}/100</div>
-                <div><span className="font-bold">Recommendation:</span> {recommendation}</div>
-              </div>
-            </div>
-            <div className="flex justify-between">
-              <button
-                onClick={() => setReferralStage('narrative')}
-                className="px-4 py-2 bg-slate-300 hover:bg-slate-400 text-slate-800 text-[10px] font-bold rounded-sm flex items-center space-x-2"
-              >
-                <span>←</span>
-                <span>Back</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (onSubmit) onSubmit();
-                  setReferralStage('submitted');
-                }}
-                className="px-6 py-2 bg-[#07A41E] hover:bg-[#06843E] text-white text-[10px] font-bold rounded-sm flex items-center space-x-2"
-              >
-                <Send className="w-3 h-3" />
-                <span>SUBMIT TO DHS</span>
-              </button>
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {referralStage === 'submitted' && (
-          <div className="bg-green-100 border border-green-300 text-green-800 p-3 rounded-sm text-[9px]">
-            <div className="flex items-center space-x-2 font-bold">
-              <CheckCircle2 className="w-5 h-5" />
-              <span>✓ Referral Package Submitted — {selectedCase?.case_id} — {new Date().toLocaleDateString()}</span>
+        {/* Factor Summary Table */}
+        {calc?.factor_summary && calc.factor_summary.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold text-[#0B1F33] mb-2">Factor Aggregation Summary</h4>
+            <div className="overflow-x-auto text-xs">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-[#D0D7DE]">
+                    <th className="text-left p-2 font-bold">Factor</th>
+                    <th className="text-center p-2 font-bold">Subtotal</th>
+                    <th className="text-center p-2 font-bold">% of Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.factor_summary.map((f: any, idx: number) => (
+                    <tr key={idx} className="border-b border-[#D0D7DE]">
+                      <td className="p-2 font-bold text-[#0B1F33]">{f.factor}</td>
+                      <td className="p-2 text-center font-bold text-[#D83933]">{f.subtotal?.toFixed(2)}</td>
+                      <td className="p-2 text-center">{f.percentage}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Adjustments */}
+        {calc?.adjustments && calc.adjustments.length > 0 && (
+          <div>
+            <h4 className="text-sm font-bold text-[#0B1F33] mb-2">Adjustments Applied</h4>
+            <div className="overflow-x-auto text-xs">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b-2 border-[#D0D7DE]">
+                    <th className="text-left p-2 font-bold">Type</th>
+                    <th className="text-center p-2 font-bold">Points</th>
+                    <th className="text-left p-2 font-bold">Reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {calc.adjustments.map((a: any, idx: number) => (
+                    <tr key={idx} className="border-b border-[#D0D7DE]">
+                      <td className="p-2 font-bold">{a.type}</td>
+                      <td className={`p-2 text-center font-bold ${a.points > 0 ? 'text-[#D83933]' : a.points < 0 ? 'text-[#0076D6]' : ''}`}>
+                        {a.points > 0 ? '+' : ''}{a.points?.toFixed(2)}
+                      </td>
+                      <td className="p-2">{a.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Calculation Ledger */}
+        {calc?.calculation_steps && (
+          <div className="p-3 bg-slate-50 rounded border border-[#D0D7DE]">
+            <h4 className="text-[9px] font-bold text-slate-600 uppercase mb-3">Calculation Ledger</h4>
+            <div className="space-y-2 text-xs">
+              {calc.calculation_steps.map((step: any, idx: number) => (
+                <div key={idx} className="flex justify-between">
+                  <span className="text-slate-700">{step.step}. {step.description}</span>
+                  <span className="font-bold text-[#0B1F33]">{step.value?.toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="border-t border-slate-300 pt-2 mt-2 flex justify-between font-bold">
+                <span>Final Score (capped at 100)</span>
+                <span className="text-[#D83933] text-sm">{calc.final_score?.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         )}
       </div>
+    );
+  }
+
+  // Risk Indicators Table
+  if (type?.includes('risk indicator')) {
+    return (
+      <div className="space-y-3">
+        {section.indicators?.map((ind: any, idx: number) => (
+          <div key={idx} className="p-3 border border-[#D0D7DE] rounded">
+            <div className="flex items-start justify-between mb-2">
+              <p className="text-sm font-bold text-[#0B1F33]">{ind.indicator}</p>
+              {ind.present && <span className="text-[#D83933] font-bold text-xs">🚩 PRESENT</span>}
+            </div>
+            <p className="text-xs text-slate-700 mb-2">{ind.evidence}</p>
+            <p className="text-[8px] text-slate-500 font-mono">Authority: {ind.authority}</p>
+          </div>
+        ))}
       </div>
+    );
+  }
+
+  // Default: Display as JSON
+  return (
+    <div className="text-xs">
+      <pre className="bg-slate-50 p-3 rounded border border-[#D0D7DE] overflow-x-auto max-h-96">
+        {JSON.stringify(section, null, 2)}
+      </pre>
     </div>
   );
 }

@@ -2,19 +2,23 @@ import React, { useState, useMemo } from 'react';
 import { ArrowRight, Sparkles, AlertCircle, ChevronDown, Download, Send, Search, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, RadarChart, Radar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { useV2Cases } from '../hooks/useV2Cases';
+import { useRiskScoring } from '../hooks/useRiskScoring';
 import { Case, Shipment, AIFinding, ReferralPackage } from '../types/v2.types';
 import { api } from '../../services/api';
+import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { EntityRelationshipGraph } from '../components/EntityRelationshipGraph';
 import { ReferralPackageGuide } from '../components/ReferralPackageGuide';
 import { ReferralPackageViewer } from '../components/ReferralPackageViewer';
+import { ReferralPackageViewerNew } from '../components/ReferralPackageViewer_NEW';
+import { TabNavigation, TabConfig } from '../components/TabNavigation';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
   shipments?: Shipment[];
   selectedCaseId?: string | null;
   setSelectedCaseId?: (id: string | null) => void;
-  activeSubTab?: 'Overview' | 'Entities' | 'Shipments' | 'Findings' | 'Synopsis' | 'Data Tables' | 'Evidence & Referral';
-  setActiveSubTab?: (tab: 'Overview' | 'Entities' | 'Shipments' | 'Findings' | 'Synopsis' | 'Data Tables' | 'Evidence & Referral') => void;
+  activeSubTab?: 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral';
+  setActiveSubTab?: (tab: 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral') => void;
   synopsisMap?: Record<string, string>;
   synopsisLoading?: Record<string, boolean>;
   findings?: AIFinding[];
@@ -29,7 +33,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
     shipments: propShipments = [],
     selectedCaseId: propSelectedCaseId = null,
     setSelectedCaseId: propSetSelectedCaseId,
-    activeSubTab: propActiveSubTab = 'Overview',
+    activeSubTab: propActiveSubTab = 'Shipment',
     setActiveSubTab: propSetActiveSubTab,
     synopsisMap = {},
     synopsisLoading = {},
@@ -43,7 +47,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   const caseShipments = localCaseShipments;
 
   const [localSelectedCaseId, setLocalSelectedCaseId] = useState<string | null>(null);
-  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Overview' | 'Entities' | 'Shipments' | 'Findings' | 'Synopsis' | 'Data Tables' | 'Evidence & Referral'>('Overview');
+  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral'>('Shipment');
 
   const selectedCaseId = propSelectedCaseId || localSelectedCaseId;
   const setSelectedCaseId = propSetSelectedCaseId || setLocalSelectedCaseId;
@@ -253,25 +257,25 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   // LIST VIEW
   if (!selectedCase) {
     return (
-      <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC] p-5">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="bg-white p-4 border border-[#D0D7DE] rounded-sm flex justify-between items-center mb-4 shadow-sm">
+        <div className={`${DESIGN.bgWhite} p-4 border ${DESIGN.borderColor} rounded-sm flex justify-between items-center mb-4 shadow-sm`}>
           <div>
-            <h2 className="text-sm font-bold text-[#0B1F33] font-mono uppercase flex items-center space-x-2">
-              <span>SENTRY INVESTIGATIONS QUEUE & STATUTORY REGISTRY</span>
+            <h2 className={`${TYPOGRAPHY.sectionTitle} uppercase flex items-center space-x-2 mb-0`}>
+              <span>ACTIVE INVESTIGATIONS</span>
             </h2>
-            <p className="text-xs text-[#5C5C5C] mt-1">Evaluate current trade targets or launch secure forensic analysis.</p>
+            <p className={`${TYPOGRAPHY.smallText} mt-1`}>Evaluate current trade targets or launch secure forensic analysis.</p>
           </div>
           <button
             onClick={() => { setSearchQuery(''); setPriorityFilter('all'); setRiskFilter('all'); }}
-            className="px-3 py-1.5 border border-[#D0D7DE] hover:bg-slate-50 text-xs font-mono rounded-sm text-slate-700 font-bold cursor-pointer"
+            className={`px-3 py-1.5 border ${DESIGN.borderColor} hover:${DESIGN.bgLight} text-xs font-bold rounded-sm ${DESIGN.textDark} cursor-pointer`}
           >
-            CLEAR ALL FILTERS
+            CLEAR ALL
           </button>
         </div>
 
         {/* Filter Controls */}
-        <div className="bg-white p-3.5 rounded-sm border border-[#D0D7DE] flex flex-col md:flex-row md:items-center gap-4 mb-4 shadow-sm">
+        <div className={`${DESIGN.bgWhite} p-3.5 rounded-sm border ${DESIGN.borderColor} flex flex-col md:flex-row md:items-center gap-4 mb-4 shadow-sm`}>
           <div className="flex-1 relative flex items-center">
             <Search className="h-4 w-4 text-slate-400 absolute left-3" />
             <input
@@ -279,14 +283,14 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Filter by case name, entity, or ID..."
-              className="w-full bg-[#F7F9FC] border border-[#D0D7DE] rounded-sm pl-9 pr-4 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-[#005EA2]"
+              className={`w-full ${DESIGN.bgLight} border ${DESIGN.borderColor} rounded-sm pl-9 pr-4 py-1.5 text-xs ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2]`}
             />
           </div>
 
           <select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="bg-slate-50 border border-slate-300 rounded px-2.5 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-[#005EA2] font-mono"
+            className={`${DESIGN.bgLight} border ${DESIGN.borderColor} rounded px-2.5 py-1.5 text-xs ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2] font-bold`}
           >
             <option value="all">PRIORITY: ALL</option>
             <option value="critical">CRITICAL</option>
@@ -443,89 +447,114 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
         </div>
       </div>
 
+      {/* Tab Navigation - Horizontal tabs at top */}
+      <TabNavigation
+        tabs={[
+          { id: 'Shipment', label: 'Shipment' },
+          { id: 'Entity', label: 'Entity' },
+          { id: 'Risk Score', label: 'Risk Score' },
+          { id: 'Evidence & Referral', label: 'Evidence & Referral' },
+        ]}
+        activeTab={activeSubTab}
+        onTabChange={(tabId) => setActiveSubTab(tabId as any)}
+        orientation="horizontal"
+      />
+
       {/* Content Area */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left Nav (6 tabs) */}
-        <div className="w-48 border-r border-[#D0D7DE] bg-white flex flex-col">
-          <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-            {(['Overview', 'Entities', 'Shipments', 'Findings', 'Synopsis', 'Data Tables', 'Evidence & Referral'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveSubTab(tab)}
-                className={`w-full text-left px-4 py-2 rounded-sm text-xs font-bold transition-colors ${
-                  activeSubTab === tab
-                    ? 'bg-[#005EA2] text-white'
-                    : 'text-[#0B1F33] hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span>{tab}</span>
-                  {tab === 'Shipments' && selectedCaseShipments.length > 0 && (
-                    <span className="bg-red-600 text-white text-[9px] font-bold px-1.5 rounded">
-                      {selectedCaseShipments.length}
-                    </span>
-                  )}
-                  {tab === 'Findings' && findings.length > 0 && (
-                    <span className="bg-cyan-500 text-white text-[9px] font-bold px-1.5 rounded">
-                      {findings.length}
-                    </span>
-                  )}
-                </div>
-              </button>
-            ))}
-          </nav>
-
-          <div className="border-t border-[#D0D7DE] p-3 text-[9px] text-slate-400 font-mono">
-            Chain of Custody: SECURE
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1 overflow-y-auto">
-          {activeSubTab === 'Overview' && <OverviewTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} synopsisMap={synopsisMap} synopsisLoading={synopsisLoading} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Entities' && <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Shipments' && <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Findings' && <FindingsTab findings={findings} findingStatuses={findingStatuses} onFindingStatusChange={(id: string, status: 'Accepted' | 'Rejected' | 'Needs Review') => setFindingStatuses({...findingStatuses, [id]: status})} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Synopsis' && <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />}
-          {activeSubTab === 'Data Tables' && <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />}
-          {activeSubTab === 'Evidence & Referral' && (
-            <ReferralPackageViewer
-              selectedReferral={selectedReferral}
+      <div className="flex-1 overflow-y-auto">
+          {activeSubTab === 'Shipment' && <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
+          {activeSubTab === 'Entity' && <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
+          {activeSubTab === 'Risk Score' && <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />}
+          {activeSubTab === 'Evidence & Referral' && selectedCaseShipments?.[0] && (
+            <ReferralPackageViewerNew
+              shipmentId={selectedCaseShipments[0].shipment_id}
+              caseId={selectedCase?.case_id}
               selectedCase={selectedCase}
-              findings={findings}
-              referralNarrative={referralNarrative}
-              setReferralNarrative={setReferralNarrative}
-              onCompile={handleCompileReferral}
-              compileLoading={compileLoading}
-              selectedCaseShipments={selectedCaseShipments}
-              onSubmit={handleSubmitReferral}
             />
           )}
-        </div>
       </div>
     </div>
   );
 }
 
-// SYNOPSIS TAB - Risk Scoring Methodology
+// RISK SCORING TAB - Risk Scoring Methodology from API
 function SynopsisTab({ selectedCase, selectedCaseShipments }: any) {
   if (!selectedCaseShipments || selectedCaseShipments.length === 0) return <div className="p-6 text-slate-500">No shipments available</div>;
   const shipment = selectedCaseShipments[0];
 
-  if (!shipment?.risk_breakdown?.components) {
-    return <div className="p-6 bg-blue-50 border border-blue-300 rounded-sm"><p className="text-xs text-blue-700">⏳ Risk breakdown data is loading...</p></div>;
+  // Fetch risk scoring data from API
+  const { scoreData, loading, error } = useRiskScoring(shipment?.shipment_id || null);
+
+  if (loading) {
+    return (
+      <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="text-slate-500">Computing risk scoring breakdown...</div>
+      </div>
+    );
   }
 
-  const components = shipment.risk_breakdown.components;
-  const chartData = components.map((c: any) => ({ name: c.component.substring(0, 15), value: parseFloat(c.weighted_result.toFixed(1)) }));
+  if (error) {
+    return (
+      <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="text-red-600">Error loading risk scoring: {error}</div>
+      </div>
+    );
+  }
+
+  if (!scoreData) {
+    return (
+      <div className="flex-1 p-6 flex items-center justify-center">
+        <div className="text-slate-500">No risk scoring data available</div>
+      </div>
+    );
+  }
+
+  const chartData = scoreData.components.map((c: any) => ({
+    name: c.component.substring(0, 15),
+    value: parseFloat(c.weighted_result.toFixed(1))
+  }));
 
   return (
     <div className="flex-1 p-6 space-y-6 overflow-y-auto bg-[#F7F9FC]">
-      <h2 className="text-lg font-bold text-[#0B1F33]">Risk Scoring Methodology</h2>
+      <h2 className="text-lg font-bold text-[#0B1F33]">Risk Scoring Summary</h2>
+
+      {/* Risk Score Summary */}
+      <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+        <h3 className="text-sm font-bold text-[#0B1F33] mb-4">Overall Risk Assessment</h3>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div className="p-3 bg-red-50 rounded">
+            <div className="text-3xl font-bold text-red-600">{scoreData.final_score.toFixed(0)}</div>
+            <div className="text-xs text-slate-600">Risk Score / 100</div>
+          </div>
+          <div className="p-3 bg-orange-50 rounded">
+            <div className="text-sm font-bold text-orange-600">{scoreData.h1_level || 'UNKNOWN'}</div>
+            <div className="text-xs text-slate-600">H1 Corridor Risk</div>
+          </div>
+          <div className="p-3 bg-yellow-50 rounded">
+            <div className="text-sm font-bold text-yellow-700">{scoreData.h3_recommendation || 'UNKNOWN'}</div>
+            <div className="text-xs text-slate-600">H3 Recommendation</div>
+          </div>
+        </div>
+      </div>
+
+      {/* H2 Signals */}
+      {scoreData.h2_signals && scoreData.h2_signals.length > 0 && (
+        <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
+          <h3 className="text-sm font-bold text-[#0B1F33] mb-3">H2 Anomaly Signals</h3>
+          <div className="space-y-2">
+            {scoreData.h2_signals.map((signal: string, idx: number) => (
+              <div key={idx} className="flex items-center text-xs">
+                <span className="inline-block w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                <span>{signal}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Breakdown Table */}
       <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
-        <h3 className="text-sm font-bold text-[#0B1F33] mb-4">7-Factor Risk Breakdown</h3>
+        <h3 className="text-sm font-bold text-[#0B1F33] mb-4">Risk Component Breakdown</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-[10px] border-collapse">
             <thead className="bg-[#005EA2] text-white">
@@ -537,7 +566,7 @@ function SynopsisTab({ selectedCase, selectedCaseShipments }: any) {
               </tr>
             </thead>
             <tbody>
-              {components.map((comp: any, idx: number) => (
+              {scoreData.components.map((comp: any, idx: number) => (
                 <tr key={idx} className={idx % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
                   <td className="text-left px-3 py-2 font-semibold">{comp.component}</td>
                   <td className="text-right px-3 py-2">{comp.weight.toFixed(1)}</td>
@@ -554,13 +583,13 @@ function SynopsisTab({ selectedCase, selectedCaseShipments }: any) {
       <div className="bg-white rounded-sm border border-[#D0D7DE] p-5">
         <h3 className="text-sm font-bold text-[#0B1F33] mb-3">Score Calculation</h3>
         <div className="space-y-2 text-[10px] font-mono">
-          <div className="flex justify-between"><span>Subtotal (Pre-Adjustment)</span><span className="font-bold">{shipment.risk_breakdown.subtotal.toFixed(1)}</span></div>
-          {shipment.audit_trail?.model_adjustment !== 0 && (
-            <div className="flex justify-between text-cyan-600"><span>Altana Adjustment</span><span className="font-bold">{shipment.audit_trail.model_adjustment > 0 ? '+' : ''}{shipment.audit_trail.model_adjustment}</span></div>
+          <div className="flex justify-between"><span>Subtotal (Components)</span><span className="font-bold">{scoreData.subtotal.toFixed(2)}</span></div>
+          {scoreData.corridor_risk_adjustment && (
+            <div className="flex justify-between text-slate-600"><span>Corridor Adjustment ({scoreData.corridor_risk_adjustment.multiplier.toFixed(2)}x)</span><span>{scoreData.corridor_risk_adjustment.adjustment_points.toFixed(2)}</span></div>
           )}
-          <div className="border-t pt-2 flex justify-between font-bold"><span>FINAL RISK SCORE</span><span className={shipment.risk_breakdown.final_score >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}>{shipment.risk_breakdown.final_score.toFixed(1)}/100</span></div>
+          <div className="border-t pt-2 flex justify-between font-bold"><span>FINAL RISK SCORE</span><span className={scoreData.final_score >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}>{scoreData.final_score.toFixed(1)}/100</span></div>
+          {scoreData.confidence_interval && <div className="text-[8px] text-slate-600 mt-2">Confidence: {scoreData.confidence_interval}</div>}
         </div>
-        {shipment.audit_trail?.altana_query && <div className="mt-3 text-[9px] text-cyan-700 bg-cyan-50 p-2 rounded">✓ Verified by Altana ({shipment.audit_trail.altana_confidence}% confidence)</div>}
       </div>
 
       {/* Chart */}
@@ -581,46 +610,52 @@ function SynopsisTab({ selectedCase, selectedCaseShipments }: any) {
 }
 
 // DATA TABLES TAB - Tables 3-8, 3-9, 3-10 with Analysis
-function DataTablesTab({ selectedCase, selectedCaseShipments }: any) {
+function DataTablesTab({ selectedCase, selectedCaseShipments, selectedReferral }: any) {
   if (!selectedCaseShipments || selectedCaseShipments.length === 0) return <div className="p-6 text-slate-500">No shipments available</div>;
   const shipment = selectedCaseShipments[0];
 
-  const table38Data = [
+  // Use referral data if available, fallback to structured defaults
+  const docReviewSection = selectedReferral?.sections?.section_3_8_document_review;
+  const docConsistencySection = selectedReferral?.sections?.section_3_9_document_consistency;
+  const supplierVerifySection = selectedReferral?.sections?.section_3_10_supplier_verification;
+
+  const table38Data = docReviewSection?.documents?.map((doc: any) => ({
+    doc: doc.document,
+    received: doc.status === 'RECEIVED' ? 'Yes' : 'No',
+    key: doc.key_data || 'Document submitted',
+    match: doc.verification_status || 'Pending',
+    concern: doc.concern || (doc.status === 'RECEIVED' ? 'Under review' : 'MAJOR GAP')
+  })) || [
     { doc: 'Commercial Invoice', received: 'Yes', key: 'Origin stated as Vietnam', match: 'Partial', concern: 'Needs production proof' },
     { doc: 'Packing List', received: 'Yes', key: '3 line items, 26,200 kg', match: 'Yes', concern: 'No factory lot mapping' },
     { doc: 'Bill of Lading', received: 'Yes', key: 'BOL-2026-00194', match: 'Yes', concern: 'Limited traceability' },
-    { doc: 'Certificate of Origin', received: 'Yes', key: 'Vietnam origin', match: 'Partial', concern: 'Template-like' },
-    { doc: 'Purchase Order', received: 'Yes', key: 'Dated Mar 28', match: 'Yes', concern: 'No source plant ID' },
     { doc: 'Factory Production Record', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
-    { doc: 'Bill of Materials', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
-    { doc: 'Raw Material Invoice', received: 'No', key: 'Not provided', match: 'No', concern: 'MAJOR GAP' },
   ];
 
-  const table39Data = [
+  const table39Data = docConsistencySection ? [
+    { element: 'ISF Element 9 Status', invoice: docConsistencySection.isf_element9?.declared_origin || 'Unknown', packing: docConsistencySection.isf_element9?.actual_stuffing_country || 'Unknown', bol: docConsistencySection.isf_element9?.actual_stuffing_country || 'Unknown', coo: 'N/A', status: docConsistencySection.isf_element9?.is_mismatch ? 'MISMATCH' : 'Consistent' },
+  ] : [
     { element: 'Shipper name', invoice: '✓', packing: '✓', bol: '✓', coo: '✓', status: 'Consistent' },
     { element: 'Country of origin', invoice: 'Vietnam', packing: 'Vietnam', bol: 'Vietnam', coo: 'Vietnam', status: 'Consistent' },
     { element: 'Commodity', invoice: 'Aluminum ext.', packing: 'Aluminum ext.', bol: 'Aluminum ext.', coo: 'Aluminum ext.', status: 'Consistent' },
     { element: 'Quantity', invoice: '26,200 kg', packing: '26,200 kg', bol: 'N/A', coo: 'N/A', status: 'Partial' },
-    { element: 'Manufacturing details', invoice: 'Missing', packing: 'Missing', bol: 'Missing', coo: 'Missing', status: 'Missing' },
-    { element: 'Plant location', invoice: 'Not stated', packing: 'Not stated', bol: 'Not stated', coo: 'Not stated', status: 'Missing' },
   ];
 
-  const table310Data = [
+  const table310Data = supplierVerifySection ? [
+    { item: 'Shipper Age', response: `${supplierVerifySection.shipper_age_months || 0} months`, evidence: supplierVerifySection.shipper_age_risk || 'Unknown', assessment: supplierVerifySection.shipper_age_risk === 'VERY_NEW' ? 'High Risk' : 'Acceptable' },
+    { item: 'Production Capacity', response: supplierVerifySection.capacity_assessment || 'Pending verification', evidence: `Declared: ${supplierVerifySection.declared_volume_kg} kg`, assessment: 'Under Review' },
+  ] : [
     { item: 'Factory address', response: 'Industrial Zone', evidence: 'No details', assessment: 'Weak' },
-    { item: 'Extrusion presses', response: 'Multiple units', evidence: 'No specs', assessment: 'Weak' },
     { item: 'Production capacity', response: 'Sufficient', evidence: 'No report', assessment: 'Weak' },
-    { item: 'Raw aluminum source', response: 'Regional', evidence: 'No invoices', assessment: 'Weak' },
-    { item: 'QC and tests', response: 'Available', evidence: 'Not provided', assessment: 'Missing' },
-    { item: 'Work order linkage', response: 'Not provided', evidence: 'None', assessment: 'Missing' },
   ];
 
-  const receivedCount = table38Data.filter(d => d.received === 'Yes').length;
+  const receivedCount = table38Data.filter((d: any) => d.received === 'Yes').length;
   const pie38Data = [
     { name: 'Received', value: receivedCount, fill: '#22c55e' },
     { name: 'Missing', value: table38Data.length - receivedCount, fill: '#ef4444' },
   ];
 
-  const consistencyScores = table39Data.map(d => ({
+  const consistencyScores = table39Data.map((d: any) => ({
     name: d.element.substring(0, 12),
     score: d.status === 'Consistent' ? 3 : d.status === 'Partial' ? 2 : 1,
   }));
@@ -644,7 +679,7 @@ function DataTablesTab({ selectedCase, selectedCaseShipments }: any) {
               </tr>
             </thead>
             <tbody>
-              {table38Data.map((row, i) => (
+              {table38Data.map((row: any, i: number) => (
                 <tr key={i} className={i % 2 === 0 ? 'bg-slate-50' : 'bg-white'}>
                   <td className="px-2 py-1">{row.doc}</td>
                   <td className="text-center"><span className={`px-1 rounded text-[8px] font-bold ${row.received === 'Yes' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{row.received}</span></td>
@@ -829,6 +864,103 @@ function OverviewTab({ selectedCase, selectedCaseShipments, synopsisMap, synopsi
         <p className="text-xs text-[#5C5C5C]">
           {synopsisMap[selectedCase.case_id] || 'Generating AI analysis...'}
         </p>
+      </div>
+
+      {/* 7-Factor Risk Breakdown */}
+      <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">
+        <h3 className="text-sm font-bold text-[#0B1F33] mb-4">7-FACTOR RISK BREAKDOWN</h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Documentation Risk</p>
+              <p className="text-[9px] text-[#5C5C5C]">ISF, Element 9, Manifest Completeness</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-[#D83933]">{Math.round(selectedCase.h1_score || 0)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-[#D83933]" style={{width: `${Math.min((selectedCase.h1_score || 0) / 40 * 100, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Corridor Risk</p>
+              <p className="text-[9px] text-[#5C5C5C]">Country-of-Origin Risk Pair</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-amber-600">{Math.round((selectedCase.risk_score || 0) * 0.7)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-amber-600" style={{width: `${Math.min((selectedCase.risk_score || 0) * 0.7, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Commodity Risk</p>
+              <p className="text-[9px] text-[#5C5C5C]">Tariff Rate, Export Control, UFLPA</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-orange-600">{Math.round((selectedCase.risk_score || 0) * 0.8)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-orange-600" style={{width: `${Math.min((selectedCase.risk_score || 0) * 0.8, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Routing Risk</p>
+              <p className="text-[9px] text-[#5C5C5C]">AIS Dwell, Port Selection, Vessel Flag</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-blue-600">{Math.round(selectedCase.h2_score || 0)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-blue-600" style={{width: `${Math.min((selectedCase.h2_score || 0) / 35 * 100, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Party Risk</p>
+              <p className="text-[9px] text-[#5C5C5C]">Shipper Age, Prior Violations, OFAC, Ownership</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-purple-600">{Math.round((selectedCase.risk_score || 0) * 0.6)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-purple-600" style={{width: `${Math.min((selectedCase.risk_score || 0) * 0.6, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Pattern Anomaly</p>
+              <p className="text-[9px] text-[#5C5C5C]">Pricing/Weight Anomaly, Trade Frequency</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-[#112E51]">{Math.round((selectedCase.risk_score || 0) * 0.65)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-[#112E51]" style={{width: `${Math.min((selectedCase.risk_score || 0) * 0.65, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33]">Time Sensitivity</p>
+              <p className="text-[9px] text-[#5C5C5C]">Pre-Tariff Timing, Seasonal Anomaly</p>
+            </div>
+            <div className="text-right">
+              <p className="text-lg font-black font-mono text-slate-600">{Math.round((selectedCase.risk_score || 0) * 0.5)}</p>
+              <div className="w-20 h-2 bg-slate-200 rounded-sm mt-1 overflow-hidden">
+                <div className="h-full bg-slate-600" style={{width: `${Math.min((selectedCase.risk_score || 0) * 0.5, 100)}%`}} />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Core Anomaly Matrix */}

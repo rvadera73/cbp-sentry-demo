@@ -43,6 +43,37 @@ class Shipment(ShipmentBase):
     h1_score: Optional[float] = None
     h2_score: Optional[float] = None
     h1_h2_score: Optional[float] = None
+    # Element 9 fields
+    element9_is_mismatch: Optional[bool] = None
+    element9_declared_country: Optional[str] = None
+    element9_actual_country: Optional[str] = None
+    element9_confidence: Optional[float] = None
+    # AD/CVD fields
+    ad_cvd_applicable: Optional[bool] = None
+    ad_cvd_rate: Optional[float] = None
+    # Anomaly detection fields
+    shipper_age_months: Optional[int] = None
+    dwell_days: Optional[float] = None
+    ais_stuffing_country: Optional[str] = None
+    port_calls: Optional[str] = None
+    vessel_flag: Optional[str] = None
+    vessel_imo: Optional[str] = None
+    shipper_country: Optional[str] = None
+    consignee_country: Optional[str] = None
+    # Risk scoring fields
+    risk_breakdown: Optional[Dict[str, Any]] = None
+    audit_trail: Optional[Dict[str, Any]] = None
+    ai_synthesis: Optional[Dict[str, Any]] = None
+    # Manifest data
+    manifest_source_id: Optional[str] = None
+    h2_signals: Optional[str] = None
+    h3_recommendation: Optional[str] = None
+    customs_flags: Optional[str] = None
+    inspection_history: Optional[str] = None
+    commodity_code: Optional[str] = None
+    commodity_name: Optional[str] = None
+    bill_of_lading: Optional[str] = None
+    voyage_number: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -174,3 +205,57 @@ class ThreeLevelScore(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============= MANIFEST UPLOAD JOB MODELS =============
+
+class UploadJobStatus(BaseModel):
+    """Status of a manifest upload job"""
+    id: str
+    filename: str
+    status: str  # "pending", "processing", "complete", "failed"
+    total_rows: int
+    processed_rows: int
+    inserted_rows: int
+    duplicate_rows: int
+    high_risk_count: int
+    medium_risk_count: int
+    low_risk_count: int
+    error_count: int
+    errors: Optional[List[Dict[str, Any]]] = None
+    manifest_id: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    elapsed_seconds: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+    @property
+    def progress_pct(self) -> int:
+        """Calculate progress percentage"""
+        if self.total_rows == 0:
+            return 0
+        return int((self.processed_rows / self.total_rows) * 100)
+
+
+class UploadJobCreate(BaseModel):
+    """Request to create an upload job"""
+    id: str
+    filename: str
+    total_rows: int
+
+
+class UploadJobUpdate(BaseModel):
+    """Request to update job progress"""
+    processed_rows: Optional[int] = None
+    inserted_rows: Optional[int] = None
+    duplicate_rows: Optional[int] = None
+    high_risk_count: Optional[int] = None
+    medium_risk_count: Optional[int] = None
+    low_risk_count: Optional[int] = None
+    error_count: Optional[int] = None
+    errors: Optional[List[Dict[str, Any]]] = None
+    status: Optional[str] = None
+    manifest_id: Optional[str] = None
+    completed_at: Optional[datetime] = None

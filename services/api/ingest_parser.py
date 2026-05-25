@@ -22,27 +22,40 @@ def parse_excel_manifest(file_content: bytes) -> Tuple[List[Dict[str, Any]], Lis
     errors = []
     rows = []
 
-    # Expected column mappings (case-insensitive)
+    # Expected column mappings (case-insensitive, handles both spaces and underscores)
     column_map = {
-        'shipper': ['shipper', 'shipper_name', 'exporter', 'supplier'],
-        'consignee': ['consignee', 'consignee_name', 'importer', 'buyer'],
-        'origin_country': ['origin', 'origin_country', 'country_of_origin', 'export_country'],
-        'destination_country': ['destination', 'destination_country', 'import_country', 'consignee_country'],
-        'hs_code': ['hs_code', 'hts_code', 'commodity_code', 'product_code'],
-        'value': ['value', 'declared_value', 'value_usd', 'fob_value'],
-        'weight': ['weight', 'weight_kg', 'net_weight', 'declared_weight'],
-        'description': ['description', 'product_description', 'commodity'],
-        'vessel_name': ['vessel', 'vessel_name', 'ship_name', 'carrying_vessel'],
+        'manifest_id': ['manifest_id', 'manifest id', 'mnf_id', 'ref_id'],
+        'shipper': ['shipper', 'shipper_name', 'shipper name', 'exporter', 'supplier'],
+        'consignee': ['consignee', 'consignee_name', 'consignee name', 'importer', 'buyer'],
+        'origin_country': ['origin', 'origin_country', 'origin country', 'country_of_origin', 'country of origin', 'export_country', 'export country'],
+        'destination_country': ['destination', 'destination_country', 'destination country', 'import_country', 'import country', 'consignee_country', 'consignee country'],
+        'hs_code': ['hs_code', 'hs code', 'hts_code', 'hts code', 'commodity_code', 'commodity code', 'product_code', 'product code'],
+        'value': ['value', 'declared_value', 'declared value', 'value_usd', 'value usd', 'fob_value', 'fob value', 'declared_value_usd', 'declared value usd'],
+        'weight': ['weight', 'weight_kg', 'weight kg', 'net_weight', 'net weight', 'declared_weight', 'declared weight', 'declared_weight_kg', 'declared weight kg'],
+        'description': ['description', 'product_description', 'product description', 'commodity'],
+        'vessel_name': ['vessel', 'vessel_name', 'vessel name', 'ship_name', 'ship name', 'carrying_vessel', 'carrying vessel'],
+        'vessel_imo': ['vessel_imo', 'vessel imo', 'imo', 'imo_number'],
+        'vessel_flag': ['vessel_flag', 'vessel flag', 'flag_state', 'flag state'],
+        'dwell_days': ['dwell_days', 'dwell days', 'dwell_time'],
+        'ais_stuffing_country': ['ais_stuffing_country', 'ais stuffing country', 'ais_country', 'stuffing_country'],
+        'port_calls': ['port_calls', 'port calls', 'ports', 'port_list'],
+        'element9_is_mismatch': ['element9_is_mismatch', 'element9 is mismatch', 'isf_mismatch', 'isf element 9'],
+        'element9_declared_country': ['element9_declared_country', 'element9 declared country', 'isf_declared_country'],
+        'element9_actual_country': ['element9_actual_country', 'element9 actual country', 'isf_actual_country'],
+        'shipper_age_months': ['shipper_age_months', 'shipper age months', 'shipper age', 'entity age'],
+        'ad_cvd_rate': ['ad_cvd_rate', 'ad cvd rate', 'duty_rate', 'duty rate'],
+        'ad_cvd_applicable': ['ad_cvd_applicable', 'ad cvd applicable', 'duty_applicable', 'has_duty'],
     }
 
-    # Find actual columns in the dataframe
-    df_columns_lower = {col.lower(): col for col in df.columns}
+    # Find actual columns in the dataframe (normalize spaces to match aliases)
+    df_columns_normalized = {col.lower().replace('_', ' '): col for col in df.columns}
     found_columns = {}
 
     for target, aliases in column_map.items():
         for alias in aliases:
-            if alias.lower() in df_columns_lower:
-                found_columns[target] = df_columns_lower[alias.lower()]
+            normalized_alias = alias.lower().replace('_', ' ')
+            if normalized_alias in df_columns_normalized:
+                found_columns[target] = df_columns_normalized[normalized_alias]
                 break
 
     if 'shipper' not in found_columns or 'consignee' not in found_columns:
@@ -52,17 +65,47 @@ def parse_excel_manifest(file_content: bytes) -> Tuple[List[Dict[str, Any]], Lis
     # Parse rows
     for idx, row in df.iterrows():
         try:
+            # Helper to safely get and convert values
+            def safe_str(val, default=''):
+                return str(val).strip() if val and str(val).strip() not in ['', 'nan', 'None'] else default
+
+            def safe_float(val, default=None):
+                try:
+                    v = float(val) if val else None
+                    return v if v else default
+                except:
+                    return default
+
+            def safe_int(val, default=None):
+                try:
+                    v = int(val) if val else None
+                    return v if v else default
+                except:
+                    return default
+
             parsed_row = {
                 'rowNumber': idx + 1,
-                'shipper': str(row.get(found_columns.get('shipper', ''), 'Unknown')).strip(),
-                'consignee': str(row.get(found_columns.get('consignee', ''), 'Unknown')).strip(),
-                'origin_country': str(row.get(found_columns.get('origin_country', ''), 'XX')).strip()[:2].upper(),
-                'destination_country': str(row.get(found_columns.get('destination_country', ''), 'US')).strip()[:2].upper(),
-                'hs_code': str(row.get(found_columns.get('hs_code', ''), '')).strip() or '9999',
-                'declared_value_usd': float(row.get(found_columns.get('value', ''), 0) or 0),
-                'declared_weight_kg': float(row.get(found_columns.get('weight', ''), 0) or 0),
-                'description': str(row.get(found_columns.get('description', ''), '')).strip(),
-                'vessel_name': str(row.get(found_columns.get('vessel_name', ''), '')).strip() or None,
+                'manifest_id': safe_str(row.get(found_columns.get('manifest_id', ''), '')) or None,
+                'shipper': safe_str(row.get(found_columns.get('shipper', ''), 'Unknown'), 'Unknown'),
+                'consignee': safe_str(row.get(found_columns.get('consignee', ''), 'Unknown'), 'Unknown'),
+                'origin_country': safe_str(row.get(found_columns.get('origin_country', ''), 'XX'), 'XX')[:2].upper(),
+                'destination_country': safe_str(row.get(found_columns.get('destination_country', ''), 'US'), 'US')[:2].upper(),
+                'hs_code': safe_str(row.get(found_columns.get('hs_code', ''), '9999'), '9999'),
+                'declared_value_usd': safe_float(row.get(found_columns.get('value', ''), 0), 0),
+                'declared_weight_kg': safe_float(row.get(found_columns.get('weight', ''), 0), 0),
+                'description': safe_str(row.get(found_columns.get('description', ''), '')) or None,
+                'vessel_name': safe_str(row.get(found_columns.get('vessel_name', ''), '')) or None,
+                'vessel_imo': safe_str(row.get(found_columns.get('vessel_imo', ''), '')) or None,
+                'vessel_flag': safe_str(row.get(found_columns.get('vessel_flag', ''), '')) or None,
+                'dwell_days': safe_float(row.get(found_columns.get('dwell_days', ''), None)),
+                'ais_stuffing_country': safe_str(row.get(found_columns.get('ais_stuffing_country', ''), '')) or None,
+                'port_calls': safe_str(row.get(found_columns.get('port_calls', ''), '')) or None,
+                'element9_is_mismatch': safe_int(row.get(found_columns.get('element9_is_mismatch', ''), 0), 0),
+                'element9_declared_country': safe_str(row.get(found_columns.get('element9_declared_country', ''), '')) or None,
+                'element9_actual_country': safe_str(row.get(found_columns.get('element9_actual_country', ''), '')) or None,
+                'shipper_age_months': safe_int(row.get(found_columns.get('shipper_age_months', ''), None)),
+                'ad_cvd_rate': safe_float(row.get(found_columns.get('ad_cvd_rate', ''), None)),
+                'ad_cvd_applicable': safe_int(row.get(found_columns.get('ad_cvd_applicable', ''), 0), 0),
             }
 
             # Basic validation

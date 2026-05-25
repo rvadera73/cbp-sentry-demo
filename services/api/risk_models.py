@@ -338,6 +338,7 @@ class RiskScoreBreakdown:
 
     final_score: float = 0.0  # Final composite score (0-100)
     confidence_interval: str = ""  # e.g., "85.0±2.5"
+    calculation_table: Dict[str, Any] = None  # Detailed calculation breakdown for transparency
 
     def to_dict(self) -> Dict:
         return {
@@ -348,4 +349,5 @@ class RiskScoreBreakdown:
             'additional_adjustments': self.additional_adjustments,
             'final_score': round(self.final_score, 1),
             'confidence_interval': self.confidence_interval,
+            'calculation_table': self.calculation_table,
         }

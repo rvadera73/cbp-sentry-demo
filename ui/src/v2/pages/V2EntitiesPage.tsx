@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, AlertTriangle } from 'lucide-react';
+import { Search, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useV2Entities } from '../hooks/useV2Entities';
 import { TradeEntity } from '../types/v2.types';
+import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 
 export default function V2EntitiesPage() {
   const { entities, selectedEntity, selectEntity, searchEntities, loading } = useV2Entities();
@@ -15,83 +16,118 @@ export default function V2EntitiesPage() {
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-[#F7F9FC]">
-      {/* Entity List */}
-      <div className="flex-1 p-5 overflow-y-auto">
-        <h1 className="text-2xl font-bold text-[#0B1F33] mb-4">Entity Resolution</h1>
-
-        {/* Search Bar */}
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search entities by name..."
-            value={searchQuery}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-[#D0D7DE] rounded-sm text-sm focus:outline-none focus:border-[#005EA2] focus:ring-1 focus:ring-[#005EA2]"
-          />
-        </div>
-
-        {/* Entity Cards Grid */}
-        <div className="grid grid-cols-2 gap-3">
-          {loading ? (
-            <div className="col-span-2 text-center text-gray-500 text-sm py-6">
-              Searching entities...
-            </div>
-          ) : entities.length === 0 ? (
-            <div className="col-span-2 text-center text-gray-500 text-sm py-6">
-              No entities found. Try searching with different keywords.
-            </div>
-          ) : (
-            entities.map(e => (
-              <button
-                key={e.entity_id}
-                onClick={() => selectEntity(e.entity_id)}
-                className={`p-4 rounded-sm border-2 text-left transition-all ${
-                  selectedEntity?.entity_id === e.entity_id
-                    ? 'bg-[#F0F4F8] border-[#005EA2] shadow-md'
-                    : 'bg-white border-[#D0D7DE] hover:border-[#005EA2]'
-                }`}
-              >
-                {/* Entity Type Badge */}
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-[8px] font-bold bg-slate-200 text-slate-800 px-1.5 py-0.5 rounded uppercase whitespace-nowrap">
-                    {e.entity_type}
-                  </span>
-                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase whitespace-nowrap ${
-                    e.risk_level === 'Critical' ? 'bg-[#D83933] text-white' :
-                    e.risk_level === 'High' ? 'bg-amber-100 text-amber-900' :
-                    'bg-green-100 text-green-900'
-                  }`}>
-                    {e.risk_level}
-                  </span>
-                </div>
-
-                {/* Entity Name */}
-                <h3 className="font-bold text-[#0B1F33] text-sm mb-1 line-clamp-2">{e.entity_name}</h3>
-
-                {/* Basic Info */}
-                <div className="space-y-1 text-[9px]">
-                  <p className="text-[#5C5C5C]"><span className="font-bold text-[8px]">Country:</span> {e.country}</p>
-                  <p className="text-[#5C5C5C]"><span className="font-bold text-[8px]">Tax ID:</span> {e.tax_id || 'Unverified'}</p>
-                  <p className={`font-semibold ${e.watchlist_status === 'Flagged' ? 'text-[#D83933]' : 'text-green-600'}`}>
-                    {e.watchlist_status}
-                  </p>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className={`${DESIGN.bgWhite} border-b ${DESIGN.borderColor} px-6 py-4 shadow-sm`}>
+        <h1 className={TYPOGRAPHY.pageTitle}>Entity Resolution</h1>
+        <p className={TYPOGRAPHY.pageSubtitle}>Identify and track trade entities across networks</p>
       </div>
 
-      {/* Detail Panel */}
-      {selectedEntity && (
-        <div className="w-96 border-l border-[#D0D7DE] bg-white overflow-y-auto flex flex-col shrink-0">
+      {/* List View */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Search Bar */}
+          <div className={`${DESIGN.bgWhite} border-b ${DESIGN.borderColor} px-6 py-4`}>
+            <div className="relative flex items-center">
+              <Search className="h-4 w-4 text-slate-400 absolute left-3" />
+              <input
+                type="text"
+                placeholder="Search by entity name, tax ID, country..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className={`w-full pl-9 pr-4 py-2 border ${DESIGN.borderColor} rounded-sm text-sm ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2]`}
+              />
+            </div>
+          </div>
+
+          {/* Entity Table */}
+          <div className="flex-1 overflow-auto">
+            <div className={`${DESIGN.bgWhite} border ${DESIGN.borderColor} rounded-sm shadow-sm h-full`}>
+              {loading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className={`text-center ${DESIGN.textGray} text-xs`}>Searching entities...</div>
+                </div>
+              ) : entities.length === 0 ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className={`text-center ${DESIGN.textGray} text-xs italic`}>No entities found. Try searching with different keywords.</div>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse">
+                  <thead className={`sticky top-0 bg-[#F0F4F8] border-b ${DESIGN.borderColor}`}>
+                    <tr>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-24`}>RISK</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3`}>ENTITY NAME</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-20`}>TYPE</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-20`}>COUNTRY</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-28`}>TAX ID</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-24`}>WATCHLIST</th>
+                      <th className={`${TYPOGRAPHY.tableHeader} p-3 text-right w-16`}>DETAILS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#E0E3E8]">
+                    {entities.map((e) => (
+                      <tr
+                        key={e.entity_id}
+                        className="hover:bg-[#F7F9FC] transition-colors cursor-pointer"
+                        onClick={() => selectEntity(e.entity_id)}
+                      >
+                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>
+                          <span className={`inline-block px-2.5 py-1 rounded text-center font-bold text-xs text-white ${
+                            e.risk_level === 'Critical' ? 'bg-[#D83933]' :
+                            e.risk_level === 'High' ? 'bg-orange-600' :
+                            'bg-green-600'
+                          }`}>
+                            {e.risk_level}
+                          </span>
+                        </td>
+                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>
+                          <div className="flex flex-col">
+                            <span className="font-bold">{e.entity_name}</span>
+                            <span className={`${TYPOGRAPHY.tableMono} mt-0.5`}>{e.entity_id}</span>
+                          </div>
+                        </td>
+                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>
+                          <span className="text-[9px] bg-slate-100 text-slate-700 px-2 py-1 rounded">
+                            {e.entity_type}
+                          </span>
+                        </td>
+                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>{e.country}</td>
+                        <td className={`${TYPOGRAPHY.tableMono} p-3`}>{e.tax_id || '—'}</td>
+                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>
+                          <span className={`text-[10px] font-bold ${
+                            e.watchlist_status === 'Flagged' ? 'text-[#D83933]' : 'text-green-600'
+                          }`}>
+                            {e.watchlist_status}
+                          </span>
+                        </td>
+                        <td className={`${TYPOGRAPHY.tableCell} p-3 text-right`}>
+                          <button
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              selectEntity(e.entity_id);
+                            }}
+                            className="px-2 py-1 bg-[#0076D6] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded-sm flex items-center space-x-1 ml-auto transition-colors"
+                          >
+                            <ChevronRight className="h-3 w-3" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Detail Panel */}
+        {selectedEntity && (
+          <div className={`w-96 border-l ${DESIGN.borderColor} ${DESIGN.bgWhite} overflow-y-auto flex flex-col shrink-0`}>
           {/* Header */}
-          <div className="bg-[#F7F9FC] border-b border-[#D0D7DE] p-4 shrink-0">
-            <h2 className="text-sm font-bold text-[#0B1F33] mb-1">{selectedEntity.entity_name}</h2>
-            <p className="text-[9px] text-[#5C5C5C] font-mono">{selectedEntity.entity_id}</p>
-            <p className="text-[9px] text-[#5C5C5C] mt-1">Tax ID: {selectedEntity.tax_id}</p>
+          <div className={`bg-[#F7F9FC] border-b ${DESIGN.borderColor} p-4 shrink-0`}>
+            <h2 className={`${TYPOGRAPHY.sectionTitle} mb-1`}>{selectedEntity.entity_name}</h2>
+            <p className={`${TYPOGRAPHY.tableMono}`}>{selectedEntity.entity_id}</p>
+            <p className={`${TYPOGRAPHY.smallText} mt-2`}>Tax ID: {selectedEntity.tax_id || 'Unverified'}</p>
           </div>
 
           {/* Content */}
@@ -116,7 +152,7 @@ export default function V2EntitiesPage() {
                   }`}>
                     {selectedEntity.sanctions_status === 'Blocked list' ? 'BLOCKED ENTITY' : 'SANCTIONS ALERT'}
                   </p>
-                  <p className="text-[9px] text-gray-700">
+                  <p className={`${TYPOGRAPHY.smallText}`}>
                     {selectedEntity.sanctions_status === 'Blocked list'
                       ? 'This entity is on the OFAC SDN list. No trade permitted.'
                       : 'This entity is under investigation for sanctions violations.'}
@@ -127,34 +163,34 @@ export default function V2EntitiesPage() {
 
             {/* Corporate Registration */}
             <section>
-              <h3 className="text-xs font-bold text-[#5C5C5C] uppercase mb-3">Corporate Registration</h3>
-              <div className="space-y-2 bg-slate-50 p-3 rounded border border-slate-200">
+              <h3 className={`${TYPOGRAPHY.label} uppercase mb-3`}>Corporate Registration</h3>
+              <div className={`space-y-2 ${DESIGN.bgLight} p-3 rounded border ${DESIGN.borderColor}`}>
                 <div>
-                  <label className="text-[8px] font-bold text-[#5C5C5C]">Entity Type</label>
-                  <p className="text-xs text-[#0B1F33]">{selectedEntity.entity_type}</p>
+                  <label className={TYPOGRAPHY.label}>Entity Type</label>
+                  <p className={`${TYPOGRAPHY.tableCell} mt-1`}>{selectedEntity.entity_type}</p>
                 </div>
                 <div>
-                  <label className="text-[8px] font-bold text-[#5C5C5C]">Status</label>
-                  <p className="text-xs text-[#0B1F33]">{selectedEntity.registration_status}</p>
+                  <label className={TYPOGRAPHY.label}>Status</label>
+                  <p className={`${TYPOGRAPHY.tableCell} mt-1`}>{selectedEntity.registration_status}</p>
                 </div>
                 <div>
-                  <label className="text-[8px] font-bold text-[#5C5C5C]">Country</label>
-                  <p className="text-xs text-[#0B1F33]">{selectedEntity.country}</p>
+                  <label className={TYPOGRAPHY.label}>Country</label>
+                  <p className={`${TYPOGRAPHY.tableCell} mt-1`}>{selectedEntity.country}</p>
                 </div>
                 <div>
-                  <label className="text-[8px] font-bold text-[#5C5C5C]">Address</label>
-                  <p className="text-xs text-[#0B1F33]">{selectedEntity.address}</p>
+                  <label className={TYPOGRAPHY.label}>Address</label>
+                  <p className={`${TYPOGRAPHY.tableCell} mt-1`}>{selectedEntity.address}</p>
                 </div>
               </div>
             </section>
 
-            {/* Architecture Notes */}
+            {/* Network Indicators */}
             <section>
-              <h3 className="text-xs font-bold text-[#5C5C5C] uppercase mb-3">Architecture Notes</h3>
+              <h3 className={`${TYPOGRAPHY.label} uppercase mb-3`}>Network Indicators</h3>
 
               {/* Affiliations */}
               <div className="mb-3">
-                <label className="text-[8px] font-bold text-[#5C5C5C] uppercase block mb-2">Known Affiliations</label>
+                <label className={`${TYPOGRAPHY.label} block mb-2`}>Known Affiliations</label>
                 {selectedEntity.known_affiliations && selectedEntity.known_affiliations.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {selectedEntity.known_affiliations.slice(0, 5).map((aff, idx) => (
@@ -169,14 +205,14 @@ export default function V2EntitiesPage() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-[9px] text-gray-500">No known affiliations</p>
+                  <p className={`${TYPOGRAPHY.smallText}`}>No known affiliations</p>
                 )}
               </div>
 
               {/* Ownership Indicators */}
               <div>
-                <label className="text-[8px] font-bold text-[#5C5C5C] uppercase block mb-2">Ownership Indicators</label>
-                <p className="text-[9px] text-gray-700 leading-snug">
+                <label className={`${TYPOGRAPHY.label} block mb-2`}>Ownership Indicators</label>
+                <p className={`${TYPOGRAPHY.smallText} leading-snug`}>
                   {selectedEntity.ownership_indicators || 'Data pending from beneficial ownership registry'}
                 </p>
               </div>
@@ -184,8 +220,8 @@ export default function V2EntitiesPage() {
 
             {/* Enforcement History */}
             <section>
-              <h3 className="text-xs font-bold text-[#5C5C5C] uppercase mb-3">Enforcement History</h3>
-              <p className="text-[9px] text-gray-700 leading-snug bg-slate-50 p-3 rounded border border-slate-200">
+              <h3 className={`${TYPOGRAPHY.label} uppercase mb-3`}>Enforcement History</h3>
+              <p className={`${TYPOGRAPHY.smallText} leading-snug ${DESIGN.bgLight} p-3 rounded border ${DESIGN.borderColor}`}>
                 {selectedEntity.enforcement_history || 'No enforcement actions recorded'}
               </p>
             </section>
@@ -200,12 +236,13 @@ export default function V2EntitiesPage() {
             </div>
 
             {/* Add to Watchlist Button */}
-            <button className="w-full px-4 py-2 bg-[#005EA2] text-white text-sm font-bold rounded hover:bg-[#0076D6] transition-colors">
+            <button className={`w-full px-4 py-2 bg-[#005EA2] text-white text-sm font-bold rounded hover:bg-[#0076D6] transition-colors`}>
               Add to Watchlist
             </button>
           </div>
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -32,10 +32,13 @@ export interface PreManifestVesselsData {
  * Fetches pre-manifest vessels currently inbound to US ports
  * Shows vessel data available before the shipment manifest is filed
  * Last refresh timestamp indicates when data was pulled from external APIs
+ *
+ * @param corridorId Optional corridor filter (e.g. "VN→US")
+ * @param autoRefresh Enable auto-refresh every 30 minutes
  */
-export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsData {
+export function usePreManifestVessels(corridorId?: string, autoRefresh = false): PreManifestVesselsData {
   const [vessels, setVessels] = useState<PreManifestVessel[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!!corridorId || autoRefresh);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
@@ -43,7 +46,16 @@ export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsDa
   const fetchVessels = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/pre-manifest/vessels');
+      const params = new URLSearchParams();
+      if (corridorId) {
+        params.append('corridor_id', corridorId);
+      }
+
+      const url = params.toString()
+        ? `/api/pre-manifest/vessels?${params}`
+        : '/api/pre-manifest/vessels';
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to fetch pre-manifest vessels: ${response.statusText}`);
       }
@@ -58,12 +70,21 @@ export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsDa
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [corridorId]);
 
   const refreshVessels = useCallback(async () => {
     try {
       setIsRefreshing(true);
-      const response = await fetch('/api/pre-manifest/vessels');
+      const params = new URLSearchParams();
+      if (corridorId) {
+        params.append('corridor_id', corridorId);
+      }
+
+      const url = params.toString()
+        ? `/api/pre-manifest/vessels?${params}`
+        : '/api/pre-manifest/vessels';
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Failed to refresh vessels: ${response.statusText}`);
       }
@@ -78,7 +99,7 @@ export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsDa
     } finally {
       setIsRefreshing(false);
     }
-  }, []);
+  }, [corridorId]);
 
   useEffect(() => {
     fetchVessels();
@@ -88,7 +109,7 @@ export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsDa
       const interval = setInterval(fetchVessels, 30 * 60 * 1000);
       return () => clearInterval(interval);
     }
-  }, [autoRefresh, fetchVessels]);
+  }, [corridorId, autoRefresh, fetchVessels]);
 
   return {
     vessels,
@@ -107,7 +128,7 @@ export function usePreManifestVessels(autoRefresh = false): PreManifestVesselsDa
  * Extended version that includes refresh trigger function
  */
 export function usePreManifestVesselsWithRefresh(autoRefresh = false) {
-  const data = usePreManifestVessels(autoRefresh);
+  const data = usePreManifestVessels(undefined, autoRefresh);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const manualRefresh = async () => {

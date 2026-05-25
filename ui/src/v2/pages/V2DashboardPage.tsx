@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
-import { Search, AlertTriangle, Clock, Coins, Shield, TrendingUp } from 'lucide-react';
+import { Search, AlertTriangle, Coins, Shield, TrendingUp, Upload } from 'lucide-react';
 import { useV2Cases } from '../hooks/useV2Cases';
 import { useV2ThreatFeed } from '../hooks/useV2ThreatFeed';
 import { Case, Shipment } from '../types/v2.types';
+import UploadPipelineModal from '../../components/cases/UploadPipelineModal';
 
 interface DashboardStats {
   criticalInvestigations: number;
   highRiskShipments: number;
   watchlistBlocks: number;
-  uncollectedRevenue: string;
-  slaRemaining: string;
 }
 
 interface V2DashboardPageProps {
@@ -30,14 +29,13 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [riskFilter, setRiskFilter] = useState('all');
+  const [showUploadModal, setShowUploadModal] = useState(false);
 
   // Calculate stats
   const stats: DashboardStats = {
     criticalInvestigations: cases.filter(c => c.priority === 'Critical').length,
     highRiskShipments: cases.filter(c => c.risk_score >= 80).length,
     watchlistBlocks: cases.filter(c => c.case_status === 'Active').length,
-    uncollectedRevenue: '$8,410,200',
-    slaRemaining: '3 DAYS',
   };
 
   // Filter cases
@@ -56,7 +54,7 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
   return (
     <div className="flex-1 p-5 flex flex-col space-y-5 overflow-y-auto bg-[#F7F9FC]">
       {/* Summary Cards */}
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
+      <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
         <div className="bg-white border-l-4 border-[#D83933] border-t border-b border-r border-slate-200 p-3 rounded-sm flex flex-col justify-between shadow-sm">
           <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold tracking-wider">Critical Investigations</span>
           <span className="text-2xl font-black font-mono tracking-tight text-[#0B1F33] mt-1">{stats.criticalInvestigations}</span>
@@ -73,21 +71,6 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
           <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold tracking-wider">UFLPA Watchlist Blocks</span>
           <span className="text-2xl font-black font-mono tracking-tight text-[#0B1F33] mt-1">{stats.watchlistBlocks}</span>
           <span className="text-[9px] text-[#00BDE3] font-bold font-mono">MATCHED VENDOR BLOCKS</span>
-        </div>
-
-        <div className="bg-white border-l-4 border-[#005EA2] border-t border-b border-r border-slate-200 p-3 rounded-sm flex flex-col justify-between shadow-sm">
-          <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold tracking-wider">Uncollected Section 301 AD/CVD</span>
-          <span className="text-lg font-black font-mono tracking-tight text-[#0B1F33] mt-1 shrink-0 truncate">{stats.uncollectedRevenue}</span>
-          <span className="text-[9px] text-green-600 font-bold font-mono">RECOVERABLE REVENUE</span>
-        </div>
-
-        <div className="bg-white border shadow-sm border-slate-200 p-3 rounded-sm flex flex-col justify-between lg:col-span-1 col-span-2">
-          <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold tracking-wider">Filing Anomaly SLA Limit</span>
-          <span className="text-2xl font-black font-mono tracking-tight text-[#D83933] mt-1 flex items-center space-x-1 animate-pulse">
-            <Clock className="w-4 h-4" />
-            <span>{stats.slaRemaining}</span>
-          </span>
-          <span className="text-[9px] text-red-600 font-bold">CLOSE TO OVERDUE REMEDIES</span>
         </div>
       </section>
 
@@ -132,6 +115,15 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
               <option value="low">LOW (&lt;50)</option>
             </select>
           </div>
+
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#0076D6] hover:bg-[#005EA2] text-white rounded text-xs font-bold transition-colors"
+            title="Upload manifest"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload Manifest</span>
+          </button>
         </div>
       </div>
 
@@ -248,6 +240,18 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
           </div>
         </div>
       </div>
+
+      {/* Upload Manifest Modal */}
+      {showUploadModal && (
+        <UploadPipelineModal
+          onClose={() => setShowUploadModal(false)}
+          onComplete={() => {
+            setShowUploadModal(false);
+            // Refresh cases after upload
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }

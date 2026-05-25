@@ -12,7 +12,6 @@ import { useState, useCallback } from 'react'
 import V2Layout from './v2/layout/V2Layout'
 import V2DashboardPage from './v2/pages/V2DashboardPage'
 import V2InvestigationsPage from './v2/pages/V2InvestigationsPage'
-import V2ShipmentsPage from './v2/pages/V2ShipmentsPage'
 import V2ShippingIntelligencePage from './v2/pages/V2ShippingIntelligencePage'
 import V2EntitiesPage from './v2/pages/V2EntitiesPage'
 import V2WatchlistsPage from './v2/pages/V2WatchlistsPage'
@@ -22,12 +21,14 @@ import { useV2Cases } from './v2/hooks/useV2Cases'
 import { useV2Referrals } from './v2/hooks/useV2Referrals'
 import { api } from './services/api'
 
+// Legacy Imports for v1 workflow
+import IngestPage from './pages/IngestPage'
+
 // V2 Pages Wrapper Component
 function V2AppWrapper() {
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'Overview' | 'Entities' | 'Shipments' | 'Findings' | 'Synopsis' | 'Data Tables' | 'Evidence & Referral'>('Overview');
 
   // Fetch cases and shipments
   const { cases, shipments, loading: casesLoading } = useV2Cases();
@@ -192,7 +193,6 @@ function V2AppWrapper() {
   const selectCaseForDetail = useCallback(async (caseObj: Case) => {
     setSelectedCaseId(caseObj.case_id);
     setActiveTab('investigations');
-    setActiveSubTab('Overview');
 
     // Fetch synopsis if not already cached
     if (!synopsisMap[caseObj.case_id]) {
@@ -239,6 +239,9 @@ function V2AppWrapper() {
     }
   }, [cases, shipments, createReferralHook, generateFindings]);
 
+  // Memoize findings to prevent infinite re-renders
+  const findings = generateFindings();
+
   const pages: Record<string, React.ReactNode> = {
     dashboard: <V2DashboardPage
       cases={cases}
@@ -251,13 +254,11 @@ function V2AppWrapper() {
       shipments={shipments}
       selectedCaseId={selectedCaseId}
       setSelectedCaseId={setSelectedCaseId}
-      activeSubTab={activeSubTab}
-      setActiveSubTab={setActiveSubTab}
       synopsisMap={synopsisMap}
       synopsisLoading={synopsisLoading}
       draftNarrative={draftNarrative}
       setDraftNarrative={setDraftNarrative}
-      findings={generateFindings()}
+      findings={findings}
       referrals={referrals}
     />,
     shipments: <V2ShippingIntelligencePage />,
@@ -365,6 +366,12 @@ function App() {
             <Route
               path="/scoring-calibration"
               element={<ProtectedRoute element={<ScoringCalibrationPage />} allowedRoles={['analyst']} />}
+            />
+
+            {/* Manifest Ingest - Upload manifests */}
+            <Route
+              path="/ingest"
+              element={<ProtectedRoute element={<IngestPage />} allowedRoles={['cbp_officer', 'analyst']} />}
             />
 
             {/* Legacy routes - commented out for reference */}
