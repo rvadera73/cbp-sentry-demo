@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/layout/Header';
 import { AlertTriangle, TrendingUp, Clock, Upload, ArrowRight } from 'lucide-react';
 import { getRiskLevel, getRiskBorderColor } from '../utils/risk';
+import { API_BASE_URL } from '../services/apiUrl';
 import '../styles/CBPOfficerDashboard.css';
 
 interface Shipment {
@@ -30,22 +31,8 @@ export default function CBPOfficerDashboard() {
 
   const fetchShipments = async () => {
     try {
-      // Detect API URL based on deployment environment
-      const hostname = window.location.hostname;
-      let apiUrl = '/api';
-
-      // Cloud Run: extract hash from sentry-ui-{HASH}.run.app
-      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-      if (cloudRunMatch) {
-        const [, hash, region] = cloudRunMatch;
-        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
-      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-        // For other environments, try to construct API URL
-        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-      }
-
       // Call sentry-api (NOT sentry-data directly)
-      const response = await fetch(`${apiUrl}/shipments?limit=100`);
+      const response = await fetch(`${API_BASE_URL}/shipments?limit=100`);
       if (!response.ok) throw new Error('Failed to fetch shipments');
       const data = await response.json();
       setShipments(data.shipments || []);

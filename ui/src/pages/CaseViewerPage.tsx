@@ -8,6 +8,7 @@ import { AlertCircle, ChevronLeft, LayoutDashboard, GitBranch, Share2, FileText,
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { scoringApi, type ScoringResponse } from '../services/scoringApi'
 import { cordApi, type SearchFirstInvestigateResponse, type EntityChain, type RiskFlag } from '../services/cordApi'
+import { API_BASE_URL } from '../services/apiUrl'
 import '../styles/CaseViewerPage.css'
 
 interface Shipment {
@@ -48,22 +49,8 @@ export default function CaseViewerPage() {
 
   const fetchShipment = async (id: string) => {
     try {
-      // Auto-detect API URL based on deployment environment
-      const hostname = window.location.hostname
-      let apiUrl = '/api'
-
-      // Cloud Run: extract hash from sentry-ui-{HASH}.run.app and use for sentry-api
-      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/)
-      if (cloudRunMatch) {
-        const [, hash, region] = cloudRunMatch
-        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`
-      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-        // For other non-localhost environments, try to construct the API URL
-        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`
-      }
-
       // Fetch shipment data
-      const response = await fetch(`${apiUrl}/data/shipments/${id}`);
+      const response = await fetch(`${API_BASE_URL}/data/shipments/${id}`);
       if (!response.ok) throw new Error('Failed to fetch shipment');
       const data = await response.json();
       setShipment(data);

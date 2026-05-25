@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../services/apiUrl';
 import './AltanaVerificationPanel.css';
 
 interface Finding {
@@ -49,19 +50,8 @@ export default function AltanaVerificationPanel({
 
   const triggerVerification = async () => {
     try {
-      // Detect API URL
-      const hostname = window.location.hostname;
-      let apiUrl = '/api';
-      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-      if (cloudRunMatch) {
-        const [, hash, region] = cloudRunMatch;
-        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
-      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-      }
-
       const response = await fetch(
-        `${apiUrl}/altana/verify/${shipmentId}`,
+        `${API_BASE_URL}/altana/verify/${shipmentId}`,
         { method: 'POST' }
       );
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRole } from '../context/RoleContext';
 import USWDSLayout from '../components/layout/USWDSLayout';
 import WeightTrendChart from '../components/scoring/WeightTrendChart';
+import { API_BASE_URL } from '../services/apiUrl';
 import '../styles/ScoringCalibration.css';
 import '../components/scoring/WeightTrendChart.css';
 
@@ -38,23 +39,6 @@ interface ScoringOverride {
   notes: string | null;
 }
 
-// Detect API URL based on deployment environment
-const getAPIBaseURL = (): string => {
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
-    return '/api';
-  }
-  const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-  if (cloudRunMatch) {
-    const [, hash, region] = cloudRunMatch;
-    return `https://sentry-api-${hash}.${region}.run.app/api`;
-  }
-  if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-    return `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-  }
-  return '/api';
-};
-
 export default function ScoringCalibrationPage() {
   const { role } = useRole();
   const userEmail = localStorage.getItem('user_email') || 'analyst@cbp.dhs.gov'
@@ -82,7 +66,7 @@ export default function ScoringCalibrationPage() {
     try {
       // Load weight configuration
       const configResp = await fetch(
-        `${getAPIBaseURL()}/weight-configuration?corridor=${selectedCorridor || 'null'}`
+        `${API_BASE_URL}/weight-configuration?corridor=${selectedCorridor || 'null'}`
       );
       if (configResp.ok) {
         setWeights(await configResp.json());
@@ -90,7 +74,7 @@ export default function ScoringCalibrationPage() {
 
       // Load pending suggestions
       const suggestionsResp = await fetch(
-        `${getAPIBaseURL()}/weight-suggestions?status=pending&corridor=${selectedCorridor || 'null'}`
+        `${API_BASE_URL}/weight-suggestions?status=pending&corridor=${selectedCorridor || 'null'}`
       );
       if (suggestionsResp.ok) {
         const data = await suggestionsResp.json();
@@ -99,7 +83,7 @@ export default function ScoringCalibrationPage() {
 
       // Load override history
       const historyResp = await fetch(
-        `${getAPIBaseURL()}/feedback/overrides?limit=50`
+        `${API_BASE_URL}/feedback/overrides?limit=50`
       );
       if (historyResp.ok) {
         const data = await historyResp.json();
@@ -115,7 +99,7 @@ export default function ScoringCalibrationPage() {
   const handleApproveSuggestion = async (suggestion: WeightSuggestion) => {
     try {
       const response = await fetch(
-        `${getAPIBaseURL()}/weight-suggestions/${suggestion.id}/approve`,
+        `${API_BASE_URL}/weight-suggestions/${suggestion.id}/approve`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -140,7 +124,7 @@ export default function ScoringCalibrationPage() {
     const reason = prompt('Reason for rejection (optional):');
     try {
       const response = await fetch(
-        `${getAPIBaseURL()}/weight-suggestions/${suggestion.id}/reject`,
+        `${API_BASE_URL}/weight-suggestions/${suggestion.id}/reject`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

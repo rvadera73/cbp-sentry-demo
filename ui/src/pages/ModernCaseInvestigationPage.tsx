@@ -6,6 +6,7 @@ import FeedbackInterface from '../components/scoring/FeedbackInterface';
 import AltanaVerificationPanel from '../components/scoring/AltanaVerificationPanel';
 import CollapsibleSection from '../components/common/CollapsibleSection';
 import { ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Users, Activity } from 'lucide-react';
+import { API_BASE_URL } from '../services/apiUrl';
 import '../styles/CompactDashboard.css';
 
 interface Case {
@@ -68,19 +69,8 @@ export default function ModernCaseInvestigationPage() {
     try {
       let shipment: Case | null = null;
 
-      const hostname = window.location.hostname;
-      let apiUrl = '/api';
-
-      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-      if (cloudRunMatch) {
-        const [, hash, region] = cloudRunMatch;
-        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
-      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-      }
-
       if (shipmentId) {
-        const response = await fetch(`${apiUrl}/shipments`);
+        const response = await fetch(`${API_BASE_URL}/shipments`);
         const data = await response.json();
         if (data.shipments) {
           shipment = data.shipments.find((s: Case) => s.id === shipmentId) || null;
@@ -99,20 +89,8 @@ export default function ModernCaseInvestigationPage() {
 
       if (shipment) {
         try {
-          // Detect API URL based on deployment environment
-          const hostname = window.location.hostname;
-          let apiUrl = '/api';
-
-          const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-          if (cloudRunMatch) {
-            const [, hash, region] = cloudRunMatch;
-            apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
-          } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-            apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-          }
-
           const scoreResponse = await fetch(
-            `${apiUrl}/score/three-level/${shipment.id}?` +
+            `${API_BASE_URL}/score/three-level/${shipment.id}?` +
             `shipper_name=${encodeURIComponent(shipment.shipper_name)}&` +
             `shipper_country=${shipment.origin_country}&` +
             `consignee_name=${encodeURIComponent(shipment.consignee_name)}&` +

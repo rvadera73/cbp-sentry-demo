@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X, Upload, CheckCircle, AlertCircle, Loader } from 'lucide-react';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 interface Props {
   onClose: () => void;
@@ -40,18 +41,7 @@ export default function UploadPipelineModal({ onClose, onComplete }: Props) {
     formData.append('file', file);
 
     try {
-      const hostname = window.location.hostname;
-      let apiUrl = '/api';
-
-      const cloudRunMatch = hostname.match(/^sentry-ui-(\d+)\.(.+?)\.run\.app$/);
-      if (cloudRunMatch) {
-        const [, hash, region] = cloudRunMatch;
-        apiUrl = `https://sentry-api-${hash}.${region}.run.app/api`;
-      } else if (hostname !== 'localhost' && !hostname.startsWith('localhost:')) {
-        apiUrl = `https://sentry-api-${hostname.split('-').slice(1).join('-')}`;
-      }
-
-      const response = await fetch(`${apiUrl}/ingest/manifest`, {
+      const response = await fetch(`${API_BASE_URL}/ingest/manifest`, {
         method: 'POST',
         body: formData,
       });
