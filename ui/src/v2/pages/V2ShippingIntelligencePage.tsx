@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MapPin, Ship, FileText, DollarSign, AlertTriangle, TrendingDown, Calendar, CheckCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { useCorridorShipments } from '../hooks/useCorridorShipments';
 import { useCorridorIntelligence, useCorridorDetail } from '../hooks/useCorridorIntelligence';
@@ -14,6 +15,7 @@ import { COLORS, PATTERNS } from '../styles/designSystem';
 type TabType = 'pre-manifest' | 'active-shipments' | 'compliance';
 
 export default function V2ShippingIntelligencePage() {
+  const navigate = useNavigate();
   const { corridors, isLoading: corridorsLoading, error: corridorsError, count: corridorsCount } = useCorridorIntelligence();
 
   // Auto-select first corridor on load
@@ -24,10 +26,8 @@ export default function V2ShippingIntelligencePage() {
     }
   }, [corridors, selectedCorridorId]);
 
-  const [selectedShipmentId, setSelectedShipmentId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('pre-manifest');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [fromPage, setFromPage] = useState<'investigations' | 'shipping-intelligence'>('shipping-intelligence');
 
   // Search and filter state for Active Shipments tab
   const [shipmentSearchQuery, setShipmentSearchQuery] = useState('');
@@ -39,8 +39,6 @@ export default function V2ShippingIntelligencePage() {
   const { vessels, isLoading: vesselsLoading, lastRefreshed } = usePreManifestVessels(selectedCorridorId || undefined);
 
   const { corridor: selectedCorridor } = useCorridorDetail(selectedCorridorId || '');
-  const selectedShipment = corridorShipments.find(s => s.shipment_id === selectedShipmentId);
-  const selectedShipmentIntel = selectedShipment ? useShippingIntelligence(selectedShipment) : null;
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -108,16 +106,9 @@ export default function V2ShippingIntelligencePage() {
     });
   }, [shipmentListItems, shipmentSearchQuery, shipmentRiskFilter]);
 
-  // Handle back navigation tracking
+  // Navigate to Investigation Workspace with shipment ID
   const handleAccessWorkspace = (shipmentId: string) => {
-    setSelectedShipmentId(shipmentId);
-    setActiveTab('compliance');
-    setFromPage('shipping-intelligence');
-  };
-
-  const handleBackToShippings = () => {
-    setSelectedShipmentId(null);
-    setActiveTab('pre-manifest');
+    navigate(`/investigations?shipmentId=${encodeURIComponent(shipmentId)}`);
   };
 
   return (
@@ -151,7 +142,6 @@ export default function V2ShippingIntelligencePage() {
             value={selectedCorridorId || ''}
             onChange={(e) => {
               setSelectedCorridorId(e.target.value);
-              setSelectedShipmentId(null);
               setActiveTab('pre-manifest');
             }}
             className={`px-4 py-2 border ${DESIGN.borderColor} rounded-sm ${DESIGN.bgWhite} text-sm font-bold ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2]`}
@@ -169,113 +159,8 @@ export default function V2ShippingIntelligencePage() {
         </div>
       </div>
 
-      {selectedShipmentId && activeTab === 'compliance' ? (
-        // SHIPMENT WORKSPACE VIEW
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Back Button */}
-          <div className="bg-[#F7F9FC] border-b border-[#D0D7DE] px-6 py-2 shrink-0">
-            <button
-              onClick={handleBackToShippings}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[#005EA2] hover:text-[#0076D6] text-xs font-bold rounded-sm flex items-center space-x-1 transition-colors"
-            >
-              <span>←</span>
-              <span>BACK TO QUEUE</span>
-            </button>
-          </div>
-
-          {/* Workspace Detail */}
-          <div className="flex-1 overflow-auto p-5">
-            {selectedShipment ? (
-              <div className="max-w-4xl space-y-4">
-                {/* Shipment Header */}
-                <div className="bg-white border border-[#D0D7DE] p-4 rounded-sm shadow-sm">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h2 className="text-lg font-bold text-[#0B1F33] mb-1">{selectedShipment.shipper_name}</h2>
-                      <p className="text-sm text-[#5C5C5C] font-mono">{selectedShipment.shipment_id}</p>
-                    </div>
-                    <span className={`px-3 py-1 rounded text-white text-sm font-bold ${
-                      selectedShipment.risk_score! >= 80 ? 'bg-[#D83933]' : 'bg-orange-600'
-                    }`}>
-                      Risk: {Math.round(selectedShipment.risk_score || 0)}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <div className="text-xs font-bold text-[#5C5C5C]">CORRIDOR</div>
-                      <div className="text-sm font-bold text-[#0B1F33] mt-1">{selectedShipment.origin_country}→{selectedShipment.destination_country}</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-[#5C5C5C]">COMMODITY</div>
-                      <div className="text-sm font-bold text-[#0B1F33] mt-1">{selectedShipment.commodity_name} (HS {selectedShipment.hs_code})</div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-[#5C5C5C]">DECLARED VALUE</div>
-                      <div className="text-sm font-bold text-[#0B1F33] mt-1">${(selectedShipment.manifest_data.declared_value_usd || 0).toLocaleString('en-US', { maximumFractionDigits: 0 })}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Risk Signals */}
-                {selectedShipment.h2_signals && selectedShipment.h2_signals.length > 0 && (
-                  <div className="bg-white border border-[#D0D7DE] p-4 rounded-sm shadow-sm">
-                    <h3 className="text-sm font-bold text-[#0B1F33] mb-3">Risk Signals</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedShipment.h2_signals.map((signal, i) => (
-                        <span key={i} className="px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-bold">
-                          {signal}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Element 9 Alert */}
-                {selectedShipment.element9_is_mismatch && (
-                  <div className="bg-red-50 border border-red-200 p-4 rounded-sm">
-                    <h3 className="text-sm font-bold text-[#D83933] mb-2 flex items-center space-x-2">
-                      <AlertTriangle className="w-4 h-4" />
-                      <span>Element 9 Mismatch</span>
-                    </h3>
-                    <div className="text-xs space-y-1 text-[#5C5C5C]">
-                      <div><span className="font-bold">Declared:</span> {selectedShipment.element9_declared_country}</div>
-                      <div><span className="font-bold">Actual:</span> {selectedShipment.element9_actual_country}</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Manifest Details */}
-                <div className="bg-white border border-[#D0D7DE] p-4 rounded-sm shadow-sm">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3">Manifest Details</h3>
-                  <div className="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                      <div className="text-[#5C5C5C] font-bold">Consignee</div>
-                      <div className="text-[#0B1F33] mt-1">{selectedShipment.manifest_data.consignee}</div>
-                    </div>
-                    <div>
-                      <div className="text-[#5C5C5C] font-bold">Vessel</div>
-                      <div className="text-[#0B1F33] mt-1">{selectedShipment.vessel_name || 'Unknown'}</div>
-                    </div>
-                    <div>
-                      <div className="text-[#5C5C5C] font-bold">Weight</div>
-                      <div className="text-[#0B1F33] mt-1">{selectedShipment.manifest_data.weight_kg.toLocaleString()} kg</div>
-                    </div>
-                    <div>
-                      <div className="text-[#5C5C5C] font-bold">Bill of Lading</div>
-                      <div className="text-[#0B1F33] mt-1 font-mono">{selectedShipment.manifest_data.bill_of_lading || 'N/A'}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-[#5C5C5C] py-12">Shipment not found</div>
-            )}
-          </div>
-        </div>
-      ) : (
-        // MAIN CONTENT AREA
-        <div className="flex-1 flex flex-col overflow-hidden">
+      {/* MAIN CONTENT AREA - TAB NAVIGATION */}
+      <div className="flex-1 flex flex-col overflow-hidden">
 
         {selectedCorridorId && selectedCorridor && (
           <div className="flex-1 flex flex-col bg-[#F7F9FC] overflow-hidden">
@@ -360,7 +245,7 @@ export default function V2ShippingIntelligencePage() {
                   title={`ACTIVE SHIPMENTS — ${selectedCorridor?.id || ''}`}
                   subtitle="Manifest-filed shipments with elevated risk indicators"
                   searchPlaceholder="Filter by shipper, consignee, or ID..."
-                  onRowClick={(itemId) => setSelectedShipmentId(itemId)}
+                  onRowClick={() => {}}
                   onAccessWorkspace={handleAccessWorkspace}
                   searchQuery={shipmentSearchQuery}
                   onSearchChange={setShipmentSearchQuery}
@@ -426,70 +311,6 @@ export default function V2ShippingIntelligencePage() {
                 </div>
               )}
 
-              {selectedShipment && activeTab === 'compliance' && (
-                <section className="bg-white rounded-sm border border-[#D0D7DE] p-4 shadow-sm">
-                  <h3 className="text-sm font-bold text-[#0B1F33] mb-3 flex items-center space-x-2">
-                    <FileText className="w-4 h-4" />
-                    <span>Shipment Compliance: {selectedShipment.shipper_name}</span>
-                  </h3>
-                  <div className="space-y-3 text-xs">
-                    <div className="bg-slate-50 p-2.5 rounded-sm">
-                      <div className="font-bold text-[#0B1F33] mb-2">Risk Breakdown</div>
-                      <div className="space-y-1 text-[#5C5C5C]">
-                        <div className="flex justify-between"><span>H1 (Corridor):</span> <span className="font-bold text-[#0B1F33]">{selectedShipment.h1_score?.toFixed(1) || 0}/40</span></div>
-                        <div className="flex justify-between"><span>H2 (Vessel):</span> <span className="font-bold text-[#0B1F33]">{selectedShipment.h2_score?.toFixed(1) || 0}/35</span></div>
-                        <div className="flex justify-between"><span>H3 (Intelligence):</span> <span className="font-bold text-[#0B1F33]">{selectedShipment.h3_score?.toFixed(1) || 0}/25</span></div>
-                        <div className="flex justify-between border-t border-[#D0D7DE] pt-1 mt-1"><span className="font-bold text-[#0B1F33]">Total Risk:</span> <span className="font-bold text-[#D83933]">{selectedShipment.risk_score?.toFixed(1) || 0}/100</span></div>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-50 p-2.5 rounded-sm">
-                      <div className="font-bold text-[#0B1F33] mb-1">ISF Filing Status</div>
-                      <div className="space-y-1 text-[#5C5C5C]">
-                        <div className="flex justify-between">
-                          <span>Element 9:</span>
-                          <span className={selectedShipment.element9_is_mismatch ? 'text-[#D83933] font-bold' : 'text-green-600 font-bold'}>
-                            {selectedShipment.element9_is_mismatch ? 'MISMATCH' : 'MATCH'}
-                          </span>
-                        </div>
-                        {selectedShipment.element9_is_mismatch && (
-                          <div className="text-[10px] text-[#D83933]">
-                            Declared: {selectedShipment.element9_declared_country} → Actual: {selectedShipment.element9_actual_country}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {selectedShipmentIntel && (
-                      <div className="bg-slate-50 p-2.5 rounded-sm">
-                        <div className="font-bold text-[#0B1F33] mb-1">Pricing Analysis</div>
-                        <div className="space-y-1 text-[#5C5C5C]">
-                          <div className="flex justify-between"><span>Declared Value:</span> <span className="font-bold text-[#0B1F33]">${selectedShipment.manifest_data?.declared_value_usd?.toLocaleString() || 0}</span></div>
-                          <div className="flex justify-between"><span>Weight:</span> <span className="font-bold text-[#0B1F33]">{selectedShipment.manifest_data?.weight_kg?.toFixed(0) || 0} kg</span></div>
-                          <div className="flex justify-between"><span>Unit Price:</span> <span className="font-bold text-[#0B1F33]">${selectedShipmentIntel?.unit_price_per_kg?.toFixed(2) || 0}/kg</span></div>
-                          <div className="flex justify-between"><span>Benchmark:</span> <span className="font-bold text-[#0B1F33]">${selectedShipmentIntel?.benchmark_price_per_kg?.toFixed(2) || 0}/kg</span></div>
-                          <div className="flex justify-between">
-                            <span>Variance:</span>
-                            <span className={`font-bold ${selectedShipmentIntel?.price_variance_percent! > 0 ? 'text-orange-600' : 'text-[#D83933]'}`}>
-                              {selectedShipmentIntel?.price_variance_percent?.toFixed(1) || 0}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between border-t border-[#D0D7DE] pt-1 mt-1">
-                            <span>Flag:</span>
-                            <span className={`font-bold px-2 py-0.5 rounded text-white text-[9px] ${
-                              selectedShipmentIntel?.pricing_flag === 'SEVERE' ? 'bg-[#D83933]' :
-                              selectedShipmentIntel?.pricing_flag === 'HIGH' ? 'bg-orange-600' :
-                              selectedShipmentIntel?.pricing_flag === 'PREMIUM' ? 'bg-[#005EA2]' : 'bg-green-600'
-                            }`}>
-                              {selectedShipmentIntel?.pricing_flag || 'NORMAL'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
             </div>
           </div>
         )}
@@ -503,8 +324,7 @@ export default function V2ShippingIntelligencePage() {
             </div>
           </div>
         )}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

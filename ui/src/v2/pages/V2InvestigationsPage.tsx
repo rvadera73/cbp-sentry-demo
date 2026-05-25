@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ArrowRight, Sparkles, AlertCircle, ChevronDown, Download, Send, Search, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, PieChart, Pie, RadarChart, Radar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { useV2Cases } from '../hooks/useV2Cases';
@@ -28,6 +29,9 @@ interface V2InvestigationsPageProps {
 }
 
 export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const {
     cases: propCases,
     shipments: propShipments = [],
@@ -42,8 +46,9 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   } = props;
 
   // Local state fallback
-  const { cases: localCases, caseShipments: localCaseShipments, loading } = useV2Cases();
+  const { cases: localCases, shipments: localShipments, caseShipments: localCaseShipments, loading } = useV2Cases();
   const cases = propCases || localCases;
+  const shipments = propShipments || localShipments;
   const caseShipments = localCaseShipments;
 
   const [localSelectedCaseId, setLocalSelectedCaseId] = useState<string | null>(null);
@@ -53,6 +58,28 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   const setSelectedCaseId = propSetSelectedCaseId || setLocalSelectedCaseId;
   const activeSubTab = propActiveSubTab || localActiveSubTab;
   const setActiveSubTab = propSetActiveSubTab || setLocalActiveSubTab;
+
+  // Auto-select case based on shipmentId query parameter
+  useEffect(() => {
+    const shipmentId = searchParams.get('shipmentId');
+    if (shipmentId && cases.length > 0 && !selectedCaseId) {
+      // Find the shipment
+      const shipment = shipments.find(s => s.shipment_id === shipmentId);
+      if (shipment) {
+        // Find the case that matches this shipment
+        const matchingCase = cases.find(c =>
+          c.origin_country === shipment.origin_country &&
+          c.destination_country === shipment.destination_country &&
+          c.target_entity === shipment.shipper_name
+        );
+        if (matchingCase) {
+          setSelectedCaseId(matchingCase.case_id);
+          // Start on Shipment tab to show the related shipment
+          setActiveSubTab('Shipment');
+        }
+      }
+    }
+  }, [searchParams, cases, shipments, selectedCaseId, setSelectedCaseId, setActiveSubTab]);
 
   const selectedCase = cases.find(c => c.case_id === selectedCaseId);
 
@@ -479,11 +506,12 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
 // RISK SCORING TAB - Risk Scoring Methodology from API
 function SynopsisTab({ selectedCase, selectedCaseShipments }: any) {
-  if (!selectedCaseShipments || selectedCaseShipments.length === 0) return <div className="p-6 text-slate-500">No shipments available</div>;
-  const shipment = selectedCaseShipments[0];
+  const shipment = selectedCaseShipments?.[0];
 
-  // Fetch risk scoring data from API
+  // Fetch risk scoring data from API (hook must be called before any early returns)
   const { scoreData, loading, error } = useRiskScoring(shipment?.shipment_id || null);
+
+  if (!selectedCaseShipments || selectedCaseShipments.length === 0) return <div className="p-6 text-slate-500">No shipments available</div>;
 
   if (loading) {
     return (
