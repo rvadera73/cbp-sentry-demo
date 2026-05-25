@@ -8,9 +8,7 @@ import { Case, Shipment, AIFinding, ReferralPackage } from '../types/v2.types';
 import { api } from '../../services/api';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { EntityRelationshipGraph } from '../components/EntityRelationshipGraph';
-import { ReferralPackageGuide } from '../components/ReferralPackageGuide';
 import { ReferralPackageViewer } from '../components/ReferralPackageViewer';
-import { ReferralPackageViewerNew } from '../components/ReferralPackageViewer_NEW';
 import { TabNavigation, TabConfig } from '../components/TabNavigation';
 
 interface V2InvestigationsPageProps {
@@ -18,8 +16,8 @@ interface V2InvestigationsPageProps {
   shipments?: Shipment[];
   selectedCaseId?: string | null;
   setSelectedCaseId?: (id: string | null) => void;
-  activeSubTab?: 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral';
-  setActiveSubTab?: (tab: 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral') => void;
+  activeSubTab?: 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral';
+  setActiveSubTab?: (tab: 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral') => void;
   synopsisMap?: Record<string, string>;
   synopsisLoading?: Record<string, boolean>;
   findings?: AIFinding[];
@@ -37,7 +35,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
     shipments: propShipments = [],
     selectedCaseId: propSelectedCaseId = null,
     setSelectedCaseId: propSetSelectedCaseId,
-    activeSubTab: propActiveSubTab = 'Shipment',
+    activeSubTab: propActiveSubTab,
     setActiveSubTab: propSetActiveSubTab,
     synopsisMap = {},
     synopsisLoading = {},
@@ -52,11 +50,11 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   const caseShipments = localCaseShipments;
 
   const [localSelectedCaseId, setLocalSelectedCaseId] = useState<string | null>(null);
-  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Shipment' | 'Entity' | 'Risk Score' | 'Evidence & Referral'>('Shipment');
+  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral'>('Shipment');
 
   const selectedCaseId = propSelectedCaseId || localSelectedCaseId;
   const setSelectedCaseId = propSetSelectedCaseId || setLocalSelectedCaseId;
-  const activeSubTab = propActiveSubTab || localActiveSubTab;
+  const activeSubTab = propActiveSubTab !== undefined ? propActiveSubTab : localActiveSubTab;
   const setActiveSubTab = propSetActiveSubTab || setLocalActiveSubTab;
 
   // Auto-select case based on shipmentId query parameter
@@ -128,16 +126,22 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   // Finding verification state
   const [findingStatuses, setFindingStatuses] = useState<Record<string, 'Accepted' | 'Rejected' | 'Needs Review'>>({});
 
+
   // Auto-fetch referral package when case is selected
   React.useEffect(() => {
     const fetchReferralData = async () => {
-      if (!selectedCaseShipments || selectedCaseShipments.length === 0) return;
+      if (!selectedCaseShipments || selectedCaseShipments.length === 0) {
+        console.log('[Evidence & Referral] No shipments selected yet');
+        return;
+      }
       try {
         const shipment = selectedCaseShipments[0];
+        console.log('[Evidence & Referral] Fetching referral for:', shipment.shipment_id);
         const referralResp = await api.getReferralPackage(shipment.shipment_id);
+        console.log('[Evidence & Referral] Referral data received:', referralResp);
         setSelectedReferral(referralResp as unknown as ReferralPackage);
       } catch (err) {
-        console.error('Error fetching referral package:', err);
+        console.error('[Evidence & Referral] Fetch error:', err);
       }
     };
     fetchReferralData();
@@ -479,24 +483,45 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
         tabs={[
           { id: 'Shipment', label: 'Shipment' },
           { id: 'Entity', label: 'Entity' },
+          { id: 'Data Tables', label: 'Data Tables' },
           { id: 'Risk Score', label: 'Risk Score' },
           { id: 'Evidence & Referral', label: 'Evidence & Referral' },
         ]}
         activeTab={activeSubTab}
-        onTabChange={(tabId) => setActiveSubTab(tabId as any)}
+        onTabChange={(tabId) => {
+          const validTabs = ['Shipment', 'Entity', 'Data Tables', 'Risk Score', 'Evidence & Referral'];
+          if (validTabs.includes(tabId)) {
+            setActiveSubTab(tabId as 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral');
+          }
+        }}
         orientation="horizontal"
       />
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto">
-          {activeSubTab === 'Shipment' && <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Entity' && <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />}
-          {activeSubTab === 'Risk Score' && <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />}
-          {activeSubTab === 'Evidence & Referral' && selectedCaseShipments?.[0] && (
-            <ReferralPackageViewerNew
-              shipmentId={selectedCaseShipments[0].shipment_id}
-              caseId={selectedCase?.case_id}
+          {activeSubTab === 'Shipment' && (
+            <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+          )}
+          {activeSubTab === 'Entity' && (
+            <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+          )}
+          {activeSubTab === 'Data Tables' && (
+            <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+          )}
+          {activeSubTab === 'Risk Score' && (
+            <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />
+          )}
+          {activeSubTab === 'Evidence & Referral' && (
+            <ReferralPackageViewer
+              selectedReferral={selectedReferral}
               selectedCase={selectedCase}
+              findings={findings}
+              referralNarrative={referralNarrative}
+              setReferralNarrative={setReferralNarrative}
+              onCompile={handleCompileReferral}
+              compileLoading={compileLoading}
+              selectedCaseShipments={selectedCaseShipments}
+              onSubmit={handleSubmitReferral}
             />
           )}
       </div>
@@ -1350,88 +1375,3 @@ function FindingsTab({ findings, findingStatuses, onFindingStatusChange, selecte
 }
 
 // REFERRAL TAB
-function ReferralTab({
-  selectedCase,
-  selectedCaseShipments,
-  findings,
-  selectedReferral,
-  referralNarrative,
-  setReferralNarrative,
-  selectedNarrativeSections,
-  setSelectedNarrativeSections,
-  handleCompileReferral,
-  compileLoading,
-}: any) {
-  return (
-    <div className="flex h-full overflow-hidden">
-      {/* Left Panel (1/3) - Narrative Sections */}
-            <div className="w-1/3 border-r border-[#D0D7DE] bg-white p-4 flex flex-col overflow-y-auto">
-              <h3 className="text-[10px] font-mono text-[#112E51] uppercase font-bold mb-4">
-                STATUTORY SECTIONS & VIOLATIONS TO CITE
-              </h3>
-
-              <div className="space-y-3 flex-1 mb-4">
-                {Object.entries(selectedNarrativeSections).map(([label, checked]) => (
-                  <label key={label} className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={checked as boolean}
-                      onChange={(e) => {
-                        setSelectedNarrativeSections({
-                          ...selectedNarrativeSections,
-                          [label]: e.target.checked,
-                        });
-                      }}
-                      className="w-4 h-4 rounded border-[#D0D7DE]"
-                    />
-                    <span className="text-xs text-slate-700 font-medium">{label}</span>
-                  </label>
-                ))}
-              </div>
-
-              <button
-                onClick={handleCompileReferral}
-                disabled={compileLoading}
-                className="w-full px-3 py-2 bg-[#005EA2] hover:bg-[#0076D6] disabled:opacity-50 text-white text-[9px] font-bold rounded-sm"
-              >
-                {compileLoading ? 'FORMULATING FORENSICS...' : 'COMPILE AI TRADE DRAFT'}
-              </button>
-            </div>
-
-            {/* Right Panel (2/3) - Narrative Editor */}
-            <div className="flex-1 bg-[#0B1F33] text-slate-100 flex flex-col p-4 overflow-hidden">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-[10px] font-mono text-cyan-400 font-bold uppercase">
-                  OFFICIAL DHS GENERAL COUNSEL TRADE FRAUD COMPLIANCE DRAFT
-                </p>
-                {referralNarrative && (
-                  <span className="bg-cyan-950 text-cyan-400 px-1.5 py-0.5 rounded font-mono text-[9px]">
-                    System Draft Mode
-                  </span>
-                )}
-              </div>
-
-              <textarea
-                value={referralNarrative}
-                onChange={(e) => setReferralNarrative(e.target.value)}
-                placeholder="Narrative will be generated from selected sections..."
-                className="flex-1 bg-[#1A2E42] border border-slate-600 text-xs text-slate-100 font-mono p-3 rounded-sm focus:outline-none focus:border-cyan-400 resize-none"
-              />
-
-              <div className="flex space-x-2 mt-3 pt-3 border-t border-slate-700">
-                <button className="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white text-[9px] font-bold rounded-sm flex items-center justify-center space-x-1">
-                  <Download className="w-3 h-3" />
-                  <span>Export PDF</span>
-                </button>
-                <button
-                  onClick={() => alert('Draft generated successfully. DHS Trade referral package submitted onto Department of Justice Trade Division API.')}
-                  className="flex-1 px-3 py-2 bg-[#0076D6] hover:bg-[#0058A3] text-white text-[9px] font-bold rounded-sm flex items-center justify-center space-x-1"
-                >
-                  <Send className="w-3 h-3" />
-                  <span>Submit Package</span>
-                </button>
-              </div>
-            </div>
-    </div>
-  );
-}

@@ -99,7 +99,7 @@ export function ReferralPackageViewer({
       const exportRequest = {
         case_id: selectedCase?.case_id || 'unknown',
         shipment_id: shipment?.shipment_id || 'unknown',
-        risk_score: selectedCase?.risk_score || 0,
+        risk_score: Math.round(selectedCase?.risk_score || 0),
         recommendation: recommendation,
         shipper_name: shipment?.shipper_name || 'Unknown',
         commodity_name: shipment?.commodity_name || 'Unknown',
@@ -114,13 +114,16 @@ export function ReferralPackageViewer({
         body: JSON.stringify(exportRequest),
       });
 
-      if (!response.ok) throw new Error(`PDF export failed: ${response.statusText}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`PDF export failed: ${response.statusText} - ${errText}`);
+      }
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `CBP-EAPA-Referral-${selectedCase?.case_id || 'unknown'}-${Date.now()}.pdf`;
+      a.download = `CBP-EAPA-Referral-${selectedCase?.case_id || 'unknown'}-${new Date().toISOString().split('T')[0]}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -146,6 +149,43 @@ export function ReferralPackageViewer({
     if (score >= 50) return '🟡 MEDIUM-ELEVATED';
     return '🟢 LOW';
   };
+
+  // Show loading state if no data yet
+  if (!selectedReferral || sections.length === 0) {
+    return (
+      <div className="flex flex-col h-full bg-[#F7F9FC]">
+        {/* Header */}
+        <div className="bg-white border-b border-[#D0D7DE] px-6 py-4 shadow-sm">
+          <div>
+            <h2 className="text-lg font-bold text-[#0B1F33]">CBP REFERRAL PACKAGE</h2>
+            <p className="text-xs text-slate-500 font-mono">
+              {selectedCase?.case_id} • {shipment?.shipment_id}
+            </p>
+          </div>
+        </div>
+
+        {/* Empty State */}
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="flex flex-col items-center space-y-4 max-w-md">
+            <AlertTriangle className="w-12 h-12 text-slate-400" />
+            <div className="text-center">
+              <h3 className="text-sm font-bold text-[#0B1F33] mb-2">No Referral Package Generated</h3>
+              <p className="text-xs text-slate-600 mb-4">
+                A referral package with detailed analysis sections must be compiled first. Click "COMPILE AI NARRATIVE" to generate the complete referral package with all sections.
+              </p>
+            </div>
+            <button
+              onClick={onCompile}
+              disabled={compileLoading}
+              className="px-4 py-2 bg-[#005EA2] hover:bg-[#0076D6] disabled:opacity-50 text-white text-[9px] font-bold rounded-sm"
+            >
+              {compileLoading ? 'COMPILING...' : 'COMPILE AI NARRATIVE'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#F7F9FC]">

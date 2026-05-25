@@ -50,11 +50,7 @@ export function TabNavigation({
             <button
               key={tab.id}
               type="button"
-              onClick={() => {
-                console.log('[TabNavigation HORIZONTAL] Clicked tab:', tab.id);
-                console.log('[TabNavigation HORIZONTAL] Current activeTab:', activeTab);
-                onTabChange(tab.id);
-              }}
+              onClick={() => onTabChange(tab.id)}
               className={`px-4 py-3 text-xs font-bold whitespace-nowrap transition-all border-b-2 cursor-pointer rounded-t-sm ${
                 activeTab === tab.id
                   ? 'bg-[#E8F0F7] text-[#005EA2] border-[#005EA2]'
@@ -85,11 +81,7 @@ export function TabNavigation({
           <button
             key={tab.id}
             type="button"
-            onClick={() => {
-              console.log('[TabNavigation] Clicked tab:', tab.id);
-              console.log('[TabNavigation] Current activeTab:', activeTab);
-              onTabChange(tab.id);
-            }}
+            onClick={() => onTabChange(tab.id)}
             className={`w-full text-left px-4 py-2 rounded-sm text-xs font-bold transition-colors cursor-pointer ${
               activeTab === tab.id
                 ? 'bg-[#005EA2] text-white'

@@ -1,0 +1,6 @@
+{
+  "name": "CBP Illegal Transshipment Sentry Platform",
+  "description": "A high-density federal intelligence-led trade enforcement workspace helping CBP Officers analyze transshipment anomalies, audit complex entity supply chains, inspect container manifests, analyze routing risks, and assemble compliance-ready trade violation referral packages.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
