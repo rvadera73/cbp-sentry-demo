@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom'
 import Header from '../components/layout/Header'
 import WorkflowSignalMap from '../components/cases/WorkflowSignalMap'
 import EntityChainViewer from '../components/cases/EntityChainViewer'
-import FederalReferralDocument from '../components/cases/FederalReferralDocument'
 import { AlertCircle, ChevronLeft, LayoutDashboard, GitBranch, Share2, FileText, Bot, CheckCircle, AlertCircle as AlertRed } from 'lucide-react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { scoringApi, type ScoringResponse } from '../services/scoringApi'
@@ -449,15 +448,7 @@ export default function CaseViewerPage() {
               )}
               {activeTab === 'referral' && (
                 <div className="tab-panel">
-                  <FederalReferralDocument
-                    shipmentId={shipmentId || ''}
-                    shipment={shipment}
-                    score={currentScore}
-                    h1Score={scoringData?.h1.score || 0}
-                    h2Score={scoringData?.h2.score || 0}
-                    h3Score={scoringData?.h3.score || 0}
-                    referralData={cordData}
-                  />
+                  <div className="p-4 text-slate-500">Referral package viewer not available in this view</div>
                 </div>
               )}
           </div>
