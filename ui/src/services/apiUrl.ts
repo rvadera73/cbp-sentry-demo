@@ -23,9 +23,9 @@ export const getAPIBaseURL = (): string => {
     return '/api';
   }
 
-  // Priority 3: Cloud Run (sentry-ui-<HASH>.run.app)
-  // Extract hash and construct sentry-api URL with same hash
-  const cloudRunMatch = hostname.match(/^sentry-ui-(-?\d+)\.(.+?)\.run\.app$/);
+  // Priority 3: Cloud Run (sentry-ui-<HASH>.<REGION>.run.app)
+  // Extract hash and region, construct sentry-api URL with same hash and region
+  const cloudRunMatch = hostname.match(/^sentry-ui-(-?\d+)\.([\w\-]+)\.run\.app$/);
   if (cloudRunMatch) {
     const [, hash, region] = cloudRunMatch;
     return `https://sentry-api-${hash}.${region}.run.app/api`;
