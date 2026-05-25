@@ -263,7 +263,7 @@ jobs:
             --timeout=300 \
             --min-instances=1 \
             --max-instances=10 \
-            --startup-cpu-boost \
+            --cpu-boost \
             --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
             --add-volume-mount volume=appdata,mount-path=/app/data \
             --add-volume name=corddata,type=cloud-storage,bucket=cbp-sentry-appdata \
