@@ -172,12 +172,12 @@ export default function V2ShippingIntelligencePage() {
                 riskLevel={selectedCorridor.risk_level}
                 shipmentCount={corridorShipments.length}
                 avgRiskScore={corridorShipments.length > 0
-                  ? corridorShipments.reduce((sum, s) => sum + (s.risk_score || 0), 0) / corridorShipments.length
+                  ? corridorShipments.reduce((sum: number, s: any) => sum + (s.risk_score || 0), 0) / corridorShipments.length
                   : 0}
                 element9MismatchPct={corridorShipments.length > 0
-                  ? (corridorShipments.filter(s => s.element9_is_mismatch).length / corridorShipments.length) * 100
+                  ? (corridorShipments.filter((s: any) => s.element9_is_mismatch).length / corridorShipments.length) * 100
                   : 0}
-                uniqueShippers={new Set(corridorShipments.map(s => s.shipper_name)).size}
+                uniqueShippers={new Set(corridorShipments.map((s: any) => s.shipper_name)).size}
                 primaryHsChapters={selectedCorridor.primary_hs_chapters}
                 riskProfile={selectedCorridor.risk_profile}
               />
@@ -210,7 +210,7 @@ export default function V2ShippingIntelligencePage() {
                       key: 'ais_status',
                       label: 'STATUS',
                       width: '12%',
-                      render: (status) => (
+                      render: (status: any) => (
                         <span className={`px-2 py-0.5 rounded text-white text-[9px] font-bold ${
                           status === 'UNDERWAY' ? 'bg-[#005EA2]' :
                           status === 'AT_BERTH' ? 'bg-green-600' : 'bg-[#5C5C5C]'
@@ -223,7 +223,7 @@ export default function V2ShippingIntelligencePage() {
                       key: 'position',
                       label: 'POSITION',
                       width: '16%',
-                      render: (_, row) => (
+                      render: (_: any, row: any) => (
                         <span className="font-mono text-[10px]">
                           {row.current_lat?.toFixed(2)}, {row.current_lon?.toFixed(2)}
                         </span>
@@ -270,13 +270,13 @@ export default function V2ShippingIntelligencePage() {
                       { key: 'duty_type', label: 'DUTY TYPE', width: '15%' },
                       { key: 'product_description', label: 'PRODUCT DESCRIPTION', width: '30%' },
                       { key: 'hs_prefix', label: 'HS PREFIX', width: '12%' },
-                      { key: 'rate_pct', label: 'RATE', width: '10%', render: (rate) => `${rate > 0 ? rate : 'Variable'}${rate > 0 ? '%' : ''}` },
+                      { key: 'rate_pct', label: 'RATE', width: '10%', render: (rate: any) => `${rate > 0 ? rate : 'Variable'}${rate > 0 ? '%' : ''}` },
                       { key: 'case_number', label: 'CASE #', width: '15%' },
                       {
                         key: 'source_url',
                         label: 'DETAILS',
                         width: '18%',
-                        render: (url) => url ? (
+                        render: (url: any) => url ? (
                           <a href={url} target="_blank" rel="noopener noreferrer" className="text-[#005EA2] hover:underline flex items-center space-x-1">
                             <ExternalLink className="w-3 h-3" />
                             <span>View</span>
@@ -293,7 +293,7 @@ export default function V2ShippingIntelligencePage() {
                     columns={[
                       { key: 'case_id', label: 'CASE ID', width: '15%' },
                       { key: 'entity_name', label: 'ENTITY NAME', width: '20%' },
-                      { key: 'case_status', label: 'STATUS', width: '12%', render: (status) => (
+                      { key: 'case_status', label: 'STATUS', width: '12%', render: (status: any) => (
                         <span className={`px-2 py-0.5 rounded text-white text-[9px] font-bold ${
                           status === 'AFFIRMATIVE' ? 'bg-[#D83933]' :
                           status === 'PENDING' ? 'bg-orange-600' : 'bg-[#5C5C5C]'
@@ -301,7 +301,7 @@ export default function V2ShippingIntelligencePage() {
                           {status}
                         </span>
                       )},
-                      { key: 'duty_evaded_usd', label: 'DUTY EVADED', width: '15%', render: (amount) => `$${amount?.toLocaleString() || '—'}` },
+                      { key: 'duty_evaded_usd', label: 'DUTY EVADED', width: '15%', render: (amount: any) => `$${amount?.toLocaleString() || '—'}` },
                       { key: 'case_year', label: 'YEAR', width: '10%' },
                       { key: 'source_description', label: 'SOURCE', width: '28%' }
                     ]}
