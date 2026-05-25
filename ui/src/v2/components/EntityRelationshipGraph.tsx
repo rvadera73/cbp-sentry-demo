@@ -20,9 +20,13 @@ interface EntityGraphProps {
   parties?: Array<{ entity: string; role: string; country: string }>;
 }
 
-export function EntityRelationshipGraph({ chain = [], parties = [] }: EntityGraphProps) {
+export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
   const nodes = useMemo(() => {
-    if (!chain || chain.length === 0) return [];
+    if (!chain || !Array.isArray(chain) || chain.length === 0) return [];
+
+    // Filter out entities without required fields
+    const validChain = chain.filter(e => e && e.name && e.entity_type);
+    if (validChain.length === 0) return [];
 
     // Calculate positions in a hierarchical layout (top-down, centered)
     const nodeWidth = 140;
@@ -31,10 +35,10 @@ export function EntityRelationshipGraph({ chain = [], parties = [] }: EntityGrap
     const yGap = 140;
 
     // Group by entity type for better visualization
-    const manufacturers = chain.filter(e => e.entity_type?.toUpperCase().includes('MANUFACTURER'));
-    const holdings = chain.filter(e => e.entity_type?.toUpperCase().includes('HOLDING'));
-    const shippers = chain.filter(e => e.entity_type?.toUpperCase().includes('SHIPPER') && !e.role?.toUpperCase().includes('CONSIGNEE'));
-    const consignees = chain.filter(e => e.role?.toUpperCase().includes('CONSIGNEE') || e.entity_type?.toUpperCase().includes('IMPORTER'));
+    const manufacturers = validChain.filter(e => e.entity_type?.toUpperCase().includes('MANUFACTURER'));
+    const holdings = validChain.filter(e => e.entity_type?.toUpperCase().includes('HOLDING'));
+    const shippers = validChain.filter(e => e.entity_type?.toUpperCase().includes('SHIPPER') && !e.role?.toUpperCase().includes('CONSIGNEE'));
+    const consignees = validChain.filter(e => e.role?.toUpperCase().includes('CONSIGNEE') || e.entity_type?.toUpperCase().includes('IMPORTER'));
 
     const rows = [manufacturers, holdings, shippers, consignees];
     const nodes: any[] = [];
@@ -241,9 +245,9 @@ export function EntityRelationshipGraph({ chain = [], parties = [] }: EntityGrap
                   fill="#1F2937"
                   className="pointer-events-none"
                 >
-                  {node.name.length > 18
-                    ? node.name.substring(0, 15) + '...'
-                    : node.name}
+                  {(node.name?.length || 0) > 18
+                    ? (node.name || '').substring(0, 15) + '...'
+                    : (node.name || 'N/A')}
                 </text>
 
                 {/* Entity type & country */}
@@ -255,7 +259,7 @@ export function EntityRelationshipGraph({ chain = [], parties = [] }: EntityGrap
                   fill="#6B7280"
                   className="pointer-events-none"
                 >
-                  {node.entity_type.replace(/_/g, ' ')}
+                  {(node.entity_type || '').replace(/_/g, ' ')}
                 </text>
 
                 <text
