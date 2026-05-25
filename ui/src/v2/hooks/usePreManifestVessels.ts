@@ -135,7 +135,7 @@ export function usePreManifestVesselsWithRefresh(autoRefresh = false) {
   const manualRefresh = async () => {
     try {
       setIsRefreshing(true);
-      const response = await fetch('/api/pre-manifest/vessels');
+      const response = await fetch(`${API_BASE_URL}/pre-manifest/vessels`);
       if (!response.ok) {
         throw new Error(`Failed to refresh vessels: ${response.statusText}`);
       }

@@ -11,6 +11,7 @@ import CorridorSummaryCard from '../components/CorridorSummaryCard';
 import DataTable, { DataTableColumn } from '../components/DataTable';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { COLORS, PATTERNS } from '../styles/designSystem';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 type TabType = 'pre-manifest' | 'active-shipments' | 'compliance';
 
@@ -44,8 +45,8 @@ export default function V2ShippingIntelligencePage() {
     setIsRefreshing(true);
     try {
       await Promise.all([
-        fetch('/api/corridors'),
-        fetch('/api/pre-manifest/vessels')
+        fetch(`${API_BASE_URL}/corridors`),
+        fetch(`${API_BASE_URL}/pre-manifest/vessels`)
       ]);
     } catch (err) {
       console.error('Refresh failed:', err);

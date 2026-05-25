@@ -595,14 +595,12 @@ function SectionRenderer({ section }: { section: any }) {
         {section.chain?.map((entity: any, idx: number) => (
           <div key={idx} className="p-4 border border-[#D0D7DE] rounded bg-slate-50">
             <div className="flex items-start justify-between mb-2">
-              <h4 className="text-sm font-bold text-[#0B1F33]">{entity.name}</h4>
+              <h4 className="text-sm font-bold text-[#0B1F33]">{entity.entity || entity.name || 'Unknown'}</h4>
               <span className="text-[8px] bg-slate-200 px-2 py-1 rounded">{entity.entity_type || 'Entity'}</span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div><p className="text-[8px] text-slate-500 font-bold">Country</p><p className="text-[#0B1F33]">{entity.country}</p></div>
               <div><p className="text-[8px] text-slate-500 font-bold">Role</p><p className="text-[#0B1F33]">{entity.role}</p></div>
-              <div><p className="text-[8px] text-slate-500 font-bold">Confidence</p><p className="text-[#0B1F33]">{entity.confidence ? (entity.confidence * 100).toFixed(0) : 'N/A'}%</p></div>
-              <div><p className="text-[8px] text-slate-500 font-bold">Relationships</p><p className="text-[#0B1F33]">{entity.relationships?.length || 0}</p></div>
             </div>
           </div>
         ))}
