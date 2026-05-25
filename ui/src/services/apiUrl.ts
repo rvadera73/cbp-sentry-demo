@@ -2,23 +2,36 @@
  * Centralized API URL resolver
  *
  * Usage:
- * - Development (local Docker): Uses nginx proxy at /api → http://sentry-api:8000
- * - Staging/Production (Cloud Run): Uses VITE_API_URL set at build time
- *
- * NEVER try to extract hash from sentry-ui URL and construct sentry-api URL
- * because services have different hash codes when deployed separately.
+ * - Local Docker: VITE_API_URL="" → uses /api (nginx proxy to sentry-api:8000)
+ * - Cloud Run: VITE_API_URL="" → detects hash from sentry-ui URL, derives sentry-api URL
+ * - Staging: VITE_API_URL="https://api.example.com" → uses explicit URL
  */
 
 export const getAPIBaseURL = (): string => {
   if (typeof window === 'undefined') return '/api';
 
-  // Priority 1: Build-time env var (set in Docker/Cloud Run)
+  // Priority 1: Explicit API URL from build-time env var
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
 
-  // Priority 2: Local development or relative paths
-  // Use nginx proxy at /api
+  const hostname = window.location.hostname;
+
+  // Priority 2: Local development (localhost)
+  // Use nginx proxy at /api → http://sentry-api:8000
+  if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+    return '/api';
+  }
+
+  // Priority 3: Cloud Run (sentry-ui-<HASH>.run.app)
+  // Extract hash and construct sentry-api URL with same hash
+  const cloudRunMatch = hostname.match(/^sentry-ui-(-?\d+)\.(.+?)\.run\.app$/);
+  if (cloudRunMatch) {
+    const [, hash, region] = cloudRunMatch;
+    return `https://sentry-api-${hash}.${region}.run.app/api`;
+  }
+
+  // Fallback
   return '/api';
 };
 
