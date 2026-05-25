@@ -1,11 +1,11 @@
 """
 Horizon 1 & 2 API Routes — Live data with AI scoring
+NOTE: Deprecated - these endpoints superseded by /api/score/full-breakdown/{id} (7-factor model)
 """
 import logging
 from fastapi import APIRouter, Query
 from services.external_apis.h1_adapters import OpenCorporatesAdapter, ComtradeAdapter, ITCTariffsAdapter
 from services.external_apis.h2_adapters import AISAdapter, PortAuthorityAdapter
-from services.external_apis.ml_scorers import H1CorridorRiskScorer, H2AnomalyScorer
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,9 +17,7 @@ itc_adapter = ITCTariffsAdapter()
 ais_adapter = AISAdapter()
 port_adapter = PortAuthorityAdapter()
 
-# Initialize scorers
-h1_scorer = H1CorridorRiskScorer()
-h2_scorer = H2AnomalyScorer()
+# NOTE: Old H1/H2 scorers removed (CLEANUP_PHASE_0) - use RiskScoringEngine instead
 
 
 @router.get("/h1/corridor-risk")

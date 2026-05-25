@@ -1,0 +1,217 @@
+/* Entity Graph Visualization Styles */
+
+.entity-graph-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f5f5f5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.entity-graph-header {
+  padding: 16px;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.entity-graph-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.entity-graph-header .metadata {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.entity-graph-header .risk-score {
+  padding: 4px 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.entity-graph-header .sources {
+  color: #666;
+  font-size: 11px;
+}
+
+.entity-graph-header .ofac-badge {
+  padding: 4px 8px;
+  background: #ffebee;
+  color: #d32f2f;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.entity-graph-content {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.flow-container {
+  flex: 1;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e0e0e0;
+  position: relative;
+}
+
+.entity-details-panel {
+  width: 280px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid #e0e0e0;
+  padding: 12px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.entity-details h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  word-break: break-word;
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-item label {
+  font-weight: 500;
+  color: #666;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.detail-item value {
+  color: #333;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.relationships-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.relationships-section h5 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+}
+
+.relationships-section ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationships-section li {
+  font-size: 11px;
+  padding: 4px 0;
+  color: #666;
+}
+
+.relationships-section strong {
+  color: #333;
+}
+
+/* Loading and Empty States */
+.entity-graph-loading,
+.entity-graph-error,
+.entity-graph-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px;
+  text-align: center;
+}
+
+.spinner {
+  font-size: 14px;
+  color: #666;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.error-message {
+  font-size: 14px;
+  color: #d32f2f;
+}
+
+.empty-message {
+  font-size: 14px;
+  color: #999;
+}
+
+/* React Flow Customizations */
+.entity-graph-container :global(.react-flow__handle) {
+  background: #1976d2;
+  border: 2px solid white;
+}
+
+.entity-graph-container :global(.react-flow__handle:hover) {
+  background: #1565c0;
+}
+
+.entity-graph-container :global(.react-flow__edge-path) {
+  stroke-width: 2;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .entity-graph-content {
+    flex-direction: column;
+  }
+
+  .entity-details-panel {
+    width: 100%;
+    max-height: 200px;
+  }
+
+  .entity-graph-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+
+  .entity-graph-header .metadata {
+    flex-wrap: wrap;
+  }
+}

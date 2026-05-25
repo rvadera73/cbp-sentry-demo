@@ -1,0 +1,151 @@
+╔════════════════════════════════════════════════════════════════════════════════╗
+║                  RISK SCORING MODEL - ANALYSIS SUMMARY                          ║
+║                           May 25, 2026                                           ║
+╚════════════════════════════════════════════════════════════════════════════════╝
+
+┌─ THE PROBLEM ─────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  User reports: Risk score shows 97 in DB, but 39 in Investigation View        │
+│                                                                                 │
+│  Reality:      THREE DIFFERENT SCORING SYSTEMS, NONE SYNCHRONIZED             │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ CURRENT ARCHITECTURE (BROKEN) ───────────────────────────────────────────────┐
+│                                                                                 │
+│   LEVEL 1: DATABASE (Static Seed Data)                                        │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   Greenfield case:                                                             │
+│   └─ risk_score = 91 (loaded once at DB init, never updated)                 │
+│   └─ Source: /api/seed_data/shipments_seed.py                                │
+│   └─ Never recalculated                                                       │
+│                                                                                 │
+│   LEVEL 2: BACKEND CALCULATION (Three-Level Model)                           │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   Same case:                                                                   │
+│   └─ Calls: /score/three-level/{id} endpoint                                 │
+│   └─ Engine: three_level_scorer.py (only 3 factors: corridor, vessel, manifest)│
+│   └─ Calculation:                                                             │
+│      (0.20 × corridor_score  +                                               │
+│       0.35 × vessel_score    +                                               │
+│       0.45 × manifest_score) × 100                                           │
+│   └─ Result: ~39-45 (MISSING 4 FACTORS!)                                     │
+│   └─ Missing: Documentation, Commodity, Party, Pattern risks                 │
+│                                                                                 │
+│   LEVEL 3: FRONTEND CALCULATION (Broken)                                     │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   computeRiskBreakdown.ts uses:                                              │
+│   └─ score = h1_score / 4 (h1 is 0-40 scale? unclear)                        │
+│   └─ score = h2_score / 3.5 (h2 is 0-35 scale? unclear)                      │
+│   └─ Results in: 38-42 (WRONG FORMULA!)                                      │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ AVAILABLE BUT UNUSED MODEL ──────────────────────────────────────────────────┐
+│                                                                                 │
+│   THE CORRECT ONE: risk_scoring_engine.py (7-factor model)                   │
+│   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   Status: FULLY IMPLEMENTED but NEVER CALLED                                  │
+│   Factors (7):                                                                 │
+│   1. Documentation Risk (25%) - Element 9 mismatch, ISF amendments, etc.      │
+│   2. Commodity Sensitivity (15%) - Tariff, export control, UFLPA             │
+│   3. Routing Risk (15%) - AIS dwell, port selection, vessel flag            │
+│   4. Party Profile Risk (15%) - Shipper age, violations, OFAC               │
+│   5. Corridor Risk (20%) - Country pair baseline + tariff evasion incentive  │
+│   6. Pattern Anomaly (10%) - Pricing, transshipment ML patterns             │
+│   7. Time Sensitivity (10%) - Pre-tariff timing, seasonal flags             │
+│                                                                                 │
+│   Expected result for Greenfield: 85-91 (not 39 or 97!)                     │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ DATA FLOW (WHAT OFFICER SEES) ───────────────────────────────────────────────┐
+│                                                                                 │
+│   User opens Investigation Page for Greenfield case                           │
+│   │                                                                             │
+│   ├─ Fetch shipment from DB                                                   │
+│   │  └─ Gets: risk_score = 91 (old seed value)                               │
+│   │                                                                             │
+│   ├─ Call /score/three-level/{id} API                                        │
+│   │  └─ Backend calculates: 42 (three-level model)                           │
+│   │  └─ Returns: {total_score: 42, components: ...}                          │
+│   │                                                                             │
+│   └─ Display in UI:                                                           │
+│      ├─ Header score badge: "91 CRITICAL"  (from DB)                         │
+│      ├─ Scoring section: "Total: 42" (from API)                              │
+│      └─ Officer confusion: "Why are these different?!"                        │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ ROOT CAUSES ─────────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  ❌ No unified scoring engine active                                          │
+│  ❌ DB score is static (never recalculated)                                   │
+│  ❌ three_level_scorer is incomplete (missing 4 factors)                     │
+│  ❌ Frontend has broken calculation formulas                                  │
+│  ❌ risk_scoring_engine.py exists but is dead code                           │
+│  ❌ No API endpoint to persist calculated score back to DB                   │
+│  ❌ No data sync between calculation and display                              │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ WHAT NEEDS TO BE IMPLEMENTED ───────────────────────────────────────────────┐
+│                                                                                 │
+│  PHASE 1: Activate the Correct Model (4-6 hours)                             │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  ✓ Create /api/score/full-breakdown/{id} endpoint                            │
+│  ✓ Use RiskScoringEngine (already exists) instead of three_level_scorer      │
+│  ✓ Return full RiskScoreBreakdown with all 7 components                      │
+│  ✓ Update Investigation Page to call new endpoint                            │
+│  ✓ Display calculated_risk_score (85-91) instead of DB score (91)            │
+│                                                                                 │
+│  PHASE 2: Persist Calculated Scores (3-4 hours)                              │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  ✓ Add calculated_risk_score, risk_score_calculated_at columns to DB         │
+│  ✓ Save calculated score after each calculation                              │
+│  ✓ Log calculation timestamp                                                  │
+│  ✓ Migrate existing data (run RiskScoringEngine on all shipments)            │
+│                                                                                 │
+│  PHASE 3: Fix Frontend Display (2-3 hours)                                   │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  ✓ Remove broken riskBreakdown.ts formulas                                   │
+│  ✓ Create RiskScoreBreakdownCard component                                   │
+│  ✓ Display full calculation table (factors, weights, components)             │
+│  ✓ Show confidence interval                                                   │
+│                                                                                 │
+│  PHASE 4: Validate & Train (ongoing)                                         │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  ✓ Officer feedback loop (correct/incorrect + reason)                        │
+│  ✓ Retrain factor weights based on feedback                                  │
+│  ✓ Validate scores on known cases                                             │
+│                                                                                 │
+│  PHASE 5: Enable ML Models (future)                                          │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│  ✓ Train Isolation Forest on AIS dwell data                                  │
+│  ✓ Train LightGBM on transshipment classification                            │
+│  ✓ Integrate into risk_scoring_engine                                        │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SUCCESS CRITERIA ────────────────────────────────────────────────────────────┐
+│                                                                                 │
+│  After Phase 1 implementation:                                                │
+│  ✅ Same shipment returns same score (no 91 vs 39 mismatch)                   │
+│  ✅ Score calculated using 7-factor model (all components visible)            │
+│  ✅ Officer can see breakdown (Documentation: X, Commodity: Y, etc.)          │
+│  ✅ Calculation < 2 seconds                                                    │
+│  ✅ No more confusion in Investigation View                                   │
+│                                                                                 │
+│  Expected scores after fix:                                                   │
+│  • Greenfield case (element9 mismatch): 85-91 ✓                              │
+│  • Clean shipper: 10-30 ✓                                                     │
+│  • Transshipment (dwell anomaly): 70-85 ✓                                    │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+RECOMMENDATION: Start with Phase 1 (activate existing 7-factor model)
+TIMELINE: 4-6 hours
+IMPACT: Eliminates user confusion immediately
+
+
+For detailed implementation plan, see: RISK_SCORING_ANALYSIS.md

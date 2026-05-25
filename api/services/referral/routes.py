@@ -1,10 +1,20 @@
 """
 Referral package API routes.
 
-Endpoints:
-- GET /api/referral/{manifest_id}
-- GET /api/referral/{manifest_id}/summary
-- POST /api/referral/export-pdf
+⚠️ DEPRECATION WARNING:
+This module uses FIXTURE DATA only. For production entity graphs, use:
+- GET /api/referral/{shipment_id}/entity-graph (Phase 2, in development)
+
+The fixture endpoints will be removed in v2.0 (target: Q3 2026).
+See ENTITY_GRAPH_OPTION3_STRATEGY.md for migration path.
+
+Endpoints (DEPRECATED):
+- GET /api/referral/{manifest_id} ← FIXTURE DATA
+- GET /api/referral/{manifest_id}/summary ← FIXTURE DATA
+- POST /api/referral/export-pdf ← FIXTURE DATA
+
+New Endpoints (Phase 2+):
+- GET /api/referral/{shipment_id}/entity-graph ← REAL DATA
 """
 
 import logging
@@ -12,7 +22,7 @@ import io
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from models.schemas import ReferralPackageResponse
 from reportlab.lib.pagesizes import letter
@@ -21,6 +31,11 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak, Table, TableStyle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from services.referral.cord_client import CORDClient
+from services.referral.entity_graph_service import EntityGraphService
+from services.isf.isf_service import ISFEnrichmentService
+from services.isf.models import ISFEnrichmentRequest
+from services.isf.vessel_tracker import VesselTrackerClient
 
 logger = logging.getLogger(__name__)
 
@@ -30,14 +45,26 @@ router = APIRouter()
 @router.get("/{manifest_id}", response_model=ReferralPackageResponse)
 async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
     """
-    Get referral package for a shipment.
+    ⚠️ DEPRECATED: Get referral package for a shipment.
+
+    **This endpoint returns FIXTURE DATA only.**
+
+    For production use, call: GET /api/referral/{shipment_id}/entity-graph
+    (Coming in Phase 2 - uses real CORD entity resolution + ISF enrichment)
+
+    Will be removed in v2.0 (target: Q3 2026).
 
     Args:
         manifest_id: Manifest identifier
 
     Returns:
-        Complete referral package with all 14 sections
+        Complete referral package with all 14 sections (FIXTURE DATA)
     """
+    logger.warning(
+        f"⚠️ DEPRECATED: get_referral_package({manifest_id}) called with FIXTURE DATA. "
+        f"Use GET /api/referral/{{shipment_id}}/entity-graph for real data."
+    )
+
     try:
         # TODO: Load referral package from database using manifest_id
         # For now, return fixture for Greenfield case
@@ -501,3 +528,158 @@ async def export_referral_pdf(request: PDFExportRequest) -> FileResponse:
     except Exception as e:
         logger.error(f"PDF export failed: {e}")
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+@router.get("/{shipment_id}/entity-graph")
+async def get_entity_graph(shipment_id: str) -> Dict[str, Any]:
+    """
+    Get entity relationship graph for a shipment with ISF enrichment + CORD resolution.
+
+    This endpoint integrates:
+    1. ISF enrichment (Element 9 analysis, vessel tracking, dwell anomalies)
+    2. CORD entity resolution (3-level ownership chain via Senzing)
+    3. Entity graph transformation (to Entity[] format for frontend visualization)
+
+    Args:
+        shipment_id: Shipment identifier (manifest_id)
+
+    Returns:
+        Entity graph with chain (Entity[]), data_sources, ofac_detected, risk_score, etc.
+        Includes ISF warnings merged into shipper node.
+
+    Raises:
+        HTTPException 404: Shipment not found
+        HTTPException 503: CORD or ISF service unavailable
+        HTTPException 500: Internal processing error
+    """
+    logger.info(f"🔍 Entity graph request for shipment: {shipment_id}")
+
+    try:
+        # Step 1: Fetch shipment data
+        # TODO: Load from database. For now, use fixture for greenfield demo.
+        shipment_data = _get_shipment_data(shipment_id)
+        if not shipment_data:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Shipment {shipment_id} not found"
+            )
+
+        logger.info(f"Loaded shipment: {shipment_data['shipper']} → {shipment_data['consignee']}")
+
+        # Step 2: Enrich with ISF data (Element 9 analysis, vessel tracking)
+        vessel_tracker = VesselTrackerClient()
+        isf_service = ISFEnrichmentService(vessel_tracker)
+
+        isf_request = ISFEnrichmentRequest(
+            manifest_id=shipment_id,
+            shipper_name=shipment_data["shipper"],
+            shipper_country=shipment_data["shipper_country"],
+            consignee_name=shipment_data["consignee"],
+            consignee_country=shipment_data["consignee_country"],
+            vessel_name=shipment_data.get("vessel_name"),
+            imo=shipment_data.get("imo"),
+            declared_origin=shipment_data.get("isf_stuffing_country"),
+            hs_code=shipment_data.get("hts_code"),
+        )
+
+        isf_response = await isf_service.enrich_manifest(isf_request)
+        logger.info(f"ISF enrichment complete: {isf_response.status}")
+
+        if isf_response.status == "error":
+            logger.warning(f"ISF enrichment warning: {isf_response.error_reason}")
+            # Continue with CORD resolution; ISF data is optional
+
+        isf_data = isf_response.isf_data if isf_response.isf_data else {}
+
+        # Step 3: Resolve entity chain via CORD
+        cord_client = CORDClient()
+
+        # Prepare context dict with ISF findings for CORD
+        context = {}
+        if isf_data and hasattr(isf_data, 'element_9'):
+            element_9 = isf_data.element_9
+            context = {
+                "element_9_mismatch": element_9.is_mismatch,
+                "stuffing_country": element_9.actual_stuffing_country,
+                "stuffing_port": element_9.port_of_loading,
+                "dwell_anomaly": False,  # Would be set if dwell > threshold
+                "new_shipper": False,  # Would check shipper age
+                "declared_origin": element_9.declared_country,
+            }
+
+        cord_response = await cord_client.resolve_shipment_entities(
+            shipper_name=shipment_data["shipper"],
+            shipper_country=shipment_data["shipper_country"],
+            consignee_name=shipment_data["consignee"],
+            consignee_country=shipment_data["consignee_country"],
+            context=context if context else None,
+        )
+
+        if cord_response is None:
+            logger.warning(f"CORD resolution failed for {shipment_id}")
+            raise HTTPException(
+                status_code=503,
+                detail="Entity resolution service (CORD) unavailable"
+            )
+
+        logger.info(f"CORD resolution success")
+
+        # Step 4: Transform to Entity[] format
+        entity_graph = EntityGraphService.transform_cord_to_entity_chain(cord_response)
+        logger.info(f"Entity graph transformed: {len(entity_graph['chain'])} levels")
+
+        # Step 5: Merge ISF warnings into graph
+        if isf_data:
+            entity_graph = EntityGraphService.add_isf_warnings(entity_graph, isf_data.dict())
+            logger.info(f"ISF warnings merged into entity graph")
+
+        # Step 6: Add processing metadata
+        entity_graph["shipment_id"] = shipment_id
+        entity_graph["processing_timestamp"] = datetime.utcnow().isoformat()
+
+        logger.info(f"✅ Entity graph complete for {shipment_id}")
+        return entity_graph
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Entity graph generation failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Entity graph generation failed: {str(e)}"
+        )
+
+
+def _get_shipment_data(shipment_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch shipment data from database or fixtures.
+
+    TODO: Replace with actual database query once manifest storage is implemented.
+    Currently returns Greenfield demo fixture for testing.
+
+    Args:
+        shipment_id: Manifest or shipment identifier
+
+    Returns:
+        Shipment data dict with shipper, consignee, vessel info, or None if not found
+    """
+    # Demo fixture for Greenfield case
+    if shipment_id == "greenfield" or shipment_id.startswith("mani_"):
+        return {
+            "manifest_id": shipment_id,
+            "shipper": "Greenfield Industrial Trading Co., Ltd.",
+            "shipper_country": "VN",
+            "consignee": "SunPath Energy Distributors LLC",
+            "consignee_country": "US",
+            "vessel_name": "MV Pacific Horizon",
+            "imo": "9876543",  # Example IMO
+            "port_of_lading": "Guangzhou",
+            "port_of_discharge": "Los Angeles",
+            "isf_stuffing_country": "CN",
+            "hts_code": "7604.10.1000",
+            "hts_description": "Aluminum extrusions",
+            "total_declared_value_usd": 450000.0,
+            "total_weight_kg": 22500.0,
+        }
+
+    return None

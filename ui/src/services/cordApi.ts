@@ -6,6 +6,9 @@
  * - POST /api/cord/investigate - Entity-based investigation
  * - GET /api/cord/status - CORD data status
  * - POST /api/cord/download - Download CORD dataset
+ *
+ * New endpoints (Phase 2):
+ * - GET /api/referral/{shipment_id}/entity-graph - ISF + CORD integration
  */
 
 import { API_BASE_URL } from './apiUrl';
@@ -117,6 +120,45 @@ export interface InvestigateResponse {
   explanation: string;
   confidence: number;
   sources: string[];
+}
+
+// Phase 2: ISF + CORD Integration Response Types
+
+export interface EntityRelationship {
+  type: string; // 'OWNED_BY', 'PARENT_COMPANY', etc.
+  target: string; // Target entity name
+  confidence: number;
+}
+
+export interface Entity {
+  entity_id: string;
+  name: string;
+  country: string;
+  entity_type: 'SHIPPER' | 'INTERMEDIARY' | 'MANUFACTURER' | 'HOLDING_COMPANY' | string;
+  role: string; // 'Shipper', 'Parent Company', 'Manufacturer', etc.
+  data_source: string; // 'CORD', 'Senzing', 'OFAC', etc.
+  confidence: number;
+  relationships: EntityRelationship[];
+  risk_score?: number;
+  risk_flags?: string[];
+  warnings?: Warning[];
+}
+
+export interface Warning {
+  type: 'ISF_ELEMENT_9_MISMATCH' | 'DWELL_ANOMALY' | 'NEW_SHIPPER' | string;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  message: string;
+  confidence?: number;
+}
+
+export interface EntityGraph {
+  chain: Entity[];
+  data_sources: string[];
+  ofac_detected: boolean;
+  risk_score: number;
+  confidence_metrics?: Record<string, number>;
+  shipment_id?: string;
+  processing_timestamp?: string;
 }
 
 // CORD API Client
@@ -314,6 +356,29 @@ class CORDApiClient {
     if (!response.ok) {
       throw new Error(
         `List failed: ${response.status} ${response.statusText}`
+      );
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get entity relationship graph for a shipment.
+   *
+   * Integrates ISF enrichment (Element 9, vessel tracking) with CORD entity resolution
+   * to produce a 3-level ownership chain with ISF warnings merged.
+   *
+   * @param shipmentId - Shipment identifier (manifest_id)
+   * @returns Entity graph with chain, data sources, risk score, and ISF warnings
+   */
+  async getEntityGraph(shipmentId: string): Promise<EntityGraph> {
+    const response = await fetch(
+      `${this.baseUrl}/referral/${shipmentId}/entity-graph`
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Entity graph fetch failed: ${response.status} ${response.statusText}`
       );
     }
 

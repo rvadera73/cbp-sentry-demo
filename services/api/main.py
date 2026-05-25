@@ -25,8 +25,6 @@ import httpx
 from external_apis.h1_adapters import OpenCorporatesAdapter, ComtradeAdapter, ITCTariffsAdapter
 from external_apis.h2_adapters import AISAdapter, PortAuthorityAdapter
 from external_apis.ofac_service import ofac_service, OFACMatch
-from ml_scorers import H1CorridorRiskScorer, H2AnomalyScorer
-from h3_scorer import H3IntelligenceScorer
 from ingest_parser import parse_excel_manifest
 from senzing_client import get_senzing_client
 from senzing_search_first import get_search_first_client
@@ -130,11 +128,6 @@ comtrade_adapter = ComtradeAdapter()
 itc_adapter = ITCTariffsAdapter()
 ais_adapter = AISAdapter()
 port_adapter = PortAuthorityAdapter()
-
-# Initialize scorers
-h1_scorer = H1CorridorRiskScorer()
-h2_scorer = H2AnomalyScorer()
-h3_scorer = H3IntelligenceScorer()
 
 # Initialize comprehensive risk scoring engine
 risk_scoring_engine = RiskScoringEngine()
@@ -2941,73 +2934,9 @@ async def list_command_center_shipments(limit: int = 15, offset: int = 0) -> Dic
 # ============= THREE-LEVEL RISK SCORING (NEW PLATFORM) =============
 
 
-@app.post("/api/score/three-level/{shipment_id}")
-async def score_shipment_three_level(
-    shipment_id: str,
-    shipper_name: str = Query(...),
-    shipper_country: str = Query(...),
-    consignee_name: str = Query(...),
-    consignee_country: str = Query(...),
-    hs_code: str = Query(...),
-    declared_value_usd: float = Query(...),
-    declared_weight_kg: float = Query(...),
-    vessel_name: Optional[str] = Query(None),
-) -> Dict[str, Any]:
-    """
-    Score a shipment across three levels:
-    Level 1: Corridor Risk (macro-level trade analysis)
-    Level 2: Vessel Risk (pre-manifest anomalies)
-    Level 3: Manifest Risk (transaction-level validation)
-    """
-    from three_level_scorer import scorer
-    from feedback_engine import feedback_engine
-
-    try:
-        # Get corridor-specific weights or defaults
-        corridor_key = f"{shipper_country}-{consignee_country}"
-        weights = feedback_engine.get_weight_configuration(corridor=corridor_key)
-
-        # Run three-level scoring
-        result = await scorer.score_shipment(
-            shipment_id=shipment_id,
-            shipper_name=shipper_name,
-            shipper_country=shipper_country,
-            consignee_name=consignee_name,
-            consignee_country=consignee_country,
-            hs_code=hs_code,
-            declared_value_usd=declared_value_usd,
-            declared_weight_kg=declared_weight_kg,
-            vessel_name=vessel_name,
-            corridor_weights={
-                "w_corridor": weights.get("w_corridor", 0.20),
-                "w_vessel": weights.get("w_vessel", 0.35),
-                "w_manifest": weights.get("w_manifest", 0.45),
-            },
-        )
-
-        # Update shipment record with new score
-        async with await get_data_service_client() as client:
-            await client.patch(
-                f"/shipments/{shipment_id}",
-                json={
-                    "risk_score": result["total_score"],
-                    "h1_score": result["corridor_score"],
-                    "h2_score": result["vessel_score"],
-                },
-            )
-
-        return result
-
-    except Exception as e:
-        logger.error(f"Three-level scoring error for {shipment_id}: {e}")
-        return {
-            "error": str(e),
-            "status": "failed",
-            "shipment_id": shipment_id,
-        }
-
-
 # ============= HUMAN FEEDBACK & WEIGHT CALIBRATION =============
+# NOTE: Old three-level scorer endpoint removed (CLEANUP_PHASE_0)
+# Replaced by: /api/score/full-breakdown/{id} (risk_scoring_engine.py)
 
 
 @app.post("/api/feedback/override")
@@ -4321,16 +4250,34 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
     """
     Generate professional CBP EAPA referral package PDF (v2 - Production).
 
-    This is a cleaner, more robust implementation that fetches all required data
-    and generates a well-formatted, professional legal document.
+    Fetches real shipment data and referral package to generate a professional,
+    data-rich PDF with all 14 sections and real analysis.
     """
     try:
         from referral_pdf_generator import CBPReferralPDFGenerator
         import json
 
-        logger.info(f"Generating referral PDF v2 for case: {request.case_id}")
+        logger.info(f"Generating referral PDF v2 for case: {request.case_id}, shipment: {request.shipment_id}")
 
-        # Prepare referral data from request
+        # Fetch actual shipment data from data service
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"/shipments/{request.shipment_id}")
+            if resp.status_code != 200:
+                logger.warning(f"Shipment {request.shipment_id} not found in data service, using request values")
+                actual_shipment = {}
+            else:
+                actual_shipment = resp.json() if isinstance(resp.json(), dict) else {}
+
+        # Fetch rich referral package (includes all sections 3-1 through 3-14)
+        referral_pkg = await get_referral_package(request.shipment_id)
+
+        # Extract sections for PDF mapping
+        sections = referral_pkg.get("sections", {})
+
+        # Determine consignee name
+        consignee_name = actual_shipment.get("consignee_name") or request.shipper_name or "Import Consignee"
+
+        # Build referral data for PDF generator from REAL DATA
         referral_data = {
             "case_id": request.case_id,
             "shipment_id": request.shipment_id,
@@ -4338,37 +4285,37 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
             "recommendation": request.recommendation,
             "shipment": {
                 "shipper_name": request.shipper_name,
-                "consignee_name": "Gulf Coast Industrial",  # From DB ideally
+                "consignee_name": consignee_name,
                 "commodity_name": request.commodity_name,
-                "hs_code": "8541.40",
+                "hs_code": actual_shipment.get("hs_code") or sections.get("section_3_1_shipment_identification", {}).get("hs_code", "9999"),
                 "origin_country": request.origin_country,
                 "destination_country": request.destination_country,
-                "declared_value": 8177.41,
-                "quantity": 1,
+                "declared_value": actual_shipment.get("declared_value_usd") or actual_shipment.get("declared_value") or sections.get("section_3_1_shipment_identification", {}).get("value_usd", 0),
+                "quantity": actual_shipment.get("quantity") or 1,
                 "unit": "shipment",
-                "weight_kg": 11624.0,
+                "weight_kg": actual_shipment.get("declared_weight_kg") or actual_shipment.get("weight_kg") or sections.get("section_3_1_shipment_identification", {}).get("weight_kg", 0),
             },
-            "line_items": [
+            "line_items": sections.get("section_3_2_line_items", {}).get("items", []) or [
                 {
-                    "hs_code": "8541.40",
+                    "hs_code": actual_shipment.get("hs_code") or "9999",
                     "description": request.commodity_name,
                     "quantity": 1,
                     "unit": "shipment",
-                    "value": 8177.41,
+                    "value": actual_shipment.get("declared_value_usd") or 0,
                 }
             ],
-            "routing": {
-                "vessel_name": "MV Seamless Journey",
-                "vessel_imo": "9645123",
+            "routing": sections.get("section_3_3_routing_history", {}) or {
+                "vessel_name": actual_shipment.get("vessel_name", "Unknown Vessel"),
+                "vessel_imo": actual_shipment.get("vessel_imo", ""),
                 "port_of_lading": request.origin_country,
                 "port_of_unlading": request.destination_country,
-                "dwell_days": 5.2,
+                "dwell_days": actual_shipment.get("dwell_days", 0),
                 "dwell_baseline": 2.5,
-                "dwell_anomaly": "HIGH",
-                "ais_gaps": 2,
+                "dwell_anomaly": "NORMAL",
+                "ais_gaps": 0,
                 "transit_days": 14,
             },
-            "parties": [
+            "parties": sections.get("section_3_4_parties_and_roles", {}).get("parties", []) or [
                 {
                     "name": request.shipper_name,
                     "role": "SHIPPER",
@@ -4376,60 +4323,28 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
                     "risk_note": "None identified",
                 },
                 {
-                    "name": "Gulf Coast Industrial",
+                    "name": consignee_name,
                     "role": "CONSIGNEE",
                     "country": request.destination_country,
-                    "risk_note": "New importer",
+                    "risk_note": "",
                 },
             ],
-            "entity_chain": [
-                {
-                    "tier": 1,
-                    "name": "Northamericana Holdings Ltd.",
-                    "country": "Canada",
-                    "ownership_pct": 100,
-                    "match_confidence": 89,
-                    "risk_signal": "None",
-                },
-            ],
+            "entity_chain": sections.get("section_3_5_entity_ownership_chain", {}).get("chain", []),
+            # Add rich analysis sections (3-6 through 3-11)
+            "section_3_6": sections.get("section_3_6_historical_import_pattern", {}),
+            "section_3_7": sections.get("section_3_7_trade_flow_intelligence", {}),
+            "section_3_8": sections.get("section_3_8_document_review", {}),
+            "section_3_9": sections.get("section_3_9_document_consistency", {}),
+            "section_3_10": sections.get("section_3_10_supplier_verification", {}),
+            "section_3_11": sections.get("section_3_11_risk_indicators", {}),
+            # Risk scoring and scenarios
             "risk_scoring": {
-                "components": {
-                    "H1: Corridor Risk": [
-                        {"name": "Trade Corridor Risk", "value": 8.5, "weight": 40},
-                        {"name": "Shipper Age & History", "value": 6.2, "weight": 35},
-                        {"name": "Commodity Risk", "value": 9.0, "weight": 25},
-                    ],
-                    "H2: Anomaly Detection": [
-                        {"name": "ISF Element 9 Mismatch", "value": 8.0, "weight": 35},
-                        {"name": "AIS Dwell Anomaly", "value": 7.5, "weight": 35},
-                        {"name": "Port Activity Pattern", "value": 6.5, "weight": 30},
-                    ],
-                    "H3: Intelligence Check": [
-                        {"name": "OFAC/SDN Match", "value": 2.0, "weight": 25},
-                        {"name": "Entity Risk Profile", "value": 8.0, "weight": 40},
-                        {"name": "Historical Pattern", "value": 7.5, "weight": 35},
-                    ],
-                },
+                "components": sections.get("section_3_12_score_breakdown", {}).get("components", []),
+                "calculation_table": sections.get("section_3_12_score_breakdown", {}).get("calculation_table"),
             },
-            "what_if_scenarios": [
-                {
-                    "name": "Vietnam Origin Alternative",
-                    "base_score": "97 → 102",
-                    "recommendation": "ESCALATE",
-                },
-                {
-                    "name": "Transshipment via Hong Kong",
-                    "base_score": "97 → 103",
-                    "recommendation": "DENY ENTRY",
-                },
-            ],
-            "documents": [
-                {"name": "Bill of Lading", "required": True, "status": "RECEIVED", "notes": "Standard format"},
-                {"name": "Commercial Invoice", "required": True, "status": "RECEIVED", "notes": "Matches ISF"},
-                {"name": "Certificate of Origin", "required": True, "status": "MISSING", "notes": "REQUEST"},
-                {"name": "Manufacturer Certificate", "required": True, "status": "MISSING", "notes": "REQUEST"},
-            ],
-            "narrative": request.shipment_narrative if request.shipment_narrative else "",
+            "what_if_scenarios": sections.get("section_3_13_what_if_scenarios", {}).get("scenarios", []),
+            "documents": sections.get("section_3_8_document_review", {}).get("documents", []),
+            "narrative": request.shipment_narrative or "",
         }
 
         # Generate PDF

@@ -390,7 +390,8 @@ class FeedbackEngine:
             if not weight_config:
                 # Create default configuration if none exists
                 logger.warning(f"No weight configuration found for corridor {corridor}, creating default")
-                from three_level_scorer import DEFAULT_WEIGHTS
+                # Default weights for three-level model (deprecated - using 7-factor model now)
+                DEFAULT_WEIGHTS = {"w_corridor": 0.20, "w_vessel": 0.35, "w_manifest": 0.45}
 
                 cursor.execute(
                     """
@@ -545,10 +546,11 @@ class FeedbackEngine:
             logger.warning(f"Could not retrieve weight configuration: {e}")
 
         # Return defaults if no configuration exists or DB error
-        from three_level_scorer import DEFAULT_WEIGHTS
+        # Default weights for three-level model (deprecated - using 7-factor model now)
+        default_weights = {"w_corridor": 0.20, "w_vessel": 0.35, "w_manifest": 0.45}
 
         return {
-            **DEFAULT_WEIGHTS,
+            **default_weights,
             "corridor": corridor,
         }
 

@@ -150,14 +150,22 @@ class CBPReferralPDFGenerator:
             content.extend(self._build_cover_page(referral_data))
             content.extend(self._build_executive_summary(referral_data))
             content.extend(self._build_officer_narrative(referral_data))
+            # Section 3-1 through 3-5: Core shipment data
             content.extend(self._build_shipment_identification(referral_data))
             content.extend(self._build_line_items(referral_data))
             content.extend(self._build_routing_history(referral_data))
             content.extend(self._build_parties_and_roles(referral_data))
             content.extend(self._build_entity_ownership_chain(referral_data))
+            # Section 3-6 through 3-11: Analysis sections
+            content.extend(self._build_historical_import_pattern(referral_data))
+            content.extend(self._build_trade_flow_intelligence(referral_data))
+            content.extend(self._build_document_review(referral_data))
+            content.extend(self._build_document_consistency(referral_data))
+            content.extend(self._build_supplier_verification(referral_data))
+            content.extend(self._build_risk_indicators(referral_data))
+            # Section 3-12 and beyond: Risk scoring, scenarios, determination
             content.extend(self._build_risk_scoring_breakdown(referral_data))
             content.extend(self._build_what_if_scenarios(referral_data))
-            content.extend(self._build_document_checklist(referral_data))
             content.extend(self._build_formal_determination(referral_data))
             content.extend(self._build_appendix(referral_data))
 
@@ -495,10 +503,239 @@ class CBPReferralPDFGenerator:
         content.append(PageBreak())
         return content
 
-    def _build_risk_scoring_breakdown(self, data: Dict[str, Any]) -> List:
-        """Build TABLE 3-6: Risk Scoring Breakdown with H1/H2/H3 components."""
+    def _build_historical_import_pattern(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-6: Historical Import Pattern Analysis."""
         content = []
-        content.append(Paragraph("TABLE 3-6: RISK SCORING BREAKDOWN (ML MODEL)", self.styles["section_heading"]))
+        content.append(Paragraph("TABLE 3-6: HISTORICAL IMPORT PATTERN ANALYSIS", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_6", {})
+        if section:
+            pattern_data = [
+                ("Origin Country", section.get("origin", "N/A")),
+                ("Destination Country", section.get("destination", "N/A")),
+                ("LLM Generated", "Yes" if section.get("llm_generated") else "No"),
+                ("Model", section.get("llm_model", "N/A") if section.get("llm_generated") else "Manual Analysis"),
+            ]
+            for label, value in pattern_data:
+                content.append(Paragraph(f"<b>{label}:</b> {value}", self.styles["body"]))
+
+            content.append(Spacer(1, 0.1 * inch))
+            content.append(Paragraph("<b>Analysis Summary</b>", self.styles["table_heading"]))
+            content.append(Paragraph(section.get("pattern", "No analysis available"), self.styles["body"]))
+        else:
+            content.append(Paragraph("No historical import pattern data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph("<b>Data Source:</b> Historical ISF Filing Analysis + Trade Pattern Intelligence", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_trade_flow_intelligence(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-7: Trade Flow Intelligence."""
+        content = []
+        content.append(Paragraph("TABLE 3-7: TRADE FLOW INTELLIGENCE", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_7", {})
+        if section:
+            trade_data = [
+                ("HS Code", section.get("hs_code", "N/A")),
+                ("Commodity", section.get("commodity", "N/A")),
+                ("Origin Country", section.get("origin", "N/A")),
+                ("AD/CVD Status", section.get("ad_cvd_status", "NONE")),
+                ("AD/CVD Rate", section.get("ad_cvd_rate", "0%")),
+                ("Prior Filings", str(section.get("prior_filings", 0))),
+                ("Origin Shift Trend", section.get("origin_shift_trend", "STABLE")),
+            ]
+            for label, value in trade_data:
+                content.append(Paragraph(f"<b>{label}:</b> {value}", self.styles["body"]))
+
+            content.append(Spacer(1, 0.1 * inch))
+            content.append(Paragraph("<b>Trade Flow Summary</b>", self.styles["table_heading"]))
+            content.append(Paragraph(section.get("summary", "No analysis available"), self.styles["body"]))
+        else:
+            content.append(Paragraph("No trade flow intelligence data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph("<b>Data Source:</b> Tariff Database + AD/CVD Orders + Trade Pattern Analysis", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_document_review(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-8: Document Review Checklist."""
+        content = []
+        content.append(Paragraph("TABLE 3-8: DOCUMENT REVIEW CHECKLIST", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_8", {})
+        documents = section.get("documents", [])
+
+        if documents:
+            table_data = [["Document", "Status", "Notes"]]
+            status_colors = {"RECEIVED": self.COLOR_SUCCESS, "MISSING": self.COLOR_DANGER, "PENDING": self.COLOR_WARNING}
+
+            for doc in documents:
+                status = doc.get("status", "PENDING")
+                table_data.append([
+                    doc.get("document", "N/A"),
+                    f'<font color="{status_colors.get(status, "#666")}">{status}</font>',
+                    doc.get("notes", ""),
+                ])
+
+            table = Table(table_data, colWidths=[2.2*inch, 1*inch, 1.8*inch])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), self.COLOR_PRIMARY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), "white"),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("GRID", (0, 0), (-1, -1), 1, "#CCCCCC"),
+                ("FONTSIZE", (0, 1), (-1, -1), 8),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), ["white", "#F5F5F5"]),
+            ]))
+            content.append(table)
+        else:
+            content.append(Paragraph("No document review data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph("<b>Data Source:</b> CBP Document Portal + Shipper Submission Records", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_document_consistency(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-9: Document Consistency Matrix (ISF Element 9 Check)."""
+        content = []
+        content.append(Paragraph("TABLE 3-9: DOCUMENT CONSISTENCY MATRIX (ISF ELEMENT 9)", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_9", {})
+        isf_data = section.get("isf_element9", {})
+
+        if isf_data:
+            is_mismatch = isf_data.get("is_mismatch", False)
+
+            if is_mismatch:
+                content.append(Paragraph(
+                    '<font color="#D83933"><b>⚠️ ISF ELEMENT 9 MISMATCH DETECTED</b></font>',
+                    self.styles["table_heading"]
+                ))
+                content.append(Spacer(1, 0.08 * inch))
+
+            consistency_data = [
+                ("Declared Origin (ISF Element 9)", isf_data.get("declared_origin", "N/A")),
+                ("Actual Stuffing Country (AIS)", isf_data.get("actual_stuffing_country", "N/A")),
+                ("Mismatch Status", "MISMATCH" if is_mismatch else "CONSISTENT"),
+                ("Confidence Level", f"{isf_data.get('mismatch_confidence', 0) * 100:.1f}%"),
+            ]
+
+            for label, value in consistency_data:
+                content.append(Paragraph(f"<b>{label}:</b> {value}", self.styles["body"]))
+
+            evidence = isf_data.get("evidence", [])
+            if evidence:
+                content.append(Spacer(1, 0.08 * inch))
+                content.append(Paragraph("<b>Supporting Evidence</b>", self.styles["table_heading"]))
+                for ev in evidence:
+                    content.append(Paragraph(f"• {ev}", self.styles["body"]))
+
+        else:
+            content.append(Paragraph("No ISF Element 9 consistency data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph(f"<b>Summary:</b> {section.get('summary', 'N/A')}", self.styles["small"]))
+        content.append(Paragraph("<b>Data Source:</b> ISF Pre-Arrival Filing + AIS Vessel Tracking", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_supplier_verification(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-10: Supplier Manufacturing Verification."""
+        content = []
+        content.append(Paragraph("TABLE 3-10: SUPPLIER MANUFACTURING VERIFICATION", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_10", {})
+        if section:
+            age_months = section.get("shipper_age_months")
+            age_risk = section.get("shipper_age_risk", "ESTABLISHED")
+
+            risk_colors = {"VERY_NEW": self.COLOR_DANGER, "NEW": self.COLOR_WARNING, "ESTABLISHED": self.COLOR_SUCCESS}
+            age_color = risk_colors.get(age_risk, "#666")
+
+            supplier_data = [
+                ("Supplier Name", section.get("shipper", "N/A")),
+                ("Operating Age", f"{age_months} months" if age_months else "Unknown"),
+                ("Age Risk Category", f'<font color="{age_color}"><b>{age_risk}</b></font>'),
+                ("Declared Volume (kg)", f"{section.get('declared_volume_kg', 0):,.0f}"),
+                ("Capacity Assessment", section.get("capacity_assessment", "Unknown")),
+            ]
+
+            for label, value in supplier_data:
+                content.append(Paragraph(f"<b>{label}:</b> {value}", self.styles["body"]))
+
+            content.append(Spacer(1, 0.1 * inch))
+            content.append(Paragraph(f"<b>Summary:</b> {section.get('summary', 'N/A')}", self.styles["body"]))
+        else:
+            content.append(Paragraph("No supplier verification data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph("<b>Data Source:</b> Company Registry Lookups + Historical Filing Analysis", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_risk_indicators(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-11: Risk Indicator Summary."""
+        content = []
+        content.append(Paragraph("TABLE 3-11: RISK INDICATOR SUMMARY", self.styles["section_heading"]))
+        content.append(Spacer(1, 0.1 * inch))
+
+        section = data.get("section_3_11", {})
+        indicators = section.get("indicators", [])
+
+        if indicators:
+            table_data = [["Risk Indicator", "Status", "Evidence", "Authority"]]
+
+            for ind in indicators:
+                # Handle both "present" (bool) and "risk_level" (str) formats
+                present = ind.get("present", False)
+                risk_level = ind.get("risk_level", "NORMAL")
+                status = "PRESENT" if (present or risk_level in ["HIGH", "MEDIUM"]) else "ABSENT"
+                status_color = self.COLOR_DANGER if status == "PRESENT" else self.COLOR_SUCCESS
+
+                table_data.append([
+                    ind.get("indicator", "N/A"),
+                    f'<font color="{status_color}"><b>{status}</b></font>',
+                    ind.get("evidence", "N/A")[:40],  # Truncate
+                    ind.get("authority", "N/A")[:25],  # Truncate
+                ])
+
+            table = Table(table_data, colWidths=[1.8*inch, 1*inch, 1.8*inch, 1.2*inch])
+            table.setStyle(TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), self.COLOR_PRIMARY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), "white"),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, 0), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("GRID", (0, 0), (-1, -1), 1, "#CCCCCC"),
+                ("FONTSIZE", (0, 1), (-1, -1), 7),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), ["white", "#F5F5F5"]),
+            ]))
+            content.append(table)
+        else:
+            content.append(Paragraph("No risk indicators data available.", self.styles["body"]))
+
+        content.append(Spacer(1, 0.1 * inch))
+        content.append(Paragraph("<b>Data Source:</b> Automated Risk Scoring Engine + Intelligence Integration", self.styles["small"]))
+        content.append(PageBreak())
+        return content
+
+    def _build_risk_scoring_breakdown(self, data: Dict[str, Any]) -> List:
+        """Build TABLE 3-12: Risk Scoring Breakdown with H1/H2/H3 components."""
+        content = []
+        content.append(Paragraph("TABLE 3-12: RISK SCORING BREAKDOWN (ML MODEL)", self.styles["section_heading"]))
         content.append(Spacer(1, 0.1 * inch))
 
         risk_scoring = data.get("risk_scoring", {})

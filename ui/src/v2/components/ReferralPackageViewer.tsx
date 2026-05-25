@@ -550,10 +550,242 @@ function SectionRenderer({ section }: { section: any }) {
           <div key={idx} className="p-3 border border-[#D0D7DE] rounded">
             <div className="flex items-start justify-between mb-2">
               <p className="text-sm font-bold text-[#0B1F33]">{ind.indicator}</p>
-              {ind.present && <span className="text-[#D83933] font-bold text-xs">🚩 PRESENT</span>}
+              {(ind.present || ind.risk_level === 'HIGH' || ind.risk_level === 'MEDIUM') && <span className="text-[#D83933] font-bold text-xs">🚩 PRESENT</span>}
             </div>
             <p className="text-xs text-slate-700 mb-2">{ind.evidence}</p>
             <p className="text-[8px] text-slate-500 font-mono">Authority: {ind.authority}</p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Table 3-4: Parties and Roles
+  if (type?.includes('parties and roles')) {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-[#005EA2] text-white">
+              <th className="text-left p-2 font-bold">Entity</th>
+              <th className="text-left p-2 font-bold">Role</th>
+              <th className="text-left p-2 font-bold">Country</th>
+              <th className="text-left p-2 font-bold">Risk Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.parties?.map((party: any, idx: number) => (
+              <tr key={idx} className="border-b border-[#D0D7DE] hover:bg-slate-50">
+                <td className="p-2 font-bold text-[#0B1F33]">{party.entity}</td>
+                <td className="p-2"><span className="bg-blue-100 text-[#0B1F33] px-2 py-1 rounded text-[7px] font-bold">{party.role}</span></td>
+                <td className="p-2 font-mono">{party.country}</td>
+                <td className="p-2 text-slate-600">{party.risk || 'None'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // Table 3-5: Entity Ownership Chain
+  if (type?.includes('entity ownership chain')) {
+    return (
+      <div className="space-y-4">
+        {section.chain?.map((entity: any, idx: number) => (
+          <div key={idx} className="p-4 border border-[#D0D7DE] rounded bg-slate-50">
+            <div className="flex items-start justify-between mb-2">
+              <h4 className="text-sm font-bold text-[#0B1F33]">{entity.name}</h4>
+              <span className="text-[8px] bg-slate-200 px-2 py-1 rounded">{entity.entity_type || 'Entity'}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div><p className="text-[8px] text-slate-500 font-bold">Country</p><p className="text-[#0B1F33]">{entity.country}</p></div>
+              <div><p className="text-[8px] text-slate-500 font-bold">Role</p><p className="text-[#0B1F33]">{entity.role}</p></div>
+              <div><p className="text-[8px] text-slate-500 font-bold">Confidence</p><p className="text-[#0B1F33]">{entity.confidence ? (entity.confidence * 100).toFixed(0) : 'N/A'}%</p></div>
+              <div><p className="text-[8px] text-slate-500 font-bold">Relationships</p><p className="text-[#0B1F33]">{entity.relationships?.length || 0}</p></div>
+            </div>
+          </div>
+        ))}
+        {section.senzing_resolution && (
+          <div className="p-3 bg-blue-50 border border-blue-200 rounded text-[8px]">
+            <p className="font-bold">Senzing Resolution Status: <span className="text-[#0B1F33]">{section.senzing_resolution.status}</span></p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Table 3-6: Historical Import Pattern
+  if (type?.includes('historical import pattern')) {
+    return (
+      <div className="space-y-3">
+        <div className="p-3 bg-slate-50 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Trade Route</p>
+          <p className="text-sm font-bold text-[#0B1F33]">{section.origin} → {section.destination}</p>
+        </div>
+        <div className="p-3 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Pattern Analysis</p>
+          <p className="text-xs text-slate-700 leading-relaxed">{section.pattern}</p>
+        </div>
+        {section.llm_generated && (
+          <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+            <p className="text-[8px] text-blue-900"><span className="font-bold">🤖 AI Generated</span> • {section.llm_model}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Table 3-7: Trade Flow Intelligence
+  if (type?.includes('trade flow intelligence')) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">HS Code</p>
+            <p className="text-sm font-mono text-[#0B1F33]">{section.hs_code}</p>
+          </div>
+          <div className="p-2 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">Commodity</p>
+            <p className="text-sm text-[#0B1F33]">{section.commodity}</p>
+          </div>
+          <div className="p-2 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">AD/CVD Status</p>
+            <p className="text-sm"><span className={section.ad_cvd_status === 'ACTIVE' ? 'text-[#D83933] font-bold' : 'text-[#07A41E]'}>{section.ad_cvd_status}</span></p>
+          </div>
+          <div className="p-2 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">Rate</p>
+            <p className="text-sm font-bold text-[#0B1F33]">{section.ad_cvd_rate}</p>
+          </div>
+        </div>
+        <div className="p-3 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Trade Intelligence Summary</p>
+          <p className="text-xs text-slate-700">{section.summary}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Table 3-8: Document Review
+  if (type?.includes('document review')) {
+    const statusColors = { RECEIVED: 'bg-green-100 text-[#07A41E]', MISSING: 'bg-red-100 text-[#D83933]', PENDING: 'bg-amber-100 text-[#FFBE2E]' };
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs border-collapse">
+          <thead>
+            <tr className="bg-[#005EA2] text-white">
+              <th className="text-left p-2 font-bold">Document</th>
+              <th className="text-center p-2 font-bold">Status</th>
+              <th className="text-left p-2 font-bold">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {section.documents?.map((doc: any, idx: number) => (
+              <tr key={idx} className="border-b border-[#D0D7DE] hover:bg-slate-50">
+                <td className="p-2 text-[#0B1F33]">{doc.document}</td>
+                <td className="p-2 text-center"><span className={`px-2 py-1 rounded text-[7px] font-bold ${statusColors[doc.status as keyof typeof statusColors] || 'bg-gray-100'}`}>{doc.status}</span></td>
+                <td className="p-2 text-slate-600">{doc.notes || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // Table 3-9: Document Consistency
+  if (type?.includes('document consistency')) {
+    const mismatch = section.isf_element9?.is_mismatch;
+    return (
+      <div className="space-y-3">
+        {mismatch && (
+          <div className="p-3 bg-[#FFECEB] border-l-4 border-[#D83933]">
+            <p className="text-sm font-bold text-[#D83933]">⚠️ ISF ELEMENT 9 MISMATCH</p>
+          </div>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-3 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Declared Origin</p>
+            <p className="text-sm font-bold text-[#0B1F33]">{section.isf_element9?.declared_origin}</p>
+          </div>
+          <div className="p-3 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Actual Stuffing</p>
+            <p className="text-sm font-bold text-[#0B1F33]">{section.isf_element9?.actual_stuffing_country}</p>
+          </div>
+        </div>
+        {section.isf_element9?.evidence && (
+          <div className="p-3 bg-slate-50 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-600 uppercase mb-2">Evidence</p>
+            {section.isf_element9.evidence.map((ev: string, idx: number) => (
+              <p key={idx} className="text-xs text-slate-700 mb-1">• {ev}</p>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Table 3-10: Supplier Verification
+  if (type?.includes('supplier verification')) {
+    const ageRiskColors = { VERY_NEW: 'text-[#D83933]', NEW: 'text-[#FFBE2E]', ESTABLISHED: 'text-[#07A41E]' };
+    return (
+      <div className="space-y-3">
+        <div className="p-3 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Supplier</p>
+          <p className="text-sm font-bold text-[#0B1F33]">{section.shipper}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-3 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">Operating Age</p>
+            <p className="text-sm text-[#0B1F33]">{section.shipper_age_months || 'N/A'} months</p>
+          </div>
+          <div className="p-3 rounded border border-[#D0D7DE]">
+            <p className="text-[8px] font-bold text-slate-500 uppercase">Risk Level</p>
+            <p className={`text-sm font-bold ${ageRiskColors[section.shipper_age_risk as keyof typeof ageRiskColors] || 'text-slate-600'}`}>{section.shipper_age_risk}</p>
+          </div>
+        </div>
+        <div className="p-3 rounded border border-[#D0D7DE]">
+          <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">Capacity Assessment</p>
+          <p className="text-xs text-slate-700">{section.capacity_assessment}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Table 3-13: What-If Scenarios
+  if (type?.includes('what-if scenarios') || type?.includes('counterfactual')) {
+    return (
+      <div className="space-y-3">
+        {section.scenarios?.map((scenario: any, idx: number) => {
+          const [current, revised] = scenario.revised_score?.split('→').map((s: string) => parseInt(s.trim())) || [0, 0];
+          const impact = revised - current;
+          return (
+            <div key={idx} className="p-3 border border-[#D0D7DE] rounded">
+              <p className="text-sm font-bold text-[#0B1F33] mb-2">{scenario.scenario}</p>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-lg font-bold text-[#0B1F33]">{current}</span>
+                <span className="text-xs text-slate-500">→</span>
+                <span className="text-lg font-bold text-[#0B1F33]">{revised}</span>
+                <span className={`text-xs font-bold ml-2 ${impact > 0 ? 'text-[#D83933]' : 'text-[#07A41E]'}`}>
+                  {impact > 0 ? '+' : ''}{impact}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600">{scenario.impact}</p>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Table 3-14: Data Sources
+  if (type?.includes('data source')) {
+    return (
+      <div className="space-y-2">
+        {section.sources?.map((source: any, idx: number) => (
+          <div key={idx} className="p-3 rounded border border-[#D0D7DE]">
+            <p className="text-sm font-bold text-[#0B1F33]">{source.source}</p>
+            <p className="text-xs text-slate-600 mt-1">{source.use}</p>
           </div>
         ))}
       </div>

@@ -1,23 +1,46 @@
 """
-Referral package builder service.
+⚠️ DEPRECATED: Referral package builder service.
 
-Constructs complete referral packages (Tables 3-1 through 3-14)
-from manifest data, entity resolution, and ML scores.
+This module builds packages from FIXTURE DATA only.
+
+For production use, implement Option 3:
+- Call CORD microservice at http://sentry-cord-integration:8004
+- Fetch entity resolution directly via CORDClient (api/services/referral/cord_client.py)
+- Use EntityGraphService to transform data (api/services/referral/entity_graph_service.py)
+
+Will be replaced in v2.0 (target: Q3 2026).
+See ENTITY_GRAPH_OPTION3_STRATEGY.md for migration details.
 """
 
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ReferralPackageBuilder:
     """
-    Builds referral packages for CBP officers.
+    ⚠️ DEPRECATED: Builds referral packages from FIXTURE DATA.
 
-    Combines:
-    - Manifest data (shipment identification, line items, routing)
-    - Entity resolution (parties, ownership chain)
-    - ML scoring (6-component breakdown, confidence)
-    - Document analysis (consistency issues, risk indicators)
+    This builder uses static fixture data and is being replaced by Option 3:
+    - CORDClient: Direct calls to CORD microservice
+    - EntityGraphService: Transform CORD responses to Entity[] format
+
+    Current limitations:
+    - ❌ No real entity resolution (uses hardcoded demo data)
+    - ❌ Missing entity_type, entity_id, relationships[]
+    - ❌ No ISF enrichment integration
+    - ❌ No OFAC status per entity
+
+    Combines (FIXTURE ONLY):
+    - Static manifest data (hardcoded)
+    - Hardcoded entity resolution (demo data)
+    - Mock ML scoring (fixed values)
+    - Static document analysis (templates)
+
+    Scheduled removal: v2.0 (Q3 2026)
+    Migration: Use CORDClient + EntityGraphService instead
     """
 
     def build_package(
