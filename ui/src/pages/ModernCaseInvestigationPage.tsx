@@ -26,6 +26,24 @@ interface Case {
   vessel_name?: string;
   status: string;
   created_at?: string;
+  // Additional fields for 7-factor risk scoring
+  element9_is_mismatch?: boolean;
+  element9_declared_country?: string;
+  element9_actual_country?: string;
+  ad_cvd_rate?: number;
+  shipper_age_months?: number;
+  dwell_days?: number;
+  ais_stuffing_country?: string;
+  port_calls?: string | string[];
+  vessel_flag?: string;
+  vessel_imo?: string;
+  prior_violations?: number;
+  ofac_status?: string;
+  ownership_opacity?: boolean;
+  price_variance_percent?: number;
+  unit_price_per_kg?: number;
+  commodity_code?: string;
+  commodity_name?: string;
 }
 
 
@@ -56,20 +74,26 @@ export default function ModernCaseInvestigationPage() {
       let shipment: Case | null = null;
 
       if (shipmentId) {
-        const response = await fetch(`${API_BASE_URL}/shipments`);
-        const data = await response.json();
-        if (data.shipments) {
-          shipment = data.shipments.find((s: Case) => s.id === shipmentId) || null;
-          if (shipment) {
-            setCaseData(shipment);
-          }
+        // Fetch complete shipment data from dedicated endpoint
+        const response = await fetch(`${API_BASE_URL}/data/shipments/${shipmentId}`);
+        if (response.ok) {
+          shipment = await response.json();
+          setCaseData(shipment);
+        } else {
+          console.error('Failed to fetch shipment detail');
         }
       } else {
+        // Fallback: fetch from list and get first
         const response = await fetch(`${API_BASE_URL}/shipments?limit=1`);
         const data = await response.json();
-        if (data.shipments && data.shipments.length > 0) {
-          shipment = data.shipments[0];
-          setCaseData(shipment);
+        if (data.data && data.data.length > 0) {
+          // Get the full shipment details using the ID from list
+          const firstId = data.data[0].id;
+          const detailResponse = await fetch(`${API_BASE_URL}/data/shipments/${firstId}`);
+          if (detailResponse.ok) {
+            shipment = await detailResponse.json();
+            setCaseData(shipment);
+          }
         }
       }
 
@@ -88,16 +112,44 @@ export default function ModernCaseInvestigationPage() {
       setRiskLoading(true);
       setRiskError(null);
 
+      // Pass all available shipment fields to the 7-factor risk engine
       const shipmentData = {
-        shipment_id: shipmentId,
+        id: shipmentId,
+        // Basic info
         shipper_name: shipment.shipper_name,
-        shipper_country: shipment.origin_country,
+        origin_country: shipment.origin_country,
         consignee_name: shipment.consignee_name,
-        consignee_country: shipment.destination_country,
+        destination_country: shipment.destination_country,
+        // Commodity
         hs_code: shipment.hs_code,
+        commodity_code: shipment.commodity_code,
+        commodity_name: shipment.commodity_name,
         declared_value_usd: shipment.declared_value_usd,
         declared_weight_kg: shipment.declared_weight_kg || 0,
+        unit_price_per_kg: shipment.unit_price_per_kg || 0,
+        price_variance_percent: shipment.price_variance_percent || 0,
+        // Vessel & Routing
         vessel_name: shipment.vessel_name || '',
+        vessel_imo: shipment.vessel_imo || '',
+        vessel_flag: shipment.vessel_flag || '',
+        dwell_days: shipment.dwell_days || 0,
+        port_calls: shipment.port_calls || [],
+        ais_stuffing_country: shipment.ais_stuffing_country || '',
+        // Documentation (Element 9 & ISF)
+        element9_is_mismatch: shipment.element9_is_mismatch || false,
+        element9_declared_country: shipment.element9_declared_country,
+        element9_actual_country: shipment.element9_actual_country,
+        isf_amendments: 0, // Default if not available
+        // Party Profile
+        shipper_age_months: shipment.shipper_age_months || 12,
+        prior_violations: shipment.prior_violations || 0,
+        ofac_status: shipment.ofac_status || 'CLEAR',
+        ownership_opacity: shipment.ownership_opacity || false,
+        // Trade/Corridor
+        ad_cvd_rate: shipment.ad_cvd_rate || 0,
+        ad_cvd_applicable: (shipment.ad_cvd_rate || 0) > 0,
+        // Metadata
+        created_at: shipment.created_at,
       };
 
       const response = await fetch(`${API_BASE_URL}/score/full-breakdown/${shipmentId}`, {
