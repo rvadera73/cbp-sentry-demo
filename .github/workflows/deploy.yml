@@ -271,6 +271,10 @@ jobs:
             --timeout=300 \
             --min-instances=1 \
             --max-instances=10 \
+            --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
+            --add-volume-mount volume=appdata,mount-path=/app/data \
+            --add-volume name=corddata,type=cloud-storage,bucket=cbp-sentry-appdata \
+            --add-volume-mount volume=corddata,mount-path=/app/cord-data \
             --set-env-vars API_MODE=live \
             --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }} \
             --set-env-vars DATA_SERVICE_URL=${{ steps.urls.outputs.data_url }} \
@@ -363,6 +367,8 @@ jobs:
             --max-instances=1 \
             --add-volume name=appdata,type=cloud-storage,bucket=cbp-sentry-appdata \
             --add-volume-mount volume=appdata,mount-path=/app/data \
+            --add-volume name=corddata,type=cloud-storage,bucket=cbp-sentry-appdata \
+            --add-volume-mount volume=corddata,mount-path=/app/cord-data \
             --set-env-vars CORD_DATA_DIR=/app/cord-data \
             --set-env-vars DATA_SERVICE_URL=${{ steps.urls.outputs.data_url }} \
             --set-env-vars DEPLOYMENT_ENV=${{ needs.setup.outputs.environment }}
