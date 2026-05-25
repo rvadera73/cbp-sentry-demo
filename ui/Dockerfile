@@ -11,9 +11,11 @@ RUN npm ci --prefer-offline --no-audit
 COPY src ./src
 COPY tsconfig.json tsconfig.node.json vite.config.ts tailwind.config.ts postcss.config.js index.html ./
 
-# Step 3: Build with optional API_URL (for Cloud Run deployments)
-# In Cloud Run, build with: --build-arg API_URL=https://sentry-api-XXXX.run.app/api
-# In local Docker, omit API_URL and use nginx proxy at /api
+# Step 3: Build with optional API_URL for different environments
+# Local Docker:  docker build --build-arg API_URL=http://sentry-api:8000 ./ui
+# Staging:       docker build --build-arg API_URL=https://api.staging.example.com ./ui
+# Cloud Run:     docker build --build-arg API_URL=https://sentry-api-XXXX.run.app ./ui
+# If API_URL is empty, React will use nginx proxy at /api
 ARG API_URL=""
 ENV VITE_API_URL=${API_URL}
 RUN npm run build

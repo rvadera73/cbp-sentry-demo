@@ -99,10 +99,15 @@ services:
       dockerfile: Dockerfile
       cache_from:
         - sentry-ui:latest
+      args:
+        # Build-time API_URL configuration:
+        # Local:   docker-compose up
+        # Staging: API_URL=https://api.staging.example.com docker-compose up
+        # Prod:    API_URL=https://sentry-api-prod.example.com docker-compose up
+        API_URL: ${API_URL:-http://sentry-api:8000}
     image: sentry-ui:latest
     container_name: sentry-ui
     environment:
-      VITE_API_URL: ${API_URL:-http://localhost:8000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${UI_PORT:-3001}:80"
