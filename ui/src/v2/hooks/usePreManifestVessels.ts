@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 export interface PreManifestVessel {
   vessel_imo: string;
@@ -52,8 +53,8 @@ export function usePreManifestVessels(corridorId?: string, autoRefresh = false):
       }
 
       const url = params.toString()
-        ? `/api/pre-manifest/vessels?${params}`
-        : '/api/pre-manifest/vessels';
+        ? `${API_BASE_URL}/pre-manifest/vessels?${params}`
+        : `${API_BASE_URL}/pre-manifest/vessels`;
 
       const response = await fetch(url);
       if (!response.ok) {
@@ -81,8 +82,8 @@ export function usePreManifestVessels(corridorId?: string, autoRefresh = false):
       }
 
       const url = params.toString()
-        ? `/api/pre-manifest/vessels?${params}`
-        : '/api/pre-manifest/vessels';
+        ? `${API_BASE_URL}/pre-manifest/vessels?${params}`
+        : `${API_BASE_URL}/pre-manifest/vessels`;
 
       const response = await fetch(url);
       if (!response.ok) {

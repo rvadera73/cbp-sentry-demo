@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 interface CorridorStats {
   shipment_count: number;
@@ -69,7 +70,7 @@ export function useCorridorIntelligence(): CorridorIntelligence {
     const fetchCorridors = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch('/api/corridors');
+        const response = await fetch(`${API_BASE_URL}/corridors`);
         if (!response.ok) {
           throw new Error(`Failed to fetch corridors: ${response.statusText}`);
         }

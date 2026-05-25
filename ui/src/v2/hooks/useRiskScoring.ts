@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { API_BASE_URL } from '../../services/apiUrl';
 
 export interface RiskScoringBreakdown {
   shipment_id?: string;
@@ -48,7 +49,7 @@ export function useRiskScoring(shipmentId: string | null) {
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/api/risk-scoring/comprehensive`, {
+        const response = await fetch(`${API_BASE_URL}/risk-scoring/comprehensive`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ shipment_id: shipmentId }),
