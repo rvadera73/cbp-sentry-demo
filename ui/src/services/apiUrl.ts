@@ -26,13 +26,11 @@ export const getAPIBaseURL = (): string => {
     return '/api';
   }
 
-  // Priority 3: Cloud Run (sentry-ui-<HASH>.<REGION>.run.app)
-  // Extract hash and region, construct sentry-api URL with same hash and region
-  const cloudRunMatch = hostname.match(/^sentry-ui-(-?\d+)\.([\w\-]+)\.run\.app$/);
-  if (cloudRunMatch) {
-    const [, hash, region] = cloudRunMatch;
-    const url = `https://sentry-api-${hash}.${region}.run.app/api`;
-    console.log('[apiUrl] Cloud Run match - hash:', hash, 'region:', region, 'url:', url);
+  // Priority 3: Cloud Run (sentry-ui-*.run.app → sentry-api-*.run.app)
+  // If hostname starts with 'sentry-ui-' and ends with '.run.app', replace 'sentry-ui' with 'sentry-api'
+  if (hostname.startsWith('sentry-ui-') && hostname.endsWith('.run.app')) {
+    const url = `https://${hostname.replace('sentry-ui-', 'sentry-api-')}/api`;
+    console.log('[apiUrl] Cloud Run hostname detected:', hostname, '→', url);
     return url;
   }
 
