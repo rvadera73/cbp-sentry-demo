@@ -42,31 +42,12 @@ jobs:
     name: Detect changed services
     runs-on: ubuntu-latest
     outputs:
-      api: ${{ steps.filter.outputs.api }}
-      data: ${{ steps.filter.outputs.data }}
-      cord: ${{ steps.filter.outputs.cord }}
-      ui: ${{ steps.filter.outputs.ui }}
+      api: 'true'
+      data: 'true'
+      cord: 'true'
+      ui: 'true'
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          base: HEAD~1
-          filters: |
-            api:
-              - 'services/api/**'
-              - '.github/workflows/deploy.yml'
-            data:
-              - 'services/data/**'
-              - '.github/workflows/deploy.yml'
-            cord:
-              - 'services/cord-integration/**'
-              - '.github/workflows/deploy.yml'
-            ui:
-              - 'ui/**'
-              - '.github/workflows/deploy.yml'
+      - run: echo "Building all services (simplified change detection)"
 
   test:
     runs-on: ubuntu-latest
