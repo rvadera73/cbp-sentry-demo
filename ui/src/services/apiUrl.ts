@@ -12,14 +12,17 @@ export const getAPIBaseURL = (): string => {
 
   // Priority 1: Explicit API URL from build-time env var
   if (import.meta.env.VITE_API_URL) {
+    console.log('[apiUrl] Using VITE_API_URL:', import.meta.env.VITE_API_URL);
     return import.meta.env.VITE_API_URL;
   }
 
   const hostname = window.location.hostname;
+  console.log('[apiUrl] Hostname:', hostname);
 
   // Priority 2: Local development (localhost)
   // Use nginx proxy at /api → http://sentry-api:8000
   if (hostname === 'localhost' || hostname.startsWith('localhost:')) {
+    console.log('[apiUrl] Using localhost proxy: /api');
     return '/api';
   }
 
@@ -28,10 +31,13 @@ export const getAPIBaseURL = (): string => {
   const cloudRunMatch = hostname.match(/^sentry-ui-(-?\d+)\.([\w\-]+)\.run\.app$/);
   if (cloudRunMatch) {
     const [, hash, region] = cloudRunMatch;
-    return `https://sentry-api-${hash}.${region}.run.app/api`;
+    const url = `https://sentry-api-${hash}.${region}.run.app/api`;
+    console.log('[apiUrl] Cloud Run match - hash:', hash, 'region:', region, 'url:', url);
+    return url;
   }
 
   // Fallback
+  console.log('[apiUrl] No match - falling back to /api');
   return '/api';
 };
 
