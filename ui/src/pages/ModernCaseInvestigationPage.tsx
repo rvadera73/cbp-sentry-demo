@@ -79,7 +79,7 @@ export default function ModernCaseInvestigationPage() {
           }
         }
       } else {
-        const response = await fetch(`${apiUrl}/shipments?limit=1`);
+        const response = await fetch(`${API_BASE_URL}/shipments?limit=1`);
         const data = await response.json();
         if (data.shipments && data.shipments.length > 0) {
           shipment = data.shipments[0];
