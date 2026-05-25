@@ -79,6 +79,7 @@ export function useV2Cases(): UseV2CasesReturn {
       }
 
       const data = await response.json();
+      console.log('[useV2Cases] Full response object:', JSON.stringify(data).substring(0, 500));
       console.log('[useV2Cases] Data received:', data.data?.length, 'items, count:', data.count);
       const shipmentData = data.data || [];
 

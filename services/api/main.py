@@ -221,9 +221,11 @@ app.add_middleware(
 # Include routers (refactored endpoints)
 from routers.manifest import router as manifest_router
 from referral_pdf_api import router as referral_pdf_router
+from risk_scoring.routes import router as risk_scoring_router
 
 app.include_router(manifest_router)
 app.include_router(referral_pdf_router)
+app.include_router(risk_scoring_router, prefix="/api/score", tags=["risk-scoring"])
 
 
 @app.get("/health")

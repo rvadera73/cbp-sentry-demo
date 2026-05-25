@@ -29,6 +29,10 @@ class ShipmentUpdate(BaseModel):
     last_polled_at: Optional[datetime] = None
     ofac_screened_at: Optional[datetime] = None
     ofac_match: Optional[bool] = None
+    calculated_risk_score: Optional[float] = None
+    risk_score_calculated_at: Optional[datetime] = None
+    risk_score_breakdown: Optional[Dict[str, Any]] = None
+    confidence_interval: Optional[Dict[str, Any]] = None
 
 
 class Shipment(ShipmentBase):
@@ -64,6 +68,11 @@ class Shipment(ShipmentBase):
     risk_breakdown: Optional[Dict[str, Any]] = None
     audit_trail: Optional[Dict[str, Any]] = None
     ai_synthesis: Optional[Dict[str, Any]] = None
+    # 7-Factor Risk Scoring Engine fields
+    calculated_risk_score: Optional[float] = None
+    risk_score_calculated_at: Optional[datetime] = None
+    risk_score_breakdown: Optional[Dict[str, Any]] = None
+    confidence_interval: Optional[Dict[str, Any]] = None
     # Manifest data
     manifest_source_id: Optional[str] = None
     h2_signals: Optional[str] = None

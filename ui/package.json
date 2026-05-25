@@ -23,6 +23,7 @@
     "react-dom": "^19.0.0",
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^6.28.0",
+    "reactflow": "^11.11.4",
     "recharts": "^2.15.4",
     "uswds": "^2.14.0"
   },

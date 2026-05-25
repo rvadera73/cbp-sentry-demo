@@ -63,7 +63,7 @@ export {
 
 // Types
 export type {
-  EntityNode,
+  EntityNodeData,
   EntityRelationship,
   Warning,
   EntityGraph,

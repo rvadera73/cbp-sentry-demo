@@ -76,6 +76,7 @@ from services.shipments.routes import router as shipments_router
 from services.cord_rag.routes import router as cord_router
 from services.isf.routes import router as isf_router
 from services.risk_corridors.routes import router as risk_corridors_router
+from api.services.risk_scoring.routes import router as risk_scoring_router
 
 app.include_router(ingest_router, prefix="/api/ingest", tags=["ingest"])
 app.include_router(scoring_router, prefix="/api/scoring", tags=["scoring"])
@@ -87,6 +88,7 @@ app.include_router(shipments_router, tags=["shipments"])
 app.include_router(cord_router, prefix="/api/cord", tags=["cord-rag"])
 app.include_router(isf_router)
 app.include_router(risk_corridors_router, tags=["risk-corridors"])
+app.include_router(risk_scoring_router, prefix="/api/score", tags=["risk-scoring"])
 
 
 @app.exception_handler(Exception)

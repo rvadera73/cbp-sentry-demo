@@ -5,8 +5,10 @@ import USWDSLayout from '../components/layout/USWDSLayout';
 import FeedbackInterface from '../components/scoring/FeedbackInterface';
 import AltanaVerificationPanel from '../components/scoring/AltanaVerificationPanel';
 import CollapsibleSection from '../components/common/CollapsibleSection';
+import RiskScoreBreakdown from '../components/risk-scoring/RiskScoreBreakdown';
 import { ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Users, Activity } from 'lucide-react';
 import { API_BASE_URL } from '../services/apiUrl';
+import { RiskScoreBreakdown as RiskScoreBreakdownType } from '../components/risk-scoring/types';
 import '../styles/CompactDashboard.css';
 
 interface Case {
@@ -26,27 +28,14 @@ interface Case {
   created_at?: string;
 }
 
-interface ThreeLevelScoreData {
-  corridor_score: number;
-  vessel_score: number;
-  manifest_score: number;
-  total_score: number;
-  risk_level: string;
-  requires_altana: boolean;
-  weights: {
-    w_corridor: number;
-    w_vessel: number;
-    w_manifest: number;
-  };
-  components: any;
-  xai_factors: string[];
-}
 
 export default function ModernCaseInvestigationPage() {
   const { role } = useRole();
   const { shipmentId } = useParams<{ shipmentId?: string }>();
   const [caseData, setCaseData] = useState<Case | null>(null);
-  const [threeLevelScore, setThreeLevelScore] = useState<ThreeLevelScoreData | null>(null);
+  const [riskBreakdown, setRiskBreakdown] = useState<RiskScoreBreakdownType | null>(null);
+  const [riskLoading, setRiskLoading] = useState(false);
+  const [riskError, setRiskError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showAltanaPanel, setShowAltanaPanel] = useState(false);
@@ -55,9 +44,6 @@ export default function ModernCaseInvestigationPage() {
   const [expandedSections, setExpandedSections] = useState({
     overview: true,
     scoring: true,
-    factors: false,
-    timeline: false,
-    altana: threeLevelScore?.requires_altana ? true : false,
     actions: true,
   });
 
@@ -88,32 +74,49 @@ export default function ModernCaseInvestigationPage() {
       }
 
       if (shipment) {
-        try {
-          const scoreResponse = await fetch(
-            `${API_BASE_URL}/score/three-level/${shipment.id}?` +
-            `shipper_name=${encodeURIComponent(shipment.shipper_name)}&` +
-            `shipper_country=${shipment.origin_country}&` +
-            `consignee_name=${encodeURIComponent(shipment.consignee_name)}&` +
-            `consignee_country=${shipment.destination_country}&` +
-            `hs_code=${shipment.hs_code}&` +
-            `declared_value_usd=${shipment.declared_value_usd}&` +
-            `declared_weight_kg=${shipment.declared_weight_kg || 0}&` +
-            `vessel_name=${encodeURIComponent(shipment.vessel_name || '')}`,
-            { method: 'POST' }
-          );
-
-          if (scoreResponse.ok) {
-            const scoreData = await scoreResponse.json();
-            setThreeLevelScore(scoreData);
-          }
-        } catch (error) {
-          console.error('Failed to fetch three-level score:', error);
-        }
+        await fetchRiskBreakdown(shipment.id, shipment);
       }
     } catch (error) {
       console.error('Failed to fetch case:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchRiskBreakdown = async (shipmentId: string, shipment: Case) => {
+    try {
+      setRiskLoading(true);
+      setRiskError(null);
+
+      const shipmentData = {
+        shipment_id: shipmentId,
+        shipper_name: shipment.shipper_name,
+        shipper_country: shipment.origin_country,
+        consignee_name: shipment.consignee_name,
+        consignee_country: shipment.destination_country,
+        hs_code: shipment.hs_code,
+        declared_value_usd: shipment.declared_value_usd,
+        declared_weight_kg: shipment.declared_weight_kg || 0,
+        vessel_name: shipment.vessel_name || '',
+      };
+
+      const response = await fetch(`${API_BASE_URL}/score/full-breakdown/${shipmentId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(shipmentData),
+      });
+
+      if (response.ok) {
+        const breakdown = await response.json();
+        setRiskBreakdown(breakdown);
+      } else {
+        setRiskError('Failed to calculate risk breakdown');
+      }
+    } catch (error) {
+      console.error('Failed to fetch risk breakdown:', error);
+      setRiskError('Error calculating risk score');
+    } finally {
+      setRiskLoading(false);
     }
   };
 
@@ -154,13 +157,13 @@ export default function ModernCaseInvestigationPage() {
             </p>
           </div>
           <div className="header-right">
-            <div className="score-display" style={{ borderColor: getRiskColor(threeLevelScore?.total_score || caseData.risk_score) }}>
-              <div className="score-number" style={{ color: getRiskColor(threeLevelScore?.total_score || caseData.risk_score) }}>
-                {Math.round(threeLevelScore?.total_score || caseData.risk_score)}
+            <div className="score-display" style={{ borderColor: getRiskColor(riskBreakdown?.final_score || caseData.risk_score) }}>
+              <div className="score-number" style={{ color: getRiskColor(riskBreakdown?.final_score || caseData.risk_score) }}>
+                {Math.round(riskBreakdown?.final_score || caseData.risk_score)}
               </div>
               <div className="score-label">RISK</div>
-              <div className="risk-badge" style={{ backgroundColor: getRiskColor(threeLevelScore?.total_score || caseData.risk_score) }}>
-                {getRiskLevel(threeLevelScore?.total_score || caseData.risk_score)}
+              <div className="risk-badge" style={{ backgroundColor: getRiskColor(riskBreakdown?.final_score || caseData.risk_score) }}>
+                {getRiskLevel(riskBreakdown?.final_score || caseData.risk_score)}
               </div>
             </div>
           </div>
@@ -206,128 +209,28 @@ export default function ModernCaseInvestigationPage() {
           </div>
         </CollapsibleSection>
 
-        {/* SCORING SECTION */}
-        {threeLevelScore && (
-          <CollapsibleSection
-            title="📊 Three-Level Risk Scoring"
-            expanded={expandedSections.scoring}
-            onToggle={() => toggleSection('scoring')}
-          >
-            <div className="scoring-grid">
-              {/* Corridor Score */}
-              <div className="score-card">
-                <div className="card-header">
-                  <span className="card-title">Level 1: Corridor Risk</span>
-                  <span className="card-weight">{(threeLevelScore.weights.w_corridor * 100).toFixed(0)}%</span>
-                </div>
-                <div className="score-value">{Math.round(threeLevelScore.corridor_score)}</div>
-                <table className="mini-table">
-                  <tbody>
-                    <tr>
-                      <td>Volume Spike:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.corridor?.macro_volume_spike || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td>Regulatory:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.corridor?.regulatory_delta || 0)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Vessel Score */}
-              <div className="score-card">
-                <div className="card-header">
-                  <span className="card-title">Level 2: Vessel Risk</span>
-                  <span className="card-weight">{(threeLevelScore.weights.w_vessel * 100).toFixed(0)}%</span>
-                </div>
-                <div className="score-value">{Math.round(threeLevelScore.vessel_score)}</div>
-                <table className="mini-table">
-                  <tbody>
-                    <tr>
-                      <td>FTZ Loiter:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.vessel?.ftz_loitering || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td>AIS Dark:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.vessel?.ais_dark_activity || 0)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Manifest Score */}
-              <div className="score-card">
-                <div className="card-header">
-                  <span className="card-title">Level 3: Manifest Risk</span>
-                  <span className="card-weight">{(threeLevelScore.weights.w_manifest * 100).toFixed(0)}%</span>
-                </div>
-                <div className="score-value">{Math.round(threeLevelScore.manifest_score)}</div>
-                <table className="mini-table">
-                  <tbody>
-                    <tr>
-                      <td>Entity Match:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.manifest?.entity_resolution_match || 0)}</td>
-                    </tr>
-                    <tr>
-                      <td>Network:</td>
-                      <td className="number">{Math.round(threeLevelScore.components.manifest?.network_anomaly || 0)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* XAI FACTORS SECTION */}
-        {threeLevelScore?.xai_factors && (
-          <CollapsibleSection
-            title="🎯 Risk Factors"
-            expanded={expandedSections.factors}
-            onToggle={() => toggleSection('factors')}
-          >
-            <div className="factors-table">
-              <table>
-                <tbody>
-                  {threeLevelScore.xai_factors.map((factor, idx) => (
-                    <tr key={idx}>
-                      <td className="factor-icon">•</td>
-                      <td>{factor}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CollapsibleSection>
-        )}
-
-        {/* ALTANA SECTION */}
-        {threeLevelScore?.requires_altana && (
-          <CollapsibleSection
-            title="⚡ Altana Atlas Verification (Score ≥90%)"
-            expanded={expandedSections.altana}
-            onToggle={() => toggleSection('altana')}
-          >
-            {!showAltanaPanel ? (
-              <div className="altana-prompt">
-                <p>Supply chain deep-dive verification required for this high-risk shipment.</p>
-                <button
-                  className="btn-primary"
-                  onClick={() => setShowAltanaPanel(true)}
-                >
-                  Run Verification
-                </button>
-              </div>
-            ) : (
-              <AltanaVerificationPanel
-                shipmentId={caseData.id}
-                riskScore={threeLevelScore.total_score}
-                onClose={() => setShowAltanaPanel(false)}
-              />
-            )}
-          </CollapsibleSection>
-        )}
+        {/* 7-FACTOR RISK SCORING SECTION */}
+        <CollapsibleSection
+          title="📊 7-Factor Risk Breakdown"
+          expanded={expandedSections.scoring}
+          onToggle={() => toggleSection('scoring')}
+        >
+          {riskBreakdown ? (
+            <RiskScoreBreakdown
+              data={riskBreakdown}
+              loading={riskLoading}
+              error={riskError || undefined}
+              onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
+            />
+          ) : (
+            <RiskScoreBreakdown
+              data={riskBreakdown || { shipment_id: caseData.id, components: [], subtotal: 0, final_score: 0, confidence_interval: '—' }}
+              loading={riskLoading}
+              error={riskError || undefined}
+              onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
+            />
+          )}
+        </CollapsibleSection>
 
         {/* ACTIONS SECTION */}
         <CollapsibleSection
@@ -353,7 +256,7 @@ export default function ModernCaseInvestigationPage() {
             <div className="feedback-wrapper">
               <FeedbackInterface
                 shipmentId={caseData.id}
-                originalScore={threeLevelScore?.total_score || caseData.risk_score}
+                originalScore={riskBreakdown?.final_score || caseData.risk_score}
                 onSubmit={() => {
                   setShowFeedback(false);
                   fetchCase();

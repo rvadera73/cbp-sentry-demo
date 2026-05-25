@@ -445,6 +445,139 @@ def init_db(db_path: str = "/app/data/cbp_sentry.db") -> None:
         )
     """)
 
+    # ==================== 7-FACTOR RISK SCORING SCHEMA ====================
+
+    # Table 1: risk_scores_cache (Current Snapshot - One Per Shipment)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS risk_scores_cache (
+            id TEXT PRIMARY KEY,
+            shipment_id TEXT UNIQUE NOT NULL,
+
+            -- THE CALCULATION
+            final_score REAL NOT NULL,
+            risk_level TEXT,
+            confidence_interval REAL,
+            breakdown_json TEXT NOT NULL,
+
+            -- METADATA
+            current_model_version TEXT NOT NULL,
+            calculation_timestamp TIMESTAMP NOT NULL,
+            is_stale BOOLEAN DEFAULT 0,
+
+            -- AUDIT
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP,
+
+            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
+        )
+    """)
+
+    # Table 2: risk_score_transactions (Complete Audit Trail - SEPARATE)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS risk_score_transactions (
+            id TEXT PRIMARY KEY,
+            shipment_id TEXT NOT NULL,
+
+            -- WHAT CHANGED
+            previous_final_score REAL,
+            new_final_score REAL NOT NULL,
+            score_delta REAL,
+
+            -- WHAT HAPPENED
+            transaction_type TEXT NOT NULL,
+            transaction_reason TEXT,
+
+            -- DETAILS
+            previous_breakdown_json TEXT,
+            new_breakdown_json TEXT NOT NULL,
+
+            -- WHO DID IT
+            triggered_by TEXT,
+            triggered_by_model_version TEXT,
+
+            -- TIMESTAMP
+            transaction_timestamp TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
+        )
+    """)
+
+    # Table 3: model_versions (ML Model Registry)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS model_versions (
+            id TEXT PRIMARY KEY,
+
+            -- METADATA
+            model_name TEXT NOT NULL,
+            version_number TEXT NOT NULL,
+            training_date TIMESTAMP,
+            released_at TIMESTAMP,
+
+            -- ML PARAMETERS
+            isolation_forest_n_estimators INT,
+            isolation_forest_contamination REAL,
+            isolation_forest_random_state INT,
+
+            lightgbm_num_leaves INT,
+            lightgbm_learning_rate REAL,
+            lightgbm_max_depth INT,
+
+            -- STATUS
+            is_active BOOLEAN DEFAULT 0,
+            deprecated_at TIMESTAMP,
+
+            -- USAGE
+            total_calculations INT DEFAULT 0,
+
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            notes TEXT
+        )
+    """)
+
+    # Table 4: altana_scenarios (External API - Conditional Only)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS altana_scenarios (
+            id TEXT PRIMARY KEY,
+            shipment_id TEXT UNIQUE NOT NULL,
+            risk_score_id TEXT NOT NULL,
+
+            -- INVOCATION CONDITION
+            initial_score_before_altana REAL NOT NULL,
+            threshold_met BOOLEAN,
+
+            -- REQUEST
+            query_timestamp TIMESTAMP,
+
+            -- RESPONSE
+            altana_confidence REAL,
+            altana_recommendation TEXT,
+            altana_risk_factors TEXT,
+            supply_chain_opacity REAL,
+            sanctions_exposure BOOLEAN,
+
+            -- ADJUSTMENT
+            confidence_bracket TEXT,
+            adjustment_points REAL,
+            final_score_after_altana REAL,
+
+            -- AUDIT
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP,
+
+            FOREIGN KEY (shipment_id) REFERENCES shipments(id),
+            FOREIGN KEY (risk_score_id) REFERENCES risk_scores_cache(id)
+        )
+    """)
+
+    # CREATE INDEXES for performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_cache_shipment ON risk_scores_cache(shipment_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_shipment ON risk_score_transactions(shipment_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_type ON risk_score_transactions(transaction_type)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_timestamp ON risk_score_transactions(transaction_timestamp)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_model_active ON model_versions(is_active)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_altana_shipment ON altana_scenarios(shipment_id)")
+
     # Idempotent migrations: add new columns if they don't exist
     # This allows running init_db on an existing database without errors
     migrations = [
@@ -562,7 +695,8 @@ def get_all_shipments(
     cursor = conn.cursor()
 
     # Build WHERE clause dynamically
-    where_conditions = ["id LIKE 'SHP-%'"]
+    # No ID filter - return all shipments (manifest data uses numeric IDs)
+    where_conditions = []
     params = []
 
     if status:
@@ -590,7 +724,7 @@ def get_all_shipments(
         where_conditions.append("COALESCE(risk_score, 0) <= ?")
         params.append(risk_max)
 
-    where_clause = " AND ".join(where_conditions)
+    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
     query = f"SELECT * FROM shipments WHERE {where_clause} ORDER BY COALESCE(risk_score, 0) DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
@@ -612,7 +746,8 @@ def get_shipments_count(
     cursor = conn.cursor()
 
     # Build WHERE clause dynamically (same as get_all_shipments)
-    where_conditions = ["id LIKE 'SHP-%'"]
+    # No ID filter - count all shipments (manifest data uses numeric IDs)
+    where_conditions = []
     params = []
 
     if status:
@@ -636,7 +771,7 @@ def get_shipments_count(
         where_conditions.append("COALESCE(risk_score, 0) <= ?")
         params.append(risk_max)
 
-    where_clause = " AND ".join(where_conditions)
+    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
     query = f"SELECT COUNT(*) FROM shipments WHERE {where_clause}"
 
     cursor.execute(query, params)
@@ -1451,3 +1586,376 @@ def find_existing_source_ids(
     existing = {row[0] for row in cursor.fetchall()}
     conn.close()
     return existing
+
+
+# ==================== 7-FACTOR RISK SCORING (CLEAN SCHEMA) ====================
+
+def create_or_update_risk_score_cache(
+    shipment_id: str,
+    final_score: float,
+    breakdown_json: str,
+    current_model_version: str = "7factor-v1.0",
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> str:
+    """Create or update risk score in cache (current snapshot)"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cache_id = str(uuid.uuid4())
+        cursor.execute("""
+            INSERT OR REPLACE INTO risk_scores_cache
+            (id, shipment_id, final_score, breakdown_json, current_model_version, calculation_timestamp, is_stale)
+            VALUES (?, ?, ?, ?, ?, ?, 0)
+        """, (
+            cache_id,
+            shipment_id,
+            final_score,
+            breakdown_json,
+            current_model_version,
+            datetime.utcnow().isoformat()
+        ))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Cached risk score for {shipment_id}: {final_score}/100 (model: {current_model_version})")
+        return cache_id
+    except Exception as e:
+        logger.error(f"Failed to cache risk score for {shipment_id}: {e}")
+        raise
+
+
+def get_risk_score_cache(
+    shipment_id: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> Optional[Dict[str, Any]]:
+    """Retrieve current cached risk score"""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM risk_scores_cache WHERE shipment_id = ?", (shipment_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Failed to retrieve cached score for {shipment_id}: {e}")
+        return None
+
+
+def record_risk_score_transaction(
+    shipment_id: str,
+    new_final_score: float,
+    new_breakdown_json: str,
+    transaction_type: str,
+    transaction_reason: str = None,
+    previous_final_score: float = None,
+    previous_breakdown_json: str = None,
+    triggered_by: str = "system",
+    triggered_by_model_version: str = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> str:
+    """Record score change as immutable transaction"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        txn_id = str(uuid.uuid4())
+        score_delta = new_final_score - previous_final_score if previous_final_score is not None else None
+
+        cursor.execute("""
+            INSERT INTO risk_score_transactions
+            (id, shipment_id, previous_final_score, new_final_score, score_delta,
+             transaction_type, transaction_reason, previous_breakdown_json, new_breakdown_json,
+             triggered_by, triggered_by_model_version, transaction_timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            txn_id,
+            shipment_id,
+            previous_final_score,
+            new_final_score,
+            score_delta,
+            transaction_type,
+            transaction_reason,
+            previous_breakdown_json,
+            new_breakdown_json,
+            triggered_by,
+            triggered_by_model_version,
+            datetime.utcnow().isoformat()
+        ))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Recorded transaction for {shipment_id}: {transaction_type} ({transaction_reason})")
+        return txn_id
+    except Exception as e:
+        logger.error(f"Failed to record transaction for {shipment_id}: {e}")
+        raise
+
+
+def get_risk_score_history(
+    shipment_id: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> List[Dict[str, Any]]:
+    """Retrieve all score transactions for a shipment"""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM risk_score_transactions
+            WHERE shipment_id = ?
+            ORDER BY transaction_timestamp DESC
+        """, (shipment_id,))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+    except Exception as e:
+        logger.error(f"Failed to retrieve history for {shipment_id}: {e}")
+        return []
+
+
+def mark_scores_stale(
+    model_version: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> int:
+    """Mark all scores from old model as stale"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE risk_scores_cache
+            SET is_stale = 1
+            WHERE current_model_version != ? AND is_stale = 0
+        """, (model_version,))
+
+        count = cursor.rowcount
+        conn.commit()
+        conn.close()
+
+        logger.info(f"Marked {count} scores as stale (new model: {model_version})")
+        return count
+    except Exception as e:
+        logger.error(f"Failed to mark scores stale: {e}")
+        return 0
+
+
+def record_altana_scenario(
+    shipment_id: str,
+    risk_score_id: str,
+    initial_score: float,
+    altana_response: Dict[str, Any] = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> Optional[str]:
+    """Record Altana API call (only if score >= 70)"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        scenario_id = str(uuid.uuid4())
+        threshold_met = initial_score >= 70
+
+        if threshold_met and altana_response:
+            # Calculate adjustment based on confidence
+            confidence = altana_response.get('confidence', 0)
+            if confidence > 0.85:
+                adjustment = 5.0
+                bracket = ">85%"
+            elif confidence >= 0.60:
+                adjustment = 2.0
+                bracket = "60-85%"
+            else:
+                adjustment = -8.0
+                bracket = "<60%"
+
+            final_score = initial_score + adjustment
+        else:
+            adjustment = 0
+            bracket = "NOT_CALLED"
+            final_score = initial_score
+            altana_response = {}
+
+        cursor.execute("""
+            INSERT INTO altana_scenarios
+            (id, shipment_id, risk_score_id, initial_score_before_altana, threshold_met,
+             query_timestamp, altana_confidence, altana_recommendation, altana_risk_factors,
+             supply_chain_opacity, sanctions_exposure, confidence_bracket, adjustment_points,
+             final_score_after_altana)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            scenario_id,
+            shipment_id,
+            risk_score_id,
+            initial_score,
+            threshold_met,
+            datetime.utcnow().isoformat() if threshold_met else None,
+            altana_response.get('confidence'),
+            altana_response.get('recommendation'),
+            json.dumps(altana_response.get('risk_factors', [])),
+            altana_response.get('supply_chain_opacity'),
+            altana_response.get('sanctions_exposure'),
+            bracket,
+            adjustment,
+            final_score
+        ))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Recorded Altana scenario for {shipment_id} (threshold_met={threshold_met})")
+        return scenario_id
+    except Exception as e:
+        logger.error(f"Failed to record Altana scenario for {shipment_id}: {e}")
+        return None
+
+
+def register_model_version(
+    model_name: str,
+    version_number: str,
+    model_params: Dict[str, Any] = None,
+    notes: str = None,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> str:
+    """Register a new ML model version"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        model_id = f"{model_name}-{version_number}"
+        model_params = model_params or {}
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO model_versions
+            (id, model_name, version_number, training_date, released_at,
+             isolation_forest_n_estimators, isolation_forest_contamination, isolation_forest_random_state,
+             lightgbm_num_leaves, lightgbm_learning_rate, lightgbm_max_depth,
+             is_active, total_calculations, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
+        """, (
+            model_id,
+            model_name,
+            version_number,
+            model_params.get('training_date'),
+            datetime.utcnow().isoformat(),
+            model_params.get('isolation_forest_n_estimators'),
+            model_params.get('isolation_forest_contamination'),
+            model_params.get('isolation_forest_random_state'),
+            model_params.get('lightgbm_num_leaves'),
+            model_params.get('lightgbm_learning_rate'),
+            model_params.get('lightgbm_max_depth'),
+            notes
+        ))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Registered model version: {model_id}")
+        return model_id
+    except Exception as e:
+        logger.error(f"Failed to register model version: {e}")
+        raise
+
+
+def get_active_model_version(
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> Optional[Dict[str, Any]]:
+    """Get the currently active model version"""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT * FROM model_versions
+            WHERE is_active = 1
+            ORDER BY released_at DESC
+            LIMIT 1
+        """)
+
+        row = cursor.fetchone()
+        conn.close()
+
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Failed to get active model version: {e}")
+        return None
+
+
+def get_model_version_by_id(
+    model_id: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> Optional[Dict[str, Any]]:
+    """Get a specific model version by ID"""
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM model_versions WHERE id = ?", (model_id,))
+        row = cursor.fetchone()
+        conn.close()
+
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"Failed to get model version {model_id}: {e}")
+        return None
+
+
+def deactivate_model_version(
+    model_id: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> bool:
+    """Deactivate a model version"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE model_versions
+            SET is_active = 0, deprecated_at = ?
+            WHERE id = ?
+        """, (datetime.utcnow().isoformat(), model_id))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Deactivated model version: {model_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to deactivate model version: {e}")
+        return False
+
+
+def activate_model_version(
+    model_id: str,
+    db_path: str = "/app/data/cbp_sentry.db"
+) -> bool:
+    """Activate a model version (deactivates all others)"""
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Deactivate all other models
+        cursor.execute("""
+            UPDATE model_versions
+            SET is_active = 0
+            WHERE id != ?
+        """, (model_id,))
+
+        # Activate the specified model
+        cursor.execute("""
+            UPDATE model_versions
+            SET is_active = 1
+            WHERE id = ?
+        """, (model_id,))
+
+        conn.commit()
+        conn.close()
+        logger.info(f"Activated model version: {model_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to activate model version: {e}")
+        return False

@@ -46,8 +46,8 @@ export default function CommodityLens({ corridors = [] }: CommodityLensProps) {
   const summaryStats = useMemo(() => {
     return {
       total_active_corridors: corridors.length,
-      high_risk_count: corridors.filter(c => getRiskLevel(70) === 'HIGH').length,
-      medium_risk_count: corridors.filter(c => getRiskLevel(50) === 'MEDIUM').length,
+      high_risk_count: corridors.filter(c => getRiskLevel(70) === 'High').length,
+      medium_risk_count: corridors.filter(c => getRiskLevel(50) === 'Medium').length,
       aggregate_manifest_value: corridors.reduce((sum, c) => sum + (c.aggregate_value || 0), 0),
     };
   }, [corridors]);

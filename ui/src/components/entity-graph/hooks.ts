@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { EntityGraph, EntityNode, Warning } from './types';
+import { EntityGraph, EntityNodeData, Warning } from './types';
 import { cordApi } from '../../services/cordApi';
 
 /**
@@ -83,7 +83,7 @@ export function useEntityHighlight() {
  */
 export function useEntitySearch(graph: EntityGraph | null) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredChain, setFilteredChain] = useState<EntityNode[]>([]);
+  const [filteredChain, setFilteredChain] = useState<EntityNodeData[]>([]);
 
   useEffect(() => {
     if (!graph) {
@@ -113,7 +113,7 @@ export function useEntitySearch(graph: EntityGraph | null) {
 /**
  * Hook to calculate entity risk styling based on confidence and risk_score.
  */
-export function useEntityRiskStyling(entity: EntityNode) {
+export function useEntityRiskStyling(entity: EntityNodeData) {
   const getRiskColor = useCallback(() => {
     const riskScore = entity.risk_score ?? 0;
 

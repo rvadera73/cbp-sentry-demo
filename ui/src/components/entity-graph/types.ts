@@ -4,7 +4,7 @@
  * Aligned with backend Entity interface and React Flow graph structure.
  */
 
-export interface EntityNode {
+export interface EntityNodeData {
   entity_id: string;
   name: string;
   country: string;
@@ -32,7 +32,7 @@ export interface Warning {
 }
 
 export interface EntityGraph {
-  chain: EntityNode[];
+  chain: EntityNodeData[];
   data_sources: string[];
   ofac_detected: boolean;
   risk_score: number;
@@ -43,7 +43,7 @@ export interface EntityGraph {
 
 // React Flow node and edge types
 export interface FlowNodeData {
-  entity: EntityNode;
+  entity: EntityNodeData;
   level: number;
   isHighlighted?: boolean;
   hasWarnings?: boolean;

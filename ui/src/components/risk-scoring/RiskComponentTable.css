@@ -1,0 +1,298 @@
+.risk-component-table {
+  width: 100%;
+}
+
+.table-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.no-data {
+  padding: 40px 24px;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 15px;
+  margin: 0;
+}
+
+/* Factor Section */
+.factor-section {
+  margin-bottom: 28px;
+}
+
+.factor-section:last-child {
+  margin-bottom: 0;
+}
+
+.factor-name {
+  margin: 0 0 16px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.factor-icon {
+  font-size: 18px;
+}
+
+/* Component Details Table */
+.component-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.component-details-table thead {
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.component-details-table th {
+  padding: 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #374151;
+  background: #f9fafb;
+}
+
+.component-details-table th[align="right"] {
+  text-align: right;
+}
+
+.component-details-table tbody tr {
+  border-bottom: 1px solid #e5e7eb;
+  transition: background 0.15s;
+}
+
+.component-details-table tbody tr:hover {
+  background: #f9fafb;
+}
+
+.component-details-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.component-details-table td {
+  padding: 12px;
+  vertical-align: top;
+}
+
+.component-details-table td[align="right"] {
+  text-align: right;
+}
+
+/* Column Widths */
+.col-component {
+  width: 40%;
+}
+
+.col-score {
+  width: 12%;
+  min-width: 80px;
+}
+
+.col-weight {
+  width: 12%;
+  min-width: 80px;
+}
+
+.col-calculation {
+  width: 18%;
+  min-width: 100px;
+}
+
+.col-result {
+  width: 18%;
+  min-width: 100px;
+}
+
+/* Component Info */
+.component-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.component-name {
+  font-weight: 600;
+  color: #111827;
+  font-size: 14px;
+}
+
+.component-rationale {
+  font-size: 13px;
+  color: #6b7280;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.component-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.evidence-item {
+  display: inline-block;
+  padding: 4px 8px;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+/* Score Values */
+.score-value {
+  font-weight: 600;
+  color: #3b82f6;
+  font-family: 'Courier New', monospace;
+}
+
+.weight-value {
+  font-weight: 500;
+  color: #6b7280;
+  font-family: 'Courier New', monospace;
+}
+
+.calculation-value {
+  color: #059669;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.result-value {
+  font-weight: 600;
+  color: #059669;
+  font-family: 'Courier New', monospace;
+}
+
+/* Responsive - Tablet */
+@media (max-width: 1024px) {
+  .component-details-table {
+    font-size: 12px;
+  }
+
+  .component-details-table th,
+  .component-details-table td {
+    padding: 10px;
+  }
+
+  .col-component {
+    width: 35%;
+  }
+
+  .col-score {
+    width: 13%;
+    min-width: 70px;
+  }
+
+  .col-weight {
+    width: 13%;
+    min-width: 70px;
+  }
+
+  .col-calculation {
+    width: 17%;
+    min-width: 90px;
+  }
+
+  .col-result {
+    width: 17%;
+    min-width: 90px;
+  }
+}
+
+/* Responsive - Mobile */
+@media (max-width: 768px) {
+  .risk-component-table {
+    overflow-x: auto;
+  }
+
+  .component-details-table {
+    font-size: 11px;
+    min-width: 600px;
+  }
+
+  .component-details-table th,
+  .component-details-table td {
+    padding: 8px;
+  }
+
+  .col-component {
+    width: 35%;
+    min-width: 150px;
+  }
+
+  .col-score {
+    width: 13%;
+    min-width: 60px;
+  }
+
+  .col-weight {
+    width: 13%;
+    min-width: 60px;
+  }
+
+  .col-calculation {
+    width: 18%;
+    min-width: 80px;
+  }
+
+  .col-result {
+    width: 18%;
+    min-width: 80px;
+  }
+
+  .component-name {
+    font-size: 13px;
+  }
+
+  .component-rationale {
+    font-size: 12px;
+  }
+
+  .evidence-item {
+    font-size: 11px;
+    padding: 3px 6px;
+  }
+
+  .score-value,
+  .weight-value,
+  .calculation-value,
+  .result-value {
+    font-size: 11px;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .component-details-table {
+    border: 1px solid #000;
+  }
+
+  .component-details-table thead {
+    background: #f0f0f0;
+  }
+
+  .component-details-table tbody tr:hover {
+    background: #ffffff;
+  }
+
+  .evidence-item {
+    background: #f0f0f0;
+    border-color: #999;
+  }
+}

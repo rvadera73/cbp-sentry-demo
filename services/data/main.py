@@ -12,7 +12,10 @@ from db import (
     init_db, create_shipment, get_shipment, get_all_shipments, get_shipments_count, update_shipment,
     get_shipments_stats, search_shipments, get_corridors, get_corridor_detail, create_or_update_corridor,
     create_corridor_duty, create_enforcement_action, get_pre_manifest_vessels, create_or_update_pre_manifest_vessel,
-    create_upload_job, get_upload_job, update_upload_job, batch_create_shipments, batch_update_risk_scores, find_existing_source_ids
+    create_upload_job, get_upload_job, update_upload_job, batch_create_shipments, batch_update_risk_scores, find_existing_source_ids,
+    create_or_update_risk_score_cache, get_risk_score_cache, record_risk_score_transaction, get_risk_score_history,
+    mark_scores_stale, record_altana_scenario, register_model_version, get_active_model_version, get_model_version_by_id,
+    deactivate_model_version, activate_model_version
 )
 from models import Shipment, ShipmentCreate, ShipmentUpdate, UploadJobCreate, UploadJobUpdate, UploadJobStatus
 import sqlite3
@@ -767,6 +770,218 @@ async def check_duplicate_source_ids_endpoint(source_ids: List[str] = Body(...))
         }
     except Exception as e:
         logger.error(f"Check duplicates failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== RISK SCORING (CLEAN SCHEMA) ====================
+
+@app.post("/risk-scores/cache/{shipment_id}", response_model=dict)
+async def create_risk_score_cache_endpoint(
+    shipment_id: str,
+    score_data: dict = Body(...)
+) -> dict:
+    """Create or update risk score cache (current snapshot)"""
+    try:
+        cache_id = create_or_update_risk_score_cache(
+            shipment_id=shipment_id,
+            final_score=score_data.get("final_score"),
+            breakdown_json=score_data.get("breakdown_json"),
+            current_model_version=score_data.get("current_model_version", "7factor-v1.0")
+        )
+        return {
+            "success": True,
+            "cache_id": cache_id,
+            "shipment_id": shipment_id,
+            "final_score": score_data.get("final_score")
+        }
+    except Exception as e:
+        logger.error(f"Create risk score cache failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/risk-scores/cache/{shipment_id}", response_model=dict)
+async def get_risk_score_cache_endpoint(shipment_id: str) -> dict:
+    """Retrieve current risk score cache"""
+    try:
+        cache = get_risk_score_cache(shipment_id)
+        if not cache:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No cached risk score found for shipment {shipment_id}"
+            )
+        return cache
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get risk score cache failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/risk-scores/transactions/{shipment_id}", response_model=dict)
+async def get_risk_score_transactions_endpoint(shipment_id: str) -> dict:
+    """Retrieve complete transaction history for a shipment"""
+    try:
+        transactions = get_risk_score_history(shipment_id)
+        return {
+            "shipment_id": shipment_id,
+            "transaction_count": len(transactions),
+            "transactions": transactions
+        }
+    except Exception as e:
+        logger.error(f"Get risk score transactions failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/risk-scores/transactions", response_model=dict)
+async def record_transaction_endpoint(txn_data: dict = Body(...)) -> dict:
+    """Record a risk score transaction (immutable audit trail)"""
+    try:
+        txn_id = record_risk_score_transaction(
+            shipment_id=txn_data.get("shipment_id"),
+            new_final_score=txn_data.get("new_final_score"),
+            new_breakdown_json=txn_data.get("new_breakdown_json"),
+            transaction_type=txn_data.get("transaction_type"),
+            transaction_reason=txn_data.get("transaction_reason"),
+            previous_final_score=txn_data.get("previous_final_score"),
+            previous_breakdown_json=txn_data.get("previous_breakdown_json"),
+            triggered_by=txn_data.get("triggered_by", "system"),
+            triggered_by_model_version=txn_data.get("triggered_by_model_version")
+        )
+        return {
+            "success": True,
+            "transaction_id": txn_id,
+            "shipment_id": txn_data.get("shipment_id"),
+            "transaction_type": txn_data.get("transaction_type")
+        }
+    except Exception as e:
+        logger.error(f"Record transaction failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/risk-scores/altana-scenario", response_model=dict)
+async def record_altana_scenario_endpoint(altana_data: dict = Body(...)) -> dict:
+    """Record Altana API scenario (conditional on score >= 70)"""
+    try:
+        scenario_id = record_altana_scenario(
+            shipment_id=altana_data.get("shipment_id"),
+            risk_score_id=altana_data.get("risk_score_id"),
+            initial_score=altana_data.get("initial_score"),
+            altana_response=altana_data.get("altana_response")
+        )
+        return {
+            "success": True,
+            "scenario_id": scenario_id,
+            "shipment_id": altana_data.get("shipment_id"),
+            "initial_score": altana_data.get("initial_score")
+        }
+    except Exception as e:
+        logger.error(f"Record Altana scenario failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model-versions/mark-stale", response_model=dict)
+async def mark_scores_stale_endpoint(data: dict = Body(...)) -> dict:
+    """Mark all scores from old model as stale"""
+    try:
+        count = mark_scores_stale(model_version=data.get("current_model_version"))
+        return {
+            "success": True,
+            "marked_stale_count": count,
+            "new_model_version": data.get("current_model_version")
+        }
+    except Exception as e:
+        logger.error(f"Mark scores stale failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model-versions/register", response_model=dict)
+async def register_model_version_endpoint(data: dict = Body(...)) -> dict:
+    """Register a new model version"""
+    try:
+        model_id = register_model_version(
+            model_name=data.get("model_name"),
+            version_number=data.get("version_number"),
+            model_params=data.get("model_params"),
+            notes=data.get("notes")
+        )
+        return {
+            "success": True,
+            "model_id": model_id,
+            "model_name": data.get("model_name"),
+            "version_number": data.get("version_number")
+        }
+    except Exception as e:
+        logger.error(f"Register model version failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/model-versions/active", response_model=dict)
+async def get_active_model_endpoint() -> dict:
+    """Get currently active model version"""
+    try:
+        model = get_active_model_version()
+        if not model:
+            raise HTTPException(
+                status_code=404,
+                detail="No active model version found"
+            )
+        return model
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get active model failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/model-versions/{model_id}", response_model=dict)
+async def get_model_version_endpoint(model_id: str) -> dict:
+    """Get a specific model version"""
+    try:
+        model = get_model_version_by_id(model_id)
+        if not model:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model version {model_id} not found"
+            )
+        return model
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Get model version failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/model-versions/{model_id}/release", response_model=dict)
+async def release_model_version_endpoint(model_id: str) -> dict:
+    """
+    Release a new model version as active.
+    This marks all previous scores as stale.
+    """
+    try:
+        # Get the model to verify it exists
+        model = get_model_version_by_id(model_id)
+        if not model:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Model version {model_id} not found"
+            )
+
+        # Activate the new model (deactivates all others)
+        activate_model_version(model_id)
+
+        # Mark all scores from other models as stale
+        stale_count = mark_scores_stale(model_id)
+
+        return {
+            "success": True,
+            "released_model_id": model_id,
+            "marked_stale_count": stale_count,
+            "message": f"Model {model_id} is now active. Marked {stale_count} previous scores as stale."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Release model version failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

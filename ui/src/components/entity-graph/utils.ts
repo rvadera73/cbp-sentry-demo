@@ -5,7 +5,7 @@
  */
 
 import { Node, Edge } from 'reactflow';
-import { EntityGraph, EntityNode, EntityRelationship, FlowNodeData, FlowEdgeData } from './types';
+import { EntityGraph, EntityNodeData, EntityRelationship, FlowNodeData, FlowEdgeData } from './types';
 
 /**
  * Convert entity graph to React Flow nodes.
@@ -88,7 +88,7 @@ export function entityGraphToFlowEdges(graph: EntityGraph): Edge<FlowEdgeData>[]
           strokeWidth: 2,
           stroke: getEdgeColor(relationship.confidence),
         },
-        markerEnd: { type: 'arrowclosed', color: getEdgeColor(relationship.confidence) },
+        markerEnd: { type: 'arrow' as any, color: getEdgeColor(relationship.confidence) },
       };
 
       edges.push(edge);
@@ -101,7 +101,7 @@ export function entityGraphToFlowEdges(graph: EntityGraph): Edge<FlowEdgeData>[]
 /**
  * Get border color for entity node based on risk level.
  */
-export function getEntityBorderColor(entity: EntityNode): string {
+export function getEntityBorderColor(entity: EntityNodeData): string {
   const riskScore = entity.risk_score ?? 0;
 
   if (riskScore >= 80) return '#d32f2f'; // RED
@@ -113,7 +113,7 @@ export function getEntityBorderColor(entity: EntityNode): string {
 /**
  * Get background color for entity node.
  */
-export function getEntityBackgroundColor(entity: EntityNode): string {
+export function getEntityBackgroundColor(entity: EntityNodeData): string {
   // Light red for high risk
   if ((entity.risk_score ?? 0) >= 80) return '#ffebee';
   // Light orange for medium risk
@@ -137,7 +137,7 @@ export function getEdgeColor(confidence: number): string {
 /**
  * Format entity display label.
  */
-export function formatEntityLabel(entity: EntityNode): string {
+export function formatEntityLabel(entity: EntityNodeData): string {
   return `${entity.name}\n${entity.country} • ${entity.role}\n${(entity.confidence * 100).toFixed(0)}% confidence`;
 }
 

@@ -146,27 +146,27 @@ function EntityDetails({ entity }: { entity: any }) {
       <div className="details-grid">
         <div className="detail-item">
           <label>Entity ID</label>
-          <value>{entity.entity_id}</value>
+          <span>{entity.entity_id}</span>
         </div>
         <div className="detail-item">
           <label>Country</label>
-          <value>{entity.country}</value>
+          <span>{entity.country}</span>
         </div>
         <div className="detail-item">
           <label>Role</label>
-          <value>{entity.role}</value>
+          <span>{entity.role}</span>
         </div>
         <div className="detail-item">
           <label>Confidence</label>
-          <value>{(entity.confidence * 100).toFixed(0)}%</value>
+          <span>{(entity.confidence * 100).toFixed(0)}%</span>
         </div>
         <div className="detail-item">
           <label>Risk Score</label>
-          <value>{entity.risk_score ?? 'N/A'}</value>
+          <span>{entity.risk_score ?? 'N/A'}</span>
         </div>
         <div className="detail-item">
           <label>Data Source</label>
-          <value>{entity.data_source}</value>
+          <span>{entity.data_source}</span>
         </div>
       </div>
 
