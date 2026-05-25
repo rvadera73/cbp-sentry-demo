@@ -47,6 +47,7 @@ class SearchFirstSenzingClient:
         """Initialize CORD engine for FTS search (lazy import)."""
         try:
             from cord_engine import get_cord_engine
+
             self.cord_engine = get_cord_engine()
             logger.info("Search-First Senzing initialized with CORD engine")
         except Exception as e:
@@ -61,7 +62,7 @@ class SearchFirstSenzingClient:
         consignee_name: Optional[str] = None,
         consignee_country: Optional[str] = None,
         directors: Optional[List[str]] = None,
-        freight_forwarder: Optional[str] = None
+        freight_forwarder: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Resolve shipper/consignee ownership chain using Search-First pattern.
@@ -104,13 +105,13 @@ class SearchFirstSenzingClient:
                 ]
             }
         """
-        logger.info(f"[{shipment_id}] Search-First entity resolution: shipper={shipper_name}, consignee={consignee_name}")
+        logger.info(
+            f"[{shipment_id}] Search-First entity resolution: shipper={shipper_name}, consignee={consignee_name}"
+        )
 
         # Step 1: Search CORD FTS index for high-signal entities
         cord_candidates = self._search_cord_for_candidates(
-            shipper_name, shipper_country,
-            consignee_name, consignee_country,
-            directors, freight_forwarder
+            shipper_name, shipper_country, consignee_name, consignee_country, directors, freight_forwarder
         )
 
         if not cord_candidates:
@@ -121,7 +122,7 @@ class SearchFirstSenzingClient:
                 "senzing_available": False,
                 "failure_reason": "no_cord_candidates",
                 "entity_chain": [],
-                "relationship_edges": []
+                "relationship_edges": [],
             }
 
         logger.info(f"[{shipment_id}] Found {len(cord_candidates)} CORD candidates")
@@ -129,7 +130,9 @@ class SearchFirstSenzingClient:
         # Step 2: Try to load candidates into Senzing and resolve
         try:
             result = await self._load_and_resolve_senzing(shipment_id, cord_candidates)
-            logger.info(f"[{shipment_id}] Senzing resolution successful: {len(result.get('entity_chain', []))} entities")
+            logger.info(
+                f"[{shipment_id}] Senzing resolution successful: {len(result.get('entity_chain', []))} entities"
+            )
             return result
         except Exception as e:
             logger.error(f"[{shipment_id}] Senzing resolution failed: {e}")
@@ -143,7 +146,7 @@ class SearchFirstSenzingClient:
         consignee_name: Optional[str],
         consignee_country: Optional[str],
         directors: Optional[List[str]],
-        freight_forwarder: Optional[str]
+        freight_forwarder: Optional[str],
     ) -> List[Dict[str, Any]]:
         """
         Query CORD FTS index for ~20 high-signal entity candidates.
@@ -159,9 +162,7 @@ class SearchFirstSenzingClient:
 
         # Search for shipper and related entities
         if shipper_name:
-            shipper_results = self.cord_engine.search(
-                shipper_name, country=shipper_country, limit=8
-            )
+            shipper_results = self.cord_engine.search(shipper_name, country=shipper_country, limit=8)
             for record in shipper_results:
                 record_id = record.get("RECORD_ID")
                 if record_id and record_id not in seen_ids:
@@ -170,9 +171,7 @@ class SearchFirstSenzingClient:
 
         # Search for consignee and related entities
         if consignee_name:
-            consignee_results = self.cord_engine.search(
-                consignee_name, country=consignee_country, limit=6
-            )
+            consignee_results = self.cord_engine.search(consignee_name, country=consignee_country, limit=6)
             for record in consignee_results:
                 record_id = record.get("RECORD_ID")
                 if record_id and record_id not in seen_ids:
@@ -201,9 +200,7 @@ class SearchFirstSenzingClient:
         return candidates[:25]  # Cap at 25 records per shipment investigation
 
     async def _load_and_resolve_senzing(
-        self,
-        shipment_id: str,
-        cord_candidates: List[Dict[str, Any]]
+        self, shipment_id: str, cord_candidates: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
         Load CORD candidates into Senzing and resolve entity chain.
@@ -229,11 +226,7 @@ class SearchFirstSenzingClient:
 
                     resp = await client.post(
                         "/addRecord",
-                        json={
-                            "dataSource": data_source,
-                            "recordId": record_id,
-                            "jsonData": json.dumps(record)
-                        }
+                        json={"dataSource": data_source, "recordId": record_id, "jsonData": json.dumps(record)},
                     )
 
                     if resp.status_code == 200:
@@ -246,9 +239,7 @@ class SearchFirstSenzingClient:
             logger.info(f"[{shipment_id}] Loaded {loaded_count}/{len(cord_candidates)} records into Senzing")
 
             # Resolve entity chain
-            entity_chain = await self._resolve_chain(
-                client, shipment_id, cord_candidates
-            )
+            entity_chain = await self._resolve_chain(client, shipment_id, cord_candidates)
 
             # Clean up: remove loaded records from Senzing
             # (not strictly necessary in eval mode, but good practice)
@@ -263,14 +254,11 @@ class SearchFirstSenzingClient:
                 "entities_loaded": loaded_count,
                 "senzing_available": True,
                 "entity_chain": entity_chain,
-                "relationship_edges": self._extract_edges(entity_chain)
+                "relationship_edges": self._extract_edges(entity_chain),
             }
 
     async def _resolve_chain(
-        self,
-        client: httpx.AsyncClient,
-        shipment_id: str,
-        cord_candidates: List[Dict[str, Any]]
+        self, client: httpx.AsyncClient, shipment_id: str, cord_candidates: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Query Senzing to resolve entity ownership chain.
@@ -291,10 +279,7 @@ class SearchFirstSenzingClient:
         # Search Senzing for each primary name
         for name in list(primary_names)[:5]:  # Max 5 name searches
             try:
-                resp = await client.post(
-                    "/searchByAttributes",
-                    json={"NAME_FULL": name}
-                )
+                resp = await client.post("/searchByAttributes", json={"NAME_FULL": name})
 
                 if resp.status_code == 200:
                     data = resp.json()
@@ -306,16 +291,18 @@ class SearchFirstSenzingClient:
                         detail_resp = await client.get(f"/entity/{entity_id}")
                         if detail_resp.status_code == 200:
                             details = detail_resp.json().get("ENTITY", {})
-                            entity_chain.append({
-                                "entity_id": str(entity_id),
-                                "name": details.get("RESOLVED_ENTITY", {}).get("ENTITY_NAME", name),
-                                "country": details.get("RESOLVED_ENTITY", {}).get("COUNTRY_CODE", ""),
-                                "entity_type": self._infer_entity_type(details),
-                                "role": "unknown",
-                                "confidence": 0.85,
-                                "data_source": "Senzing Entity Resolution",
-                                "relationships": []
-                            })
+                            entity_chain.append(
+                                {
+                                    "entity_id": str(entity_id),
+                                    "name": details.get("RESOLVED_ENTITY", {}).get("ENTITY_NAME", name),
+                                    "country": details.get("RESOLVED_ENTITY", {}).get("COUNTRY_CODE", ""),
+                                    "entity_type": self._infer_entity_type(details),
+                                    "role": "unknown",
+                                    "confidence": 0.85,
+                                    "data_source": "Senzing Entity Resolution",
+                                    "relationships": [],
+                                }
+                            )
             except Exception as e:
                 logger.debug(f"[{shipment_id}] Senzing search error for '{name}': {e}")
 
@@ -340,20 +327,19 @@ class SearchFirstSenzingClient:
         edges = []
         for entity in entity_chain:
             for rel in entity.get("relationships", []):
-                edges.append({
-                    "source_name": entity.get("name"),
-                    "target_name": rel.get("target_name"),
-                    "relationship_type": rel.get("type"),
-                    "evidence": rel.get("evidence", ""),
-                    "confidence": rel.get("confidence", 0.5)
-                })
+                edges.append(
+                    {
+                        "source_name": entity.get("name"),
+                        "target_name": rel.get("target_name"),
+                        "relationship_type": rel.get("type"),
+                        "evidence": rel.get("evidence", ""),
+                        "confidence": rel.get("confidence", 0.5),
+                    }
+                )
         return edges
 
     def _fallback_to_cord_only(
-        self,
-        shipment_id: str,
-        cord_candidates: List[Dict[str, Any]],
-        failure_reason: str
+        self, shipment_id: str, cord_candidates: List[Dict[str, Any]], failure_reason: str
     ) -> Dict[str, Any]:
         """
         Fallback: return CORD data directly without Senzing resolution.
@@ -364,18 +350,20 @@ class SearchFirstSenzingClient:
         entity_chain = []
         for record in cord_candidates[:10]:  # Limit to top 10
             names = record.get("NAMES", [])
-            primary_name = (names[0].get("NAME_ORG") or names[0].get("NAME_FULL") if names else "")
+            primary_name = names[0].get("NAME_ORG") or names[0].get("NAME_FULL") if names else ""
 
-            entity_chain.append({
-                "entity_id": record.get("RECORD_ID", ""),
-                "name": primary_name,
-                "country": record.get("COUNTRIES", [{}])[0].get("REGISTRATION_COUNTRY", ""),
-                "entity_type": record.get("RECORD_TYPE", "ENTITY"),
-                "role": record.get("DATA_SOURCE", ""),  # GLEIF, OpenSanctions, etc
-                "confidence": 0.75,  # Lower confidence since no Senzing resolution
-                "data_source": f"CORD {record.get('DATA_SOURCE', 'ENTITY')} (Senzing unavailable)",
-                "relationships": []
-            })
+            entity_chain.append(
+                {
+                    "entity_id": record.get("RECORD_ID", ""),
+                    "name": primary_name,
+                    "country": record.get("COUNTRIES", [{}])[0].get("REGISTRATION_COUNTRY", ""),
+                    "entity_type": record.get("RECORD_TYPE", "ENTITY"),
+                    "role": record.get("DATA_SOURCE", ""),  # GLEIF, OpenSanctions, etc
+                    "confidence": 0.75,  # Lower confidence since no Senzing resolution
+                    "data_source": f"CORD {record.get('DATA_SOURCE', 'ENTITY')} (Senzing unavailable)",
+                    "relationships": [],
+                }
+            )
 
         return {
             "shipment_id": shipment_id,
@@ -383,7 +371,7 @@ class SearchFirstSenzingClient:
             "senzing_available": False,
             "failure_reason": failure_reason,
             "entity_chain": entity_chain,
-            "relationship_edges": []
+            "relationship_edges": [],
         }
 
 

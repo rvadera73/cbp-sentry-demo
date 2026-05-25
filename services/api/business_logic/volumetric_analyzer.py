@@ -64,9 +64,7 @@ class VolumetricAnalyzer:
         # Get baseline capacity
         if baseline_capacity_tons is None:
             if self.hts_classifier:
-                baseline_capacity_tons = self.hts_classifier.get_baseline_capacity_tons(
-                    hts_code
-                )
+                baseline_capacity_tons = self.hts_classifier.get_baseline_capacity_tons(hts_code)
             else:
                 # Default capacity for unknown HTS
                 baseline_capacity_tons = 10_000_000
@@ -87,9 +85,7 @@ class VolumetricAnalyzer:
         period_capacity_tons = daily_capacity_tons * time_period_days
 
         # Compute ratio
-        ratio = (
-            total_manifest_tons / period_capacity_tons if period_capacity_tons > 0 else 0
-        )
+        ratio = total_manifest_tons / period_capacity_tons if period_capacity_tons > 0 else 0
 
         # Determine status and severity
         if ratio > 4.0:
@@ -119,9 +115,7 @@ class VolumetricAnalyzer:
             "severity": severity,
         }
 
-    def detect_weight_value_mismatch(
-        self, manifest_rows: List[Dict[str, Any]], hts_code: str
-    ) -> Dict[str, Any]:
+    def detect_weight_value_mismatch(self, manifest_rows: List[Dict[str, Any]], hts_code: str) -> Dict[str, Any]:
         """Detect price/weight anomalies suggesting misclassification or transshipment.
 
         Low unit price can indicate dumping; inconsistent pricing across shipments
@@ -199,8 +193,7 @@ class VolumetricAnalyzer:
             "price_range_ratio": round(max_price / min_price, 2) if min_price > 0 else 0,
             "suspect_rows": suspect_rows,
             "signal": (
-                f"Price variation {round(std_dev, 2)} std dev; "
-                f"range {min_price:.0f}-{max_price:.0f} USD/ton"
+                f"Price variation {round(std_dev, 2)} std dev; " f"range {min_price:.0f}-{max_price:.0f} USD/ton"
             ),
         }
 
@@ -267,7 +260,9 @@ class VolumetricAnalyzer:
         return {
             "spike_detected": spike_detected,
             "shipment_count": len(manifest_rows),
-            "frequency_anomaly": f"~{len(manifest_rows)} shipments over {(dates[-1] - dates[0]).days if len(dates) > 1 else 0} days"
-            if len(dates) > 1
-            else f"{len(manifest_rows)} shipments on single date",
+            "frequency_anomaly": (
+                f"~{len(manifest_rows)} shipments over {(dates[-1] - dates[0]).days if len(dates) > 1 else 0} days"
+                if len(dates) > 1
+                else f"{len(manifest_rows)} shipments on single date"
+            ),
         }

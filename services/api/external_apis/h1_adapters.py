@@ -1,6 +1,7 @@
 """
 Horizon 1 API Adapters — Corridor Risk Data (OpenCorporates, Comtrade, ITC Tariffs)
 """
+
 import logging
 from typing import Any, Dict
 import json
@@ -35,15 +36,17 @@ class OpenCorporatesAdapter(BaseAPIAdapter):
 
             if companies:
                 company = companies[0]
-                return self.add_data_source_metadata({
-                    "name": company.get("name"),
-                    "jurisdiction": company.get("jurisdiction_code"),
-                    "incorporation_date": company.get("incorporation_date"),
-                    "company_number": company.get("company_number"),
-                    "company_type": company.get("company_type"),
-                    "officers_url": company.get("officers_url"),
-                    "found": True,
-                })
+                return self.add_data_source_metadata(
+                    {
+                        "name": company.get("name"),
+                        "jurisdiction": company.get("jurisdiction_code"),
+                        "incorporation_date": company.get("incorporation_date"),
+                        "company_number": company.get("company_number"),
+                        "company_type": company.get("company_type"),
+                        "officers_url": company.get("officers_url"),
+                        "found": True,
+                    }
+                )
             else:
                 return self.add_data_source_metadata({"found": False, "error": "Company not found"})
         except Exception as e:
@@ -117,16 +120,18 @@ class ComtradeAdapter(BaseAPIAdapter):
             result = await self.http_get(url, params=params)
             if result.get("data"):
                 data = result["data"][0]
-                return self.add_data_source_metadata({
-                    "hs_code": hs_code,
-                    "reporter": data.get("rtTitle"),
-                    "partner": data.get("ptTitle"),
-                    "trade_value_usd": data.get("TradeValue"),
-                    "quantity": data.get("Qty"),
-                    "unit": data.get("Unit"),
-                    "year": year,
-                    "found": True,
-                })
+                return self.add_data_source_metadata(
+                    {
+                        "hs_code": hs_code,
+                        "reporter": data.get("rtTitle"),
+                        "partner": data.get("ptTitle"),
+                        "trade_value_usd": data.get("TradeValue"),
+                        "quantity": data.get("Qty"),
+                        "unit": data.get("Unit"),
+                        "year": year,
+                        "found": True,
+                    }
+                )
             else:
                 return self.add_data_source_metadata({"found": False})
         except Exception as e:
@@ -164,24 +169,23 @@ class ComtradeAdapter(BaseAPIAdapter):
         }
 
         hs_base = hs_code[:4] if hs_code else ""
-        benchmark = benchmarks.get(hs_base, {
-            "unit_price_per_kg": 5.00,
-            "avg_shipment_kg": 10000,
-            "annual_volume": 100000,
-            "flag": None
-        })
+        benchmark = benchmarks.get(
+            hs_base, {"unit_price_per_kg": 5.00, "avg_shipment_kg": 10000, "annual_volume": 100000, "flag": None}
+        )
 
-        return self.add_data_source_metadata({
-            "hs_code": hs_code,
-            "reporter": reporter,
-            "partner": partner,
-            "benchmark_unit_price_usd_per_kg": benchmark.get("unit_price_per_kg", 5.00),
-            "avg_shipment_weight_kg": benchmark.get("avg_shipment_kg", 10000),
-            "annual_volume_kg": benchmark.get("annual_volume", 100000),
-            "pricing_flag": benchmark.get("flag"),
-            "year": year,
-            "found": True,
-        })
+        return self.add_data_source_metadata(
+            {
+                "hs_code": hs_code,
+                "reporter": reporter,
+                "partner": partner,
+                "benchmark_unit_price_usd_per_kg": benchmark.get("unit_price_per_kg", 5.00),
+                "avg_shipment_weight_kg": benchmark.get("avg_shipment_kg", 10000),
+                "annual_volume_kg": benchmark.get("annual_volume", 100000),
+                "pricing_flag": benchmark.get("flag"),
+                "year": year,
+                "found": True,
+            }
+        )
 
 
 class ITCTariffsAdapter(BaseAPIAdapter):
@@ -205,8 +209,18 @@ class ITCTariffsAdapter(BaseAPIAdapter):
         # Note: For transshipment routes (e.g., VN with aluminum), duties reflect actual origin
         duty_fixtures = {
             "7604": {  # Aluminum extrusions (HTS 7604.29)
-                "CN": {"base_rate": 0.06, "ad_cv_rate": 3.7415, "total": 3.8015, "case": "AD/CVD from China (Scope Product)"},
-                "VN": {"base_rate": 0.06, "ad_cv_rate": 3.7415, "total": 3.8015, "case": "Transshipment from China (high risk)"},
+                "CN": {
+                    "base_rate": 0.06,
+                    "ad_cv_rate": 3.7415,
+                    "total": 3.8015,
+                    "case": "AD/CVD from China (Scope Product)",
+                },
+                "VN": {
+                    "base_rate": 0.06,
+                    "ad_cv_rate": 3.7415,
+                    "total": 3.8015,
+                    "case": "Transshipment from China (high risk)",
+                },
                 "MY": {"base_rate": 0.06, "ad_cv_rate": 0.20, "total": 0.26, "case": "Malaysia (lower duty)"},
                 "TH": {"base_rate": 0.06, "ad_cv_rate": 0.08, "total": 0.14, "case": "Thailand (lower duty)"},
             },
@@ -237,14 +251,18 @@ class ITCTariffsAdapter(BaseAPIAdapter):
 
         hs_base = hs_code[:4] if hs_code else ""
         duties = duty_fixtures.get(hs_base, {})
-        duty_info = duties.get(origin_country, {"base_rate": 0.00, "ad_cv_rate": 0.00, "total": 0.00, "case": "Unknown"})
+        duty_info = duties.get(
+            origin_country, {"base_rate": 0.00, "ad_cv_rate": 0.00, "total": 0.00, "case": "Unknown"}
+        )
 
-        return self.add_data_source_metadata({
-            "hs_code": hs_code,
-            "origin_country": origin_country,
-            "base_rate": duty_info["base_rate"],
-            "ad_cv_rate": duty_info["ad_cv_rate"],
-            "total_effective_rate": duty_info["total"],
-            "case_description": duty_info["case"],
-            "found": True,
-        })
+        return self.add_data_source_metadata(
+            {
+                "hs_code": hs_code,
+                "origin_country": origin_country,
+                "base_rate": duty_info["base_rate"],
+                "ad_cv_rate": duty_info["ad_cv_rate"],
+                "total_effective_rate": duty_info["total"],
+                "case_description": duty_info["case"],
+                "found": True,
+            }
+        )

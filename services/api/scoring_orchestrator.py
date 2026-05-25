@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ComponentScore:
     """Single component of the 3-horizon scoring."""
+
     name: str  # "H1 Corridor Risk", "H2 Vessel Anomaly", etc
     value: float  # 0-40, 0-35, 0-25 respectively
     max_points: float
@@ -35,6 +36,7 @@ class ComponentScore:
 @dataclass
 class ScoreResponse:
     """Full scoring response with audit trail."""
+
     manifest_id: str
     shipment_id: Optional[str]
     timestamp: datetime
@@ -83,10 +85,7 @@ class ScoringOrchestrator:
         logger.info(f"ScoringOrchestrator initialized in {self.api_mode} mode")
 
     async def score_shipment(
-        self,
-        manifest_id: str,
-        shipment_data: Dict[str, Any],
-        feedback_override: Optional[Dict[str, Any]] = None
+        self, manifest_id: str, shipment_data: Dict[str, Any], feedback_override: Optional[Dict[str, Any]] = None
     ) -> ScoreResponse:
         """
         Score a shipment using all three horizons with live APIs.
@@ -119,12 +118,7 @@ class ScoringOrchestrator:
             h3_task = self._score_h3_manifest_intelligence(shipment_data, latencies, api_sources)
 
             # Execute all in parallel
-            h1_score, h2_score, h3_score = await asyncio.gather(
-                h1_task,
-                h2_task,
-                h3_task,
-                return_exceptions=False
-            )
+            h1_score, h2_score, h3_score = await asyncio.gather(h1_task, h2_task, h3_task, return_exceptions=False)
 
             # Combine scores
             total_score = min(h1_score.value + h2_score.value + h3_score.value, 100.0)
@@ -153,18 +147,13 @@ class ScoringOrchestrator:
 
             # Count live vs fixture APIs
             live_api_count = sum(
-                1 for api_data in api_sources.values()
-                if api_data.get("_metadata", {}).get("mode") == "live"
+                1 for api_data in api_sources.values() if api_data.get("_metadata", {}).get("mode") == "live"
             )
             fixture_api_count = len(api_sources) - live_api_count
 
             # Calculate overall confidence
             overall_confidence = self._calculate_confidence(
-                h1_score.confidence,
-                h2_score.confidence,
-                h3_score.confidence,
-                live_api_count,
-                fixture_api_count
+                h1_score.confidence, h2_score.confidence, h3_score.confidence, live_api_count, fixture_api_count
             )
 
             total_latency = (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -186,7 +175,7 @@ class ScoringOrchestrator:
                 live_api_count=live_api_count,
                 fixture_api_count=fixture_api_count,
                 total_latency_ms=total_latency,
-                api_sources=api_sources
+                api_sources=api_sources,
             )
 
         except Exception as e:
@@ -194,10 +183,7 @@ class ScoringOrchestrator:
             raise
 
     async def _score_h1_corridor_risk(
-        self,
-        shipment_data: Dict[str, Any],
-        latencies: Dict[str, float],
-        api_sources: Dict[str, Any]
+        self, shipment_data: Dict[str, Any], latencies: Dict[str, float], api_sources: Dict[str, Any]
     ) -> ComponentScore:
         """H1: Corridor Risk Scoring (40 pts max)"""
         start = datetime.utcnow()
@@ -208,8 +194,7 @@ class ScoringOrchestrator:
             # Fetch shipper info (OpenCorporates)
             oc_start = datetime.utcnow()
             shipper_info = await self.oc_adapter.fetch(
-                company_name=shipment_data["shipper_name"],
-                jurisdiction=shipment_data["shipper_country"]
+                company_name=shipment_data["shipper_name"], jurisdiction=shipment_data["shipper_country"]
             )
             latencies["opencorporates"] = (datetime.utcnow() - oc_start).total_seconds() * 1000
             api_sources["opencorporates"] = shipper_info
@@ -224,7 +209,7 @@ class ScoringOrchestrator:
             benchmark_data = await self.comtrade_adapter.fetch(
                 hs_code=shipment_data["hs_code"],
                 reporter=shipment_data["shipper_country"],
-                partner=shipment_data["consignee_country"]
+                partner=shipment_data["consignee_country"],
             )
             latencies["comtrade"] = (datetime.utcnow() - ct_start).total_seconds() * 1000
             api_sources["comtrade"] = benchmark_data
@@ -237,8 +222,7 @@ class ScoringOrchestrator:
             # Fetch tariff/duty info (ITC)
             itc_start = datetime.utcnow()
             tariff_info = await self.itc_adapter.fetch(
-                hs_code=shipment_data["hs_code"],
-                origin_country=shipment_data["shipper_country"]
+                hs_code=shipment_data["hs_code"], origin_country=shipment_data["shipper_country"]
             )
             latencies["itc_tariffs"] = (datetime.utcnow() - itc_start).total_seconds() * 1000
             api_sources["itc_tariffs"] = tariff_info
@@ -264,6 +248,7 @@ class ScoringOrchestrator:
                 if incorporation_date:
                     # Calculate shipper age in months
                     from datetime import datetime as dt
+
                     try:
                         inc_date = dt.fromisoformat(incorporation_date.replace("Z", "+00:00"))
                         months_old = (dt.utcnow() - inc_date.replace(tzinfo=None)).days / 30
@@ -285,7 +270,9 @@ class ScoringOrchestrator:
 
             # Price undervaluation (declared vs benchmark)
             if benchmark_data.get("price_per_kg"):
-                declared_price = shipment_data.get("declared_value", 0) / max(shipment_data.get("declared_weight_kg", 1), 1)
+                declared_price = shipment_data.get("declared_value", 0) / max(
+                    shipment_data.get("declared_weight_kg", 1), 1
+                )
                 bench_price = benchmark_data["price_per_kg"]
                 if declared_price < bench_price * 0.7:
                     score += 10
@@ -310,7 +297,7 @@ class ScoringOrchestrator:
                 confidence=confidence,
                 sources=sources,
                 evidence=evidence,
-                api_latency_ms=latencies
+                api_latency_ms=latencies,
             )
 
         except Exception as e:
@@ -322,14 +309,11 @@ class ScoringOrchestrator:
                 confidence=0.0,
                 sources=sources,
                 evidence=[f"Error: {str(e)}"],
-                api_latency_ms=latencies
+                api_latency_ms=latencies,
             )
 
     async def _score_h2_vessel_anomaly(
-        self,
-        shipment_data: Dict[str, Any],
-        latencies: Dict[str, float],
-        api_sources: Dict[str, Any]
+        self, shipment_data: Dict[str, Any], latencies: Dict[str, float], api_sources: Dict[str, Any]
     ) -> ComponentScore:
         """H2: Vessel Anomaly Scoring (35 pts max)"""
         # Placeholder — implement similar to H1 but with vessel APIs
@@ -345,14 +329,11 @@ class ScoringOrchestrator:
             confidence=0.5,
             sources=sources,
             evidence=evidence,
-            api_latency_ms={}
+            api_latency_ms={},
         )
 
     async def _score_h3_manifest_intelligence(
-        self,
-        shipment_data: Dict[str, Any],
-        latencies: Dict[str, float],
-        api_sources: Dict[str, Any]
+        self, shipment_data: Dict[str, Any], latencies: Dict[str, float], api_sources: Dict[str, Any]
     ) -> ComponentScore:
         """H3: Manifest Intelligence Scoring (25 pts max)
 
@@ -387,8 +368,7 @@ class ScoringOrchestrator:
 
             start = time.time()
             shipper_match = await cord_rag.resolve_entity(
-                shipment_data.get("shipper_name", ""),
-                shipment_data.get("shipper_country", "")
+                shipment_data.get("shipper_name", ""), shipment_data.get("shipper_country", "")
             )
             latencies_h3["shipper_cord_lookup"] = (time.time() - start) * 1000
 
@@ -413,14 +393,12 @@ class ScoringOrchestrator:
                             score += 5.0
                             sources.append("Senzing")
                             evidence.append(
-                                f"Beneficial owner chain traced via Senzing "
-                                f"({len(related)} related entities found)"
+                                f"Beneficial owner chain traced via Senzing " f"({len(related)} related entities found)"
                             )
                         else:
                             # Entity found in CORD but no Senzing relationships
                             evidence.append(
-                                f"Entity verified in CORD, "
-                                f"no additional relationships found in Senzing"
+                                f"Entity verified in CORD, " f"no additional relationships found in Senzing"
                             )
                     except Exception as e:
                         logger.warning(f"Senzing relationship query failed: {e}")
@@ -429,9 +407,7 @@ class ScoringOrchestrator:
                     # Try CORD's built-in beneficial owner tracing
                     start = time.time()
                     chain = await cord_rag.trace_beneficial_owner(
-                        shipper_match["entity_name"],
-                        shipper_match["country"],
-                        depth=3
+                        shipper_match["entity_name"], shipper_match["country"], depth=3
                     )
                     latencies_h3["cord_beneficial_owner_trace"] = (time.time() - start) * 1000
 
@@ -449,8 +425,7 @@ class ScoringOrchestrator:
 
             start = time.time()
             consignee_match = await cord_rag.resolve_entity(
-                shipment_data.get("consignee_name", ""),
-                shipment_data.get("consignee_country", "")
+                shipment_data.get("consignee_name", ""), shipment_data.get("consignee_country", "")
             )
             latencies_h3["consignee_cord_lookup"] = (time.time() - start) * 1000
 
@@ -475,8 +450,7 @@ class ScoringOrchestrator:
 
             # Check shipper sanctions
             shipper_sanctions = await cord_rag.search_sanctions(
-                shipment_data.get("shipper_name", ""),
-                shipment_data.get("shipper_country", "")
+                shipment_data.get("shipper_name", ""), shipment_data.get("shipper_country", "")
             )
             if shipper_sanctions["status"] != "CLEAR":
                 score = -25.0  # BLOCK
@@ -494,13 +468,12 @@ class ScoringOrchestrator:
                     confidence=0.95,
                     sources=list(set(sources)),
                     evidence=evidence,
-                    api_latency_ms=latencies_h3
+                    api_latency_ms=latencies_h3,
                 )
 
             # Check consignee sanctions
             consignee_sanctions = await cord_rag.search_sanctions(
-                shipment_data.get("consignee_name", ""),
-                shipment_data.get("consignee_country", "")
+                shipment_data.get("consignee_name", ""), shipment_data.get("consignee_country", "")
             )
             if consignee_sanctions["status"] != "CLEAR":
                 if consignee_sanctions["status"] == "OFAC_HIT":
@@ -519,7 +492,7 @@ class ScoringOrchestrator:
                     confidence=0.95,
                     sources=list(set(sources)),
                     evidence=evidence,
-                    api_latency_ms=latencies_h3
+                    api_latency_ms=latencies_h3,
                 )
 
             latencies_h3["sanctions_check"] = (time.time() - start) * 1000
@@ -567,16 +540,11 @@ class ScoringOrchestrator:
             confidence=confidence,
             sources=list(set(sources)),
             evidence=evidence,
-            api_latency_ms=latencies_h3
+            api_latency_ms=latencies_h3,
         )
 
     def _calculate_confidence(
-        self,
-        h1_conf: float,
-        h2_conf: float,
-        h3_conf: float,
-        live_count: int,
-        fixture_count: int
+        self, h1_conf: float, h2_conf: float, h3_conf: float, live_count: int, fixture_count: int
     ) -> float:
         """Calculate overall confidence based on component confidence + data source quality."""
         # Average of component confidences

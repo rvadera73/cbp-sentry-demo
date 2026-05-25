@@ -70,9 +70,7 @@ class AltanaVerificationClient:
         logger.info(f"Initiating Altana verification for shipment {shipment_id} (score: {risk_score}/100)")
 
         if not self.enabled:
-            return self._mock_verification(
-                shipment_id, shipper_name, consignee_name, hs_code, risk_score
-            )
+            return self._mock_verification(shipment_id, shipper_name, consignee_name, hs_code, risk_score)
 
         try:
             async with httpx.AsyncClient() as client:
@@ -126,65 +124,72 @@ class AltanaVerificationClient:
 
         # Mock findings based on shipper/HS code patterns
         is_high_risk_shipper = any(
-            keyword in shipper_name.lower()
-            for keyword in ["greenfield", "solaria", "proxy", "shell"]
+            keyword in shipper_name.lower() for keyword in ["greenfield", "solaria", "proxy", "shell"]
         )
         is_high_risk_code = hs_code.startswith(("7604", "8541"))
 
         findings = []
 
         if is_high_risk_shipper and is_high_risk_code:
-            findings.append({
-                "type": "origin_mismatch",
-                "severity": "critical",
-                "title": "Manufacturing Origin Mismatch",
-                "description": "Declared origin (VN) diverges from actual manufacturing source (CN)",
-                "evidence": [
-                    "Altana supplier trace identifies Chinese manufacturer links",
-                    "Capacity analysis shows capacity only at CN locations",
-                    "Historical shipping patterns show CN→VN→US routing"
-                ],
-                "confidence_pct": 94.0
-            })
+            findings.append(
+                {
+                    "type": "origin_mismatch",
+                    "severity": "critical",
+                    "title": "Manufacturing Origin Mismatch",
+                    "description": "Declared origin (VN) diverges from actual manufacturing source (CN)",
+                    "evidence": [
+                        "Altana supplier trace identifies Chinese manufacturer links",
+                        "Capacity analysis shows capacity only at CN locations",
+                        "Historical shipping patterns show CN→VN→US routing",
+                    ],
+                    "confidence_pct": 94.0,
+                }
+            )
 
-            findings.append({
-                "type": "transshipment_ring",
-                "severity": "critical",
-                "title": "Likely Transshipment Ring Detected",
-                "description": "Shipper linked to 8+ similar high-risk shipments via shared directors",
-                "evidence": [
-                    "Senzing match on director 'Zhang Wei' across 8 entities",
-                    "Altana identifies shared freight forwarder 'Global Logistics Ltd'",
-                    "Pattern: CN manufacturer → VN/MY staging → US consignment"
-                ],
-                "confidence_pct": 89.0
-            })
+            findings.append(
+                {
+                    "type": "transshipment_ring",
+                    "severity": "critical",
+                    "title": "Likely Transshipment Ring Detected",
+                    "description": "Shipper linked to 8+ similar high-risk shipments via shared directors",
+                    "evidence": [
+                        "Senzing match on director 'Zhang Wei' across 8 entities",
+                        "Altana identifies shared freight forwarder 'Global Logistics Ltd'",
+                        "Pattern: CN manufacturer → VN/MY staging → US consignment",
+                    ],
+                    "confidence_pct": 89.0,
+                }
+            )
 
         elif is_high_risk_code:
-            findings.append({
-                "type": "commodity_red_flag",
-                "severity": "high",
-                "title": "High-Risk Commodity with Elevated AD/CVD Rates",
-                "description": "HS code carries significant anti-dumping duties",
-                "evidence": [
-                    f"HS {hs_code} subject to 374% AD/CVD on CN origin",
-                    "Multiple prior CBP EAPA determinations on similar flows"
-                ],
-                "confidence_pct": 78.0
-            })
+            findings.append(
+                {
+                    "type": "commodity_red_flag",
+                    "severity": "high",
+                    "title": "High-Risk Commodity with Elevated AD/CVD Rates",
+                    "description": "HS code carries significant anti-dumping duties",
+                    "evidence": [
+                        f"HS {hs_code} subject to 374% AD/CVD on CN origin",
+                        "Multiple prior CBP EAPA determinations on similar flows",
+                    ],
+                    "confidence_pct": 78.0,
+                }
+            )
         else:
-            findings.append({
-                "type": "standard_verification",
-                "severity": "low",
-                "title": "Standard Supply Chain Verification Complete",
-                "description": "Shipment appears consistent with declared origin and supply chain",
-                "evidence": [
-                    f"Capacity verified at declared origin ({shipper_name})",
-                    "Pricing consistent with market benchmarks",
-                    "No watchlist matches detected"
-                ],
-                "confidence_pct": 72.0
-            })
+            findings.append(
+                {
+                    "type": "standard_verification",
+                    "severity": "low",
+                    "title": "Standard Supply Chain Verification Complete",
+                    "description": "Shipment appears consistent with declared origin and supply chain",
+                    "evidence": [
+                        f"Capacity verified at declared origin ({shipper_name})",
+                        "Pricing consistent with market benchmarks",
+                        "No watchlist matches detected",
+                    ],
+                    "confidence_pct": 72.0,
+                }
+            )
 
         return {
             "shipment_id": shipment_id,
@@ -202,8 +207,8 @@ class AltanaVerificationClient:
                 "Altana Global Knowledge Graph",
                 "Supplier capacity databases",
                 "Historical shipping patterns",
-                "Public trade records (UN Comtrade, ITC)"
-            ]
+                "Public trade records (UN Comtrade, ITC)",
+            ],
         }
 
     def _parse_altana_response(self, data: Dict, shipment_id: str) -> Dict[str, Any]:
@@ -216,7 +221,7 @@ class AltanaVerificationClient:
             "recommendation": data.get("recommendation", "EXAMINE"),
             "overall_assessment": data.get("assessment", ""),
             "timestamp": datetime.utcnow().isoformat(),
-            "data_sources": ["Altana Global Knowledge Graph", "Supply Chain Intelligence"]
+            "data_sources": ["Altana Global Knowledge Graph", "Supply Chain Intelligence"],
         }
 
     def _error_response(self, shipment_id: str, error: str) -> Dict[str, Any]:
@@ -229,7 +234,7 @@ class AltanaVerificationClient:
             "recommendation": "MANUAL_REVIEW",
             "overall_assessment": f"Altana verification failed: {error}. Manual review required.",
             "timestamp": datetime.utcnow().isoformat(),
-            "error": error
+            "error": error,
         }
 
 

@@ -83,14 +83,10 @@ class RiskCorridorFactory:
 
         # Generate corridor ID: HC-[4digitHTS]-[origin][dest]-[entity_hash]
         entity_hash = self._entity_hash(shipper_name)
-        corridor_id = (
-            f"HC-{str(hts_code)[:4]}-{origin_country}{destination_country}-{entity_hash}"
-        )
+        corridor_id = f"HC-{str(hts_code)[:4]}-{origin_country}{destination_country}-{entity_hash}"
 
         # Get evasion origin shifts
-        evasion_origin_shifts = self.hts_classifier.get_evasion_origin_shifts(
-            hts_code, origin_country
-        )
+        evasion_origin_shifts = self.hts_classifier.get_evasion_origin_shifts(hts_code, origin_country)
 
         # Lookup AD/CVD rate
         ad_cvd_rate = self.hts_classifier.lookup_ad_cvd_rate(hts_code, origin_country)
@@ -162,27 +158,15 @@ class RiskCorridorFactory:
 
         # Aggregate basic metrics
         shipment_count = len(shipment_rows)
-        aggregate_value = sum(
-            row.get("declared_value_usd", 0) or row.get("value_usd", 0)
-            for row in shipment_rows
-        )
-        total_weight_tons = sum(
-            row.get("declared_weight_kg", 0) / 1000.0 for row in shipment_rows
-        )
-        active_vessels = len(
-            set(
-                row.get("vessel_name")
-                for row in shipment_rows
-                if row.get("vessel_name")
-            )
-        )
+        aggregate_value = sum(row.get("declared_value_usd", 0) or row.get("value_usd", 0) for row in shipment_rows)
+        total_weight_tons = sum(row.get("declared_weight_kg", 0) / 1000.0 for row in shipment_rows)
+        active_vessels = len(set(row.get("vessel_name") for row in shipment_rows if row.get("vessel_name")))
 
         # Convert weight_kg to weight_tons for analyzer
         shipment_rows_with_tons = [
             {
                 **row,
-                "weight_tons": row.get("weight_tons")
-                or (row.get("declared_weight_kg", 0) / 1000.0),
+                "weight_tons": row.get("weight_tons") or (row.get("declared_weight_kg", 0) / 1000.0),
             }
             for row in shipment_rows
         ]
@@ -202,8 +186,7 @@ class RiskCorridorFactory:
         if prior_period_shipments:
             prior_count = len(prior_period_shipments)
             prior_value = sum(
-                row.get("declared_value_usd", 0) or row.get("value_usd", 0)
-                for row in prior_period_shipments
+                row.get("declared_value_usd", 0) or row.get("value_usd", 0) for row in prior_period_shipments
             )
             prior_metrics = {"shipment_count": prior_count, "aggregate_value": prior_value}
         else:
@@ -229,18 +212,16 @@ class RiskCorridorFactory:
             ftz_codes = set(row.get("ftz_code") for row in shipment_rows if row.get("ftz_code"))
             for ftz_code in ftz_codes:
                 dwell_days = 2.0  # Default estimate if not provided
-                ftz_dwell = self.transshipment_detector.detect_ftz_dwell_anomaly(
-                    ftz_code, dwell_days
-                )
+                ftz_dwell = self.transshipment_detector.detect_ftz_dwell_anomaly(ftz_code, dwell_days)
                 if ftz_dwell.get("flag"):
                     transshipment_risk["risk_score"] += ftz_dwell.get("confidence", 0.5) * 20
                     transshipment_risk["signals"].append(ftz_dwell.get("signal", ""))
 
             transshipment_risk["risk_score"] = min(100.0, transshipment_risk["risk_score"])
             transshipment_risk["risk_level"] = (
-                "HIGH" if transshipment_risk["risk_score"] > 60 else
-                "MEDIUM" if transshipment_risk["risk_score"] > 30 else
-                "LOW"
+                "HIGH"
+                if transshipment_risk["risk_score"] > 60
+                else "MEDIUM" if transshipment_risk["risk_score"] > 30 else "LOW"
             )
 
         # Compute composite risk level
@@ -277,9 +258,7 @@ class RiskCorridorFactory:
             "last_updated": datetime.now().isoformat(),
         }
 
-    def group_shipments_by_corridor(
-        self, shipments: List[Dict[str, Any]]
-    ) -> Dict[str, List[Dict[str, Any]]]:
+    def group_shipments_by_corridor(self, shipments: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
         """Group shipments by corridor ID.
 
         Args:
@@ -301,9 +280,7 @@ class RiskCorridorFactory:
         """Generate short 4-character hash for corridor ID."""
         return hashlib.md5(entity_name.encode()).hexdigest()[:4].upper()
 
-    def _compute_baseline_risk(
-        self, segment: Dict[str, Any], evasion_shifts: List[str]
-    ) -> float:
+    def _compute_baseline_risk(self, segment: Dict[str, Any], evasion_shifts: List[str]) -> float:
         """Compute baseline risk score (0-100) before anomaly detection.
 
         Args:
@@ -344,13 +321,15 @@ class RiskCorridorFactory:
         Returns:
             "CRITICAL" | "HIGH" | "MEDIUM" | "LOW"
         """
-        high_signals = sum([
-            volumetric_status == "FLAGGED",
-            yoy_status in ["CRITICAL", "HIGH"],
-            baseline_risk >= 70,
-            price_anomaly,
-            transshipment_level == "HIGH",
-        ])
+        high_signals = sum(
+            [
+                volumetric_status == "FLAGGED",
+                yoy_status in ["CRITICAL", "HIGH"],
+                baseline_risk >= 70,
+                price_anomaly,
+                transshipment_level == "HIGH",
+            ]
+        )
 
         if high_signals >= 3:
             return "CRITICAL"

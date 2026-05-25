@@ -6,6 +6,7 @@ Run these tests against a deployed Cloud Run instance:
 Requires environment variable: STAGING_API_URL
 Example: STAGING_API_URL=https://sentry-api-staging.run.app pytest -m integration
 """
+
 import os
 import pytest
 import httpx
@@ -95,8 +96,9 @@ async def test_shipment_has_manifest_ids(async_client):
 
     # Verify all IDs follow SHP-* pattern (not hardcoded shipment-* pattern)
     for shipment in shipments:
-        assert shipment["id"].startswith("SHP-"), \
-            f"Shipment ID {shipment['id']} does not match SHP-* pattern. Database may not be seeded with manifest JSON."
+        assert shipment["id"].startswith(
+            "SHP-"
+        ), f"Shipment ID {shipment['id']} does not match SHP-* pattern. Database may not be seeded with manifest JSON."
 
 
 @pytest.mark.asyncio
@@ -122,8 +124,7 @@ async def test_score_consistency_between_list_and_detail(async_client):
         detail_score = detail.get("risk_score")
 
         # Scores should match
-        assert list_score == detail_score, \
-            f"Score mismatch for {shipment_id}: list={list_score}, detail={detail_score}"
+        assert list_score == detail_score, f"Score mismatch for {shipment_id}: list={list_score}, detail={detail_score}"
 
 
 @pytest.mark.asyncio
@@ -214,13 +215,16 @@ async def test_manifest_json_loaded_not_hardcoded_data(async_client):
     shipments = data["data"]
 
     # Should have many shipments (1,191+ from manifest)
-    assert data["count"] > 100, \
-        f"Only {data['count']} shipments found. Expected 1,191+ from manifest. Database may have fallback data."
+    assert (
+        data["count"] > 100
+    ), f"Only {data['count']} shipments found. Expected 1,191+ from manifest. Database may have fallback data."
 
     # All should have SHP-* IDs (manifest), not shipment-* (hardcoded)
     for shipment in shipments:
         shipment_id = shipment["id"]
-        assert shipment_id.startswith("SHP-"), \
-            f"Found hardcoded ID pattern {shipment_id}. Database should only contain manifest JSON data (SHP-*)"
-        assert not shipment_id.startswith("shipment-"), \
-            f"Found hardcoded fallback ID {shipment_id}. This indicates fallback data is being used instead of manifest."
+        assert shipment_id.startswith(
+            "SHP-"
+        ), f"Found hardcoded ID pattern {shipment_id}. Database should only contain manifest JSON data (SHP-*)"
+        assert not shipment_id.startswith(
+            "shipment-"
+        ), f"Found hardcoded fallback ID {shipment_id}. This indicates fallback data is being used instead of manifest."

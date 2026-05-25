@@ -15,9 +15,11 @@ from dateutil import parser as dateutil_parser
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class RegistryMatch:
     """Result from corporate registry check"""
+
     found: bool
     entity_name: str
     country_of_incorporation: str
@@ -36,6 +38,7 @@ class RegistryMatch:
         if self.risk_flags is None:
             self.risk_flags = []
 
+
 class RegistryService:
     """Service for checking entities against international corporate registries"""
 
@@ -51,19 +54,17 @@ class RegistryService:
                 "status": "active",
                 "directors": [
                     {"name": "ZHANG Wei", "nationality": "CN", "role": "Director"},
-                    {"name": "LI Ming", "nationality": "CN", "role": "Manager"}
+                    {"name": "LI Ming", "nationality": "CN", "role": "Manager"},
                 ],
-                "company_type": "Limited Liability Company"
+                "company_type": "Limited Liability Company",
             },
             "solaria manufacturing": {
                 "country": "MY",
                 "reg_number": "MY2024001234",
                 "incorporation_date": "2025-04-01",
                 "status": "active",
-                "directors": [
-                    {"name": "TAN Peng", "nationality": "MY", "role": "Director"}
-                ],
-                "company_type": "Sdn Bhd"
+                "directors": [{"name": "TAN Peng", "nationality": "MY", "role": "Director"}],
+                "company_type": "Sdn Bhd",
             },
             "guangdong greenfield": {
                 "country": "CN",
@@ -72,17 +73,13 @@ class RegistryService:
                 "status": "active",
                 "directors": [
                     {"name": "ZHANG Wei", "nationality": "CN", "role": "Legal Representative"},
-                    {"name": "WANG Fang", "nationality": "CN", "role": "Director"}
+                    {"name": "WANG Fang", "nationality": "CN", "role": "Director"},
                 ],
-                "company_type": "Limited Liability Company"
-            }
+                "company_type": "Limited Liability Company",
+            },
         }
 
-    async def lookup_entity(
-        self,
-        entity_name: str,
-        country_code: str
-    ) -> RegistryMatch:
+    async def lookup_entity(self, entity_name: str, country_code: str) -> RegistryMatch:
         """
         Look up entity in corporate registry.
 
@@ -100,9 +97,7 @@ class RegistryService:
         for mock_key, mock_data in self.mock_entities.items():
             if mock_key in entity_lower and mock_data["country"] == country_code:
                 risk_flags = self._assess_risk_flags(
-                    entity_name,
-                    mock_data.get("incorporation_date"),
-                    mock_data.get("directors", [])
+                    entity_name, mock_data.get("incorporation_date"), mock_data.get("directors", [])
                 )
                 return RegistryMatch(
                     found=True,
@@ -114,7 +109,7 @@ class RegistryService:
                     directors=mock_data.get("directors", []),
                     company_type=mock_data.get("company_type"),
                     confidence_pct=95.0,
-                    risk_flags=risk_flags
+                    risk_flags=risk_flags,
                 )
 
         # Try real API if available
@@ -124,10 +119,7 @@ class RegistryService:
         except Exception as e:
             logger.warning(f"Registry lookup failed: {e}")
             return RegistryMatch(
-                found=False,
-                entity_name=entity_name,
-                country_of_incorporation=country_code,
-                confidence_pct=0.0
+                found=False, entity_name=entity_name, country_of_incorporation=country_code, confidence_pct=0.0
             )
 
     async def check_director(self, director_name: str, countries: List[str]) -> Dict[str, RegistryMatch]:
@@ -143,7 +135,7 @@ class RegistryService:
         shipper: str,
         shipper_country: str,
         parent_entity: Optional[str] = None,
-        parent_country: Optional[str] = None
+        parent_country: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Verify complete ownership chain from shipper to ultimate beneficial owner.
@@ -154,7 +146,7 @@ class RegistryService:
             "chain_valid": False,
             "confidence_pct": 0.0,
             "shared_directors": [],
-            "shared_agents": []
+            "shared_agents": [],
         }
 
         if parent_entity and parent_country:
@@ -173,10 +165,7 @@ class RegistryService:
         return results
 
     def _assess_risk_flags(
-        self,
-        entity_name: str,
-        incorporation_date: Optional[str],
-        directors: List[Dict[str, Any]]
+        self, entity_name: str, incorporation_date: Optional[str], directors: List[Dict[str, Any]]
     ) -> List[str]:
         """
         Assess risk flags based on incorporation date, directors, and other factors
@@ -204,11 +193,7 @@ class RegistryService:
 
         return flags
 
-    async def _lookup_opencorporates(
-        self,
-        entity_name: str,
-        country_code: str
-    ) -> RegistryMatch:
+    async def _lookup_opencorporates(self, entity_name: str, country_code: str) -> RegistryMatch:
         """
         Call real OpenCorporates API when available.
         Production: Replace with actual OpenCorporates REST API
@@ -217,12 +202,8 @@ class RegistryService:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{self.opencorporates_url}/companies/search",
-                    params={
-                        "q": entity_name,
-                        "country_code": country_code,
-                        "per_page": 1
-                    },
-                    timeout=self.timeout
+                    params={"q": entity_name, "country_code": country_code, "per_page": 1},
+                    timeout=self.timeout,
                 )
                 if response.status_code == 200:
                     data = response.json()
@@ -237,16 +218,13 @@ class RegistryService:
                             incorporation_date=company.get("incorporation_date"),
                             status=company.get("status", "active"),
                             company_type=company.get("company_type"),
-                            confidence_pct=90.0
+                            confidence_pct=90.0,
                         )
         except Exception as e:
             logger.warning(f"OpenCorporates API error: {e}")
 
         return RegistryMatch(
-            found=False,
-            entity_name=entity_name,
-            country_of_incorporation=country_code,
-            confidence_pct=0.0
+            found=False, entity_name=entity_name, country_of_incorporation=country_code, confidence_pct=0.0
         )
 
 

@@ -61,9 +61,7 @@ class TestEntityLoading:
 
         for entity in greenfield_entities.values():
             if isinstance(entity, dict) and "type" in entity:
-                assert entity["type"] in valid_types, (
-                    f"Invalid type: {entity['type']}"
-                )
+                assert entity["type"] in valid_types, f"Invalid type: {entity['type']}"
 
 
 class TestGreenfieldVNtoCNResolution:
@@ -72,9 +70,7 @@ class TestGreenfieldVNtoCNResolution:
     Expected chain: VN shipper → HK holding → CN manufacturer
     """
 
-    def test_resolve_greenfield_vn_shipper_to_cn_parent(
-        self, greenfield_entities, mock_senzing
-    ):
+    def test_resolve_greenfield_vn_shipper_to_cn_parent(self, greenfield_entities, mock_senzing):
         """
         GIVEN: Greenfield VN shipper in manifest
         WHEN: Senzing resolution runs
@@ -165,8 +161,7 @@ class TestWhyExplanationAPI:
 
         match_keys = [f["match_key"] for f in explanation["match_factors"]]
         assert len(match_keys) > 0
-        assert any(key in ["ADMIN", "PHONE", "RELATIONSHIP", "COMMERCIAL_RECORDS"]
-                   for key in match_keys)
+        assert any(key in ["ADMIN", "PHONE", "RELATIONSHIP", "COMMERCIAL_RECORDS"] for key in match_keys)
 
 
 class TestEntityGraphConstruction:
@@ -290,10 +285,7 @@ class TestSenzingIntegration:
         THEN: Only matches >= threshold are returned
         """
         vn_entity = greenfield_entities["shipper_vn"]
-        matches = mock_senzing.search_entity({
-            "name": vn_entity["name"],
-            "country": vn_entity["country"]
-        })
+        matches = mock_senzing.search_entity({"name": vn_entity["name"], "country": vn_entity["country"]})
 
         # All returned matches should have confidence > 0
         for match in matches:
@@ -335,10 +327,7 @@ class TestEntityResolutionEndToEnd:
         parent = greenfield_entities["parent_cn"]
 
         # Get explanation
-        explanation = mock_senzing.why_entities(
-            shipper["senzing_record_id"],
-            parent["senzing_record_id"]
-        )
+        explanation = mock_senzing.why_entities(shipper["senzing_record_id"], parent["senzing_record_id"])
 
         # Verify explanation contains key factors
         assert explanation["confidence"] >= 0.85

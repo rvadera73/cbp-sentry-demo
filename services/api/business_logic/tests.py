@@ -88,9 +88,7 @@ class TestVolumetricAnalyzer(unittest.TestCase):
         """Test volume exceeding capacity (4× ratio = CRITICAL)."""
         # Solar baseline is 2.5M tons/year = 6849 tons/day = 47,940 tons/week
         # Create 150,000 tons = 3.1× weekly capacity
-        manifest = [
-            {"weight_tons": 1000.0, "declared_value": 1000000} for _ in range(150)
-        ]
+        manifest = [{"weight_tons": 1000.0, "declared_value": 1000000} for _ in range(150)]
         result = self.analyzer.calculate_macro_volumetric_delta(
             hts_code="8541",
             origin_country="CN",
@@ -107,7 +105,7 @@ class TestVolumetricAnalyzer(unittest.TestCase):
         manifest = [
             {"weight_tons": 10.0, "declared_value": 100000},  # $10k/ton (normal)
             {"weight_tons": 10.0, "declared_value": 105000},  # $10.5k/ton
-            {"weight_tons": 10.0, "declared_value": 15000},   # $1.5k/ton (OUTLIER)
+            {"weight_tons": 10.0, "declared_value": 15000},  # $1.5k/ton (OUTLIER)
             {"weight_tons": 10.0, "declared_value": 102000},  # $10.2k/ton
         ]
         result = self.analyzer.detect_weight_value_mismatch(manifest, "8541")
@@ -321,10 +319,7 @@ class TestRiskCorridorFactory(unittest.TestCase):
 
     def test_composite_risk_score_calculation(self):
         """Test composite risk score synthesis."""
-        shipments = [
-            {"weight_tons": 1000, "declared_value": 1000000}
-            for _ in range(150)  # High volume
-        ]
+        shipments = [{"weight_tons": 1000, "declared_value": 1000000} for _ in range(150)]  # High volume
         shipments[0]["hts_code"] = "8541"
         shipments[0]["origin_country"] = "CN"
         shipments[0]["destination_country"] = "US"

@@ -1,4 +1,5 @@
 """Background scheduler jobs for refreshing pre-manifest vessel and duty rate data"""
+
 import logging
 import httpx
 import os
@@ -39,7 +40,7 @@ async def refresh_pre_manifest_vessels() -> Dict[str, Any]:
                 "status": "SKIPPED",
                 "reason": "VESSEL_FINDER_API_KEY not configured",
                 "vessels_refreshed": 0,
-                "vessels_skipped": 0
+                "vessels_skipped": 0,
             }
 
         try:
@@ -49,12 +50,7 @@ async def refresh_pre_manifest_vessels() -> Dict[str, Any]:
 
                 # VesselFinder API: search for vessels
                 # This is a simplified example; actual API call would be more complex
-                params = {
-                    "destination": "US",
-                    "eta_min_days": 0,
-                    "eta_max_days": 30,
-                    "api_key": VESSEL_FINDER_API_KEY
-                }
+                params = {"destination": "US", "eta_min_days": 0, "eta_max_days": 30, "api_key": VESSEL_FINDER_API_KEY}
 
                 # Note: This is a mock call - in production, use actual VesselFinder API
                 # For now, we'll return a placeholder response
@@ -69,16 +65,12 @@ async def refresh_pre_manifest_vessels() -> Dict[str, Any]:
             "vessels_refreshed": vessels_refreshed,
             "vessels_skipped": vessels_skipped,
             "timestamp": datetime.utcnow().isoformat(),
-            "note": "VesselFinder integration to be completed in next phase"
+            "note": "VesselFinder integration to be completed in next phase",
         }
 
     except Exception as e:
         logger.error(f"❌ Pre-manifest vessel refresh failed: {e}")
-        return {
-            "status": "FAILED",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return {"status": "FAILED", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
 
 async def refresh_corridor_duties() -> Dict[str, Any]:
@@ -124,16 +116,12 @@ async def refresh_corridor_duties() -> Dict[str, Any]:
             "duties_refreshed": duties_refreshed,
             "duties_skipped": duties_skipped,
             "timestamp": datetime.utcnow().isoformat(),
-            "note": "trade.gov integration to be completed in next phase"
+            "note": "trade.gov integration to be completed in next phase",
         }
 
     except Exception as e:
         logger.error(f"❌ Corridor duty refresh failed: {e}")
-        return {
-            "status": "FAILED",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        return {"status": "FAILED", "error": str(e), "timestamp": datetime.utcnow().isoformat()}
 
 
 async def log_refresh_status(job_name: str, result: Dict[str, Any]) -> None:

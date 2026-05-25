@@ -129,9 +129,7 @@ class HTSIndustryClassifier:
         segment = self.classify_hts_to_segment(hts_code)
         shifts = []
 
-        for primary_origin, suspect_origins in segment.get(
-            "known_evasion_origin_shifts", []
-        ):
+        for primary_origin, suspect_origins in segment.get("known_evasion_origin_shifts", []):
             if origin_country == primary_origin:
                 shifts = suspect_origins
                 break

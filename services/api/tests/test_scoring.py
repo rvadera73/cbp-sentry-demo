@@ -66,10 +66,7 @@ class TestTier1SenzingEntityChain:
         assert score_no_parent == 0.0
 
         # With parent
-        with_parent = {
-            "shipper_vn": {"match_confidence": 0.9},
-            "parent_cn": {"match_confidence": 0.9}
-        }
+        with_parent = {"shipper_vn": {"match_confidence": 0.9}, "parent_cn": {"match_confidence": 0.9}}
         score_with_parent = scorer.score(with_parent)
         assert score_with_parent > score_no_parent
 
@@ -84,17 +81,11 @@ class TestTier1SenzingEntityChain:
         scorer = Tier1Scorer()
 
         # Low confidence
-        low_conf = {
-            "shipper_vn": {"match_confidence": 0.5},
-            "parent_cn": {"match_confidence": 0.5}
-        }
+        low_conf = {"shipper_vn": {"match_confidence": 0.5}, "parent_cn": {"match_confidence": 0.5}}
         score_low = scorer.score(low_conf)
 
         # High confidence
-        high_conf = {
-            "shipper_vn": {"match_confidence": 0.98},
-            "parent_cn": {"match_confidence": 0.91}
-        }
+        high_conf = {"shipper_vn": {"match_confidence": 0.98}, "parent_cn": {"match_confidence": 0.91}}
         score_high = scorer.score(high_conf)
 
         assert score_low < score_high
@@ -110,10 +101,7 @@ class TestTier1SenzingEntityChain:
         scorer = Tier1Scorer()
 
         # Shipper role (higher risk)
-        shipper_entities = {
-            "shipper_vn": {"match_confidence": 0.9},
-            "parent_cn": {"match_confidence": 0.9}
-        }
+        shipper_entities = {"shipper_vn": {"match_confidence": 0.9}, "parent_cn": {"match_confidence": 0.9}}
         shipper_score = scorer.score(shipper_entities)
 
         # Consignee only (lower risk)
@@ -373,9 +361,7 @@ class TestTier4BayesianBeliefNetwork:
         breakdown = greenfield_score_breakdown
 
         # Tier 4 components should reflect high prior confidence from earlier tiers
-        tier_4_total = sum(
-            c["score"] for c in breakdown["components"] if c["tier"] == 4
-        )
+        tier_4_total = sum(c["score"] for c in breakdown["components"] if c["tier"] == 4)
         assert tier_4_total >= 35, "Tier 4 should be high given strong Tier 1-3 evidence"
 
     def test_tier4_isf_coo_contradiction_high_weight(self, greenfield_manifest, greenfield_entities):
@@ -639,9 +625,7 @@ class TestScoringIntegration:
         assert response.total_score == 91.0
         assert response.confidence_tier == "HIGH"
 
-    def test_score_includes_all_component_narratives(
-        self, greenfield_score_breakdown
-    ):
+    def test_score_includes_all_component_narratives(self, greenfield_score_breakdown):
         """
         GIVEN: Scored Greenfield case
         WHEN: Examining components

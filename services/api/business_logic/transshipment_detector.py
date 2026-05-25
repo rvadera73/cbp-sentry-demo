@@ -25,7 +25,7 @@ class TransshipmentDetector:
     FTZ_BASELINE_DWELL_DAYS = {
         "FTZ-80": 1.5,  # Los Angeles FTZ
         "FTZ-48": 2.0,  # New York/New Jersey
-        "FTZ-1": 1.8,   # General baseline
+        "FTZ-1": 1.8,  # General baseline
         "FTZ-24": 2.2,  # San Francisco
         "FTZ-44": 1.9,  # Houston
         "default": 2.0,
@@ -47,9 +47,7 @@ class TransshipmentDetector:
         """Initialize transshipment detector."""
         pass
 
-    def detect_ftz_dwell_anomaly(
-        self, ftz_code: str, actual_dwell_days: float
-    ) -> Dict[str, Any]:
+    def detect_ftz_dwell_anomaly(self, ftz_code: str, actual_dwell_days: float) -> Dict[str, Any]:
         """Flag if FTZ dwell exceeds baseline (suggests repackaging/consolidation).
 
         **Logic**: Foreign Trade Zones are bonded areas where goods can be
@@ -70,9 +68,7 @@ class TransshipmentDetector:
                 - flag: bool (True if anomalous)
                 - confidence: float (0.5-0.95)
         """
-        baseline = self.FTZ_BASELINE_DWELL_DAYS.get(
-            ftz_code, self.FTZ_BASELINE_DWELL_DAYS["default"]
-        )
+        baseline = self.FTZ_BASELINE_DWELL_DAYS.get(ftz_code, self.FTZ_BASELINE_DWELL_DAYS["default"])
         ratio = actual_dwell_days / baseline if baseline > 0 else 0
 
         if ratio > 3.0:
@@ -96,9 +92,7 @@ class TransshipmentDetector:
             "confidence": round(confidence, 2),
         }
 
-    def detect_port_routing_anomaly(
-        self, port_call_sequence: List[Dict[str, str]]
-    ) -> Dict[str, Any]:
+    def detect_port_routing_anomaly(self, port_call_sequence: List[Dict[str, str]]) -> Dict[str, Any]:
         """Detect illogical port sequences suggesting transshipment detour.
 
         **Anomalies**:
@@ -168,14 +162,10 @@ class TransshipmentDetector:
             # Simplified check: if intermediate port is geographically between origin/dest
             # and visit is short, suspect transshipment
             if transshipment_hub_visits:
-                anomalies.append(
-                    f"Transit through {len(transshipment_hub_visits)} transshipment hub(s)"
-                )
+                anomalies.append(f"Transit through {len(transshipment_hub_visits)} transshipment hub(s)")
 
         # Build routing path
-        routing_path = " → ".join(
-            [p.get("port_code", p.get("country", "?")) for p in port_call_sequence]
-        )
+        routing_path = " → ".join([p.get("port_code", p.get("country", "?")) for p in port_call_sequence])
 
         # Determine severity
         severity = "NONE"
@@ -199,9 +189,7 @@ class TransshipmentDetector:
             f"{len(anomalies)} anomaly(ies), {len(transshipment_hub_visits)} hub(s)",
         }
 
-    def detect_consolidation_pattern(
-        self, shipments_by_ftz: Dict[str, List[Dict[str, Any]]]
-    ) -> Dict[str, Any]:
+    def detect_consolidation_pattern(self, shipments_by_ftz: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
         """Detect consolidation centers (single FTZ receives from multiple origins).
 
         **Logic**: If one FTZ receives shipments from many different origins,
@@ -276,9 +264,7 @@ class TransshipmentDetector:
             f"{', '.join(max_consolidation['origins'])}",
         }
 
-    def detect_vessel_rotation_anomaly(
-        self, vessel_port_calls: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def detect_vessel_rotation_anomaly(self, vessel_port_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Detect when a vessel makes suspicious port rotation (potential transshipment).
 
         **Pattern**: Same vessel visits multiple ports in sequence with inconsistent

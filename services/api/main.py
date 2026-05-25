@@ -1,4 +1,5 @@
 """Sentry CBP API Service - H1/H2 Scoring, Ingest, Monitoring, Entity Resolution"""
+
 import os
 import logging
 import uuid
@@ -37,6 +38,7 @@ from risk_scoring_engine import RiskScoringEngine
 
 try:
     import google.generativeai as genai
+
     GEMINI_AVAILABLE = True
 except ImportError:
     GEMINI_AVAILABLE = False
@@ -74,6 +76,7 @@ async def get_oidc_token(target_service_url: str) -> Optional[str]:
         return None  # No token needed for local development
 
     import time
+
     now = time.time()
 
     # Check cache validity (tokens valid for ~1 hour, cache for 30 min)
@@ -84,19 +87,14 @@ async def get_oidc_token(target_service_url: str) -> Optional[str]:
     try:
         # Get token from GCP metadata server (Cloud Run standard)
         async with httpx.AsyncClient() as client:
-            headers = {
-                "Metadata-Flavor": "Google"
-            }
+            headers = {"Metadata-Flavor": "Google"}
             # Service account token endpoint
-            metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+            metadata_url = (
+                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+            )
             params = {"audience": target_service_url, "format": "full"}
 
-            response = await client.get(
-                metadata_url,
-                headers=headers,
-                params=params,
-                timeout=2.0
-            )
+            response = await client.get(metadata_url, headers=headers, params=params, timeout=2.0)
 
             if response.status_code == 200:
                 token = response.text
@@ -164,10 +162,12 @@ async def lifespan(app: FastAPI):
 
     # Initialize CORD FTS index on startup (non-fatal if unavailable)
     import os
+
     cord_data_dir = os.getenv("CORD_DATA_DIR", "/app/cord-data")
     if os.path.exists(cord_data_dir):
         try:
             from cord_engine import get_cord_engine
+
             cord = get_cord_engine()
             entity_count = cord.get_entity_count()
             logger.info(f"✓ CORD engine initialized: {entity_count} entities indexed")
@@ -186,22 +186,22 @@ async def lifespan(app: FastAPI):
         # Schedule pre-manifest vessel refresh every 30 minutes
         scheduler.add_job(
             refresh_pre_manifest_vessels,
-            'interval',
+            "interval",
             minutes=30,
-            id='refresh_pre_manifest_vessels',
-            name='Refresh pre-manifest vessels from VesselFinder API',
-            replace_existing=True
+            id="refresh_pre_manifest_vessels",
+            name="Refresh pre-manifest vessels from VesselFinder API",
+            replace_existing=True,
         )
         logger.info("✓ Scheduled: Pre-manifest vessel refresh every 30 minutes")
 
         # Schedule corridor duty rate refresh daily
         scheduler.add_job(
             refresh_corridor_duties,
-            'interval',
+            "interval",
             hours=24,
-            id='refresh_corridor_duties',
-            name='Refresh corridor duty rates from trade.gov API',
-            replace_existing=True
+            id="refresh_corridor_duties",
+            name="Refresh corridor duty rates from trade.gov API",
+            replace_existing=True,
         )
         logger.info("✓ Scheduled: Corridor duty refresh daily")
 
@@ -228,6 +228,7 @@ app.add_middleware(
 # Include routers (refactored endpoints)
 from routers.manifest import router as manifest_router
 from referral_pdf_api import router as referral_pdf_router
+
 app.include_router(manifest_router)
 app.include_router(referral_pdf_router)
 
@@ -291,7 +292,7 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
-    if not file.filename.lower().endswith(('.xlsx', '.xls', '.csv')):
+    if not file.filename.lower().endswith((".xlsx", ".xls", ".csv")):
         raise HTTPException(status_code=400, detail="Only Excel (.xlsx/.xls) and CSV files are supported")
 
     try:
@@ -308,20 +309,20 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
 
         # Generate/extract manifest_source_ids for dedup
         for row in rows:
-            if not row.get('manifest_id'):
+            if not row.get("manifest_id"):
                 key = f"{row['shipper']}{row['consignee']}{row['origin_country']}{row['destination_country']}{row['hs_code']}{row['declared_value_usd']}"
-                row['manifest_source_id'] = hashlib.sha256(key.encode()).hexdigest()[:16]
+                row["manifest_source_id"] = hashlib.sha256(key.encode()).hexdigest()[:16]
             else:
-                row['manifest_source_id'] = row['manifest_id']
+                row["manifest_source_id"] = row["manifest_id"]
 
         # Check for duplicates
         async with await get_data_service_client() as client:
-            source_ids = [r['manifest_source_id'] for r in rows]
+            source_ids = [r["manifest_source_id"] for r in rows]
             dup_resp = await client.post("/shipments/check-duplicates", json=source_ids)
-            duplicate_set = set(dup_resp.json().get('duplicates', []))
+            duplicate_set = set(dup_resp.json().get("duplicates", []))
 
         # Filter duplicates
-        new_rows = [r for r in rows if r['manifest_source_id'] not in duplicate_set]
+        new_rows = [r for r in rows if r["manifest_source_id"] not in duplicate_set]
         duplicate_count = len(rows) - len(new_rows)
 
         # Batch insert new shipments
@@ -336,40 +337,40 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
             insert_payload = [
                 {
                     "manifest_id": manifest_id,
-                    "shipper_name": r['shipper'],
-                    "consignee_name": r['consignee'],
-                    "origin_country": r['origin_country'],
-                    "destination_country": r['destination_country'],
-                    "hs_code": r['hs_code'],
-                    "declared_value_usd": r['declared_value_usd'],
-                    "declared_weight_kg": r['declared_weight_kg'],
-                    "description": r.get('description'),
-                    "vessel_name": r.get('vessel_name'),
-                    "vessel_imo": r.get('vessel_imo'),
-                    "vessel_flag": r.get('vessel_flag'),
-                    "dwell_days": r.get('dwell_days'),
-                    "ais_stuffing_country": r.get('ais_stuffing_country'),
-                    "port_calls": r.get('port_calls'),
-                    "element9_is_mismatch": r.get('element9_is_mismatch'),
-                    "element9_declared_country": r.get('element9_declared_country'),
-                    "element9_actual_country": r.get('element9_actual_country'),
-                    "shipper_age_months": r.get('shipper_age_months'),
-                    "ad_cvd_rate": r.get('ad_cvd_rate'),
-                    "ad_cvd_applicable": r.get('ad_cvd_applicable'),
-                    "manifest_source_id": r['manifest_source_id'],
+                    "shipper_name": r["shipper"],
+                    "consignee_name": r["consignee"],
+                    "origin_country": r["origin_country"],
+                    "destination_country": r["destination_country"],
+                    "hs_code": r["hs_code"],
+                    "declared_value_usd": r["declared_value_usd"],
+                    "declared_weight_kg": r["declared_weight_kg"],
+                    "description": r.get("description"),
+                    "vessel_name": r.get("vessel_name"),
+                    "vessel_imo": r.get("vessel_imo"),
+                    "vessel_flag": r.get("vessel_flag"),
+                    "dwell_days": r.get("dwell_days"),
+                    "ais_stuffing_country": r.get("ais_stuffing_country"),
+                    "port_calls": r.get("port_calls"),
+                    "element9_is_mismatch": r.get("element9_is_mismatch"),
+                    "element9_declared_country": r.get("element9_declared_country"),
+                    "element9_actual_country": r.get("element9_actual_country"),
+                    "shipper_age_months": r.get("shipper_age_months"),
+                    "ad_cvd_rate": r.get("ad_cvd_rate"),
+                    "ad_cvd_applicable": r.get("ad_cvd_applicable"),
+                    "manifest_source_id": r["manifest_source_id"],
                 }
                 for r in new_rows
             ]
 
             async with await get_data_service_client() as client:
                 batch_resp = await client.post("/shipments/batch", json=insert_payload)
-                inserted_ids = batch_resp.json().get('ids', [])
+                inserted_ids = batch_resp.json().get("ids", [])
 
             # Score and classify
             score_updates = []
             for shipment_id, row_data in zip(inserted_ids, new_rows):
                 try:
-                    score_result = risk_scoring_engine.score_shipment({'id': shipment_id, **row_data})
+                    score_result = risk_scoring_engine.score_shipment({"id": shipment_id, **row_data})
                     final_score = score_result.final_score
 
                     if final_score >= 80:
@@ -379,16 +380,18 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
                     else:
                         low_risk_count += 1
 
-                    score_updates.append({
-                        'id': shipment_id,
-                        'risk_score': final_score,
-                        'h1_score': score_result.components[0].score if score_result.components else None,
-                        'h2_score': score_result.components[1].score if len(score_result.components) > 1 else None,
-                        'h3_score': score_result.components[2].score if len(score_result.components) > 2 else None,
-                    })
+                    score_updates.append(
+                        {
+                            "id": shipment_id,
+                            "risk_score": final_score,
+                            "h1_score": score_result.components[0].score if score_result.components else None,
+                            "h2_score": score_result.components[1].score if len(score_result.components) > 1 else None,
+                            "h3_score": score_result.components[2].score if len(score_result.components) > 2 else None,
+                        }
+                    )
                 except Exception as e:
                     error_count += 1
-                    errors.append({'row': shipment_id, 'reason': str(e)})
+                    errors.append({"row": shipment_id, "reason": str(e)})
 
             # Batch update scores
             if score_updates:
@@ -406,7 +409,7 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
             "low_risk_count": low_risk_count,
             "error_count": error_count,
             "errors": errors if errors else None,
-            "elapsed_seconds": round(elapsed_seconds, 2)
+            "elapsed_seconds": round(elapsed_seconds, 2),
         }
 
     except HTTPException:
@@ -417,6 +420,7 @@ async def ingest_manifest(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 
 # ============= HORIZON 1: CORRIDOR RISK =============
+
 
 @app.get("/api/h1/corridor-risk")
 async def get_h1_corridor_risk(
@@ -464,6 +468,7 @@ async def get_h1_corridor_risk(
 
 # ============= HORIZON 2: ANOMALY DETECTION =============
 
+
 @app.get("/api/h2/anomaly-detection")
 async def get_h2_anomalies(
     manifest_id: str = Query(...),
@@ -483,9 +488,7 @@ async def get_h2_anomalies(
             )
             vessel_data.update(dwell_details)
 
-        port_data = await port_adapter.fetch(
-            port_code=vessel_data.get("current_port", ""), vessel_name=vessel_name
-        )
+        port_data = await port_adapter.fetch(port_code=vessel_data.get("current_port", ""), vessel_name=vessel_name)
         isf_data = await port_adapter.get_isf_stuffing_location(manifest_id=manifest_id, container_number="")
 
         h2_score = await h2_scorer.score(vessel_data=vessel_data, isf_data=isf_data, port_calls=[port_data])
@@ -502,6 +505,7 @@ async def get_h2_anomalies(
 
 
 # ============= INTEGRATED H1+H2 =============
+
 
 @app.get("/api/h1-h2/integrated")
 async def get_h1_h2_integrated(
@@ -554,6 +558,7 @@ async def get_h1_h2_integrated(
 
 # ============= ENTITY RESOLUTION (Placeholder) =============
 
+
 @app.post("/api/er/load")
 async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -579,7 +584,7 @@ async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "Shipment not found",
                 "shipment_id": shipment_id,
                 "senzing_available": False,
-                "failure_reason": "shipment_not_found"
+                "failure_reason": "shipment_not_found",
             }
 
         shipments = resp.json().get("data", [])
@@ -588,13 +593,14 @@ async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "error": "Shipment not found",
                 "shipment_id": shipment_id,
                 "senzing_available": False,
-                "failure_reason": "shipment_not_found"
+                "failure_reason": "shipment_not_found",
             }
 
         shipment = shipments[0]
 
         # Import Search-First client
         from senzing_search_first import get_search_first_client
+
         sf_client = get_search_first_client()
 
         # Step 1: Execute Search-First Senzing pattern
@@ -606,47 +612,54 @@ async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
             consignee_name=shipment.get("consignee_name", ""),
             consignee_country=shipment.get("consignee_country") or shipment.get("destination_country"),
             directors=[],  # TODO: extract from shipment if available
-            freight_forwarder=shipment.get("freight_forwarder")
+            freight_forwarder=shipment.get("freight_forwarder"),
         )
 
         # Step 2: Build entity list from resolution result
         entities = []
         for i, entity in enumerate(resolution_result.get("entity_chain", [])):
-            entities.append({
-                "entity_id": i + 1,
-                "entity_name": entity.get("name", ""),
-                "entity_type": entity.get("entity_type", "ENTITY"),
-                "senzing_confidence": entity.get("confidence", 0.0),
-                "jurisdiction": entity.get("country", ""),
-                "matching_evidence": [f"Source: {entity.get('data_source', '')}"],
-                "prior_cbp_filings": 0,
-                "data_source": entity.get("data_source", "")
-            })
+            entities.append(
+                {
+                    "entity_id": i + 1,
+                    "entity_name": entity.get("name", ""),
+                    "entity_type": entity.get("entity_type", "ENTITY"),
+                    "senzing_confidence": entity.get("confidence", 0.0),
+                    "jurisdiction": entity.get("country", ""),
+                    "matching_evidence": [f"Source: {entity.get('data_source', '')}"],
+                    "prior_cbp_filings": 0,
+                    "data_source": entity.get("data_source", ""),
+                }
+            )
 
         # Step 3: Add manifest parties if not found in resolution
         if not any(e["entity_type"] == "SHIPPER" for e in entities):
-            entities.insert(0, {
-                "entity_id": 100,
-                "entity_name": shipment.get("shipper_name", ""),
-                "entity_type": "SHIPPER",
-                "senzing_confidence": 0.9,
-                "jurisdiction": shipment.get("shipper_country") or shipment.get("origin_country", ""),
-                "matching_evidence": ["Found in manifest"],
-                "prior_cbp_filings": 0,
-                "data_source": "Manifest"
-            })
+            entities.insert(
+                0,
+                {
+                    "entity_id": 100,
+                    "entity_name": shipment.get("shipper_name", ""),
+                    "entity_type": "SHIPPER",
+                    "senzing_confidence": 0.9,
+                    "jurisdiction": shipment.get("shipper_country") or shipment.get("origin_country", ""),
+                    "matching_evidence": ["Found in manifest"],
+                    "prior_cbp_filings": 0,
+                    "data_source": "Manifest",
+                },
+            )
 
         if not any(e["entity_type"] == "CONSIGNEE" for e in entities):
-            entities.append({
-                "entity_id": 200,
-                "entity_name": shipment.get("consignee_name", ""),
-                "entity_type": "CONSIGNEE",
-                "senzing_confidence": 0.88,
-                "jurisdiction": shipment.get("consignee_country") or shipment.get("destination_country", ""),
-                "matching_evidence": ["Found in manifest"],
-                "prior_cbp_filings": 0,
-                "data_source": "Manifest"
-            })
+            entities.append(
+                {
+                    "entity_id": 200,
+                    "entity_name": shipment.get("consignee_name", ""),
+                    "entity_type": "CONSIGNEE",
+                    "senzing_confidence": 0.88,
+                    "jurisdiction": shipment.get("consignee_country") or shipment.get("destination_country", ""),
+                    "matching_evidence": ["Found in manifest"],
+                    "prior_cbp_filings": 0,
+                    "data_source": "Manifest",
+                }
+            )
 
         return {
             "shipment_id": shipment_id,
@@ -659,7 +672,7 @@ async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
             "senzing_available": resolution_result.get("senzing_available", False),
             "failure_reason": resolution_result.get("failure_reason"),  # Explicit reason if Senzing unavailable
             "data_source": "Search-First Senzing (CORD + Senzing SDK)",
-            "estimated_completion": datetime.utcnow().isoformat()
+            "estimated_completion": datetime.utcnow().isoformat(),
         }
 
     except Exception as e:
@@ -668,7 +681,7 @@ async def load_entities(payload: Dict[str, Any]) -> Dict[str, Any]:
             "error": str(e),
             "shipment_id": shipment_id,
             "senzing_available": False,
-            "failure_reason": f"exception: {str(e)}"
+            "failure_reason": f"exception: {str(e)}",
         }
 
 
@@ -679,26 +692,30 @@ async def get_entity_why(entity_a: int, entity_b: int) -> Dict[str, Any]:
         "entity_a": {
             "id": entity_a,
             "name": "Greenfield Industrial Trading Co." if entity_a == 1 else "Guangdong Greenfield Aluminum Mfg.",
-            "country": "VN" if entity_a == 1 else "CN"
+            "country": "VN" if entity_a == 1 else "CN",
         },
         "entity_b": {
             "id": entity_b,
             "name": "Guangdong Greenfield Aluminum Mfg." if entity_b == 2 else "SunPath Energy Distributors LLC",
-            "country": "CN" if entity_b == 2 else "US"
+            "country": "CN" if entity_b == 2 else "US",
         },
         "connection_path": [
             {
                 "step": 1,
                 "entity_id": entity_a,
-                "entity_name": "Greenfield Industrial Trading Co." if entity_a == 1 else "Guangdong Greenfield Aluminum Mfg.",
-                "relationship": "OWNED_BY"
+                "entity_name": (
+                    "Greenfield Industrial Trading Co." if entity_a == 1 else "Guangdong Greenfield Aluminum Mfg."
+                ),
+                "relationship": "OWNED_BY",
             },
             {
                 "step": 2,
                 "entity_id": entity_b,
-                "entity_name": "Guangdong Greenfield Aluminum Mfg." if entity_b == 2 else "SunPath Energy Distributors LLC",
-                "relationship": "DIRECTOR_SHARED"
-            }
+                "entity_name": (
+                    "Guangdong Greenfield Aluminum Mfg." if entity_b == 2 else "SunPath Energy Distributors LLC"
+                ),
+                "relationship": "DIRECTOR_SHARED",
+            },
         ],
         "connection_depth": 2,
         "total_confidence": 0.91,
@@ -706,12 +723,13 @@ async def get_entity_why(entity_a: int, entity_b: int) -> Dict[str, Any]:
         "evidence": [
             "Director John Smith appears in both company registrations",
             "Both entities use Global Freight Solutions LLC as freight forwarder",
-            "Shared corporate address registration"
-        ]
+            "Shared corporate address registration",
+        ],
     }
 
 
 # ============= SCORING (Real Computation) =============
+
 
 @app.post("/api/scoring/score")
 async def calculate_score_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -751,7 +769,7 @@ async def calculate_score_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "max_score": 40,
                 "weight": 0.4,
                 "factors": [],
-                "summary": f"Corridor risk score: {h1_score}/40"
+                "summary": f"Corridor risk score: {h1_score}/40",
             },
             "h2": {
                 "horizon": "H2",
@@ -760,7 +778,7 @@ async def calculate_score_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "max_score": 35,
                 "weight": 0.35,
                 "factors": [],
-                "summary": f"Vessel anomaly score: {h2_score}/35"
+                "summary": f"Vessel anomaly score: {h2_score}/35",
             },
             "h3": {
                 "horizon": "H3",
@@ -769,12 +787,12 @@ async def calculate_score_endpoint(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "max_score": 25,
                 "weight": 0.25,
                 "factors": [],
-                "summary": f"Intelligence score: {h3_score}/25"
+                "summary": f"Intelligence score: {h3_score}/25",
             },
             "total_score": total_score,
             "confidence": confidence,
             "should_verify_altana": total_score >= 70,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
     except HTTPException:
         raise
@@ -818,42 +836,42 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
                 "score": h3_score,
                 "max": 25,
                 "pct": int((h3_score / 25 * 100)) if h3_score > 0 else 0,
-                "horizon": "H3"
+                "horizon": "H3",
             },
             {
                 "name": "Commodity Sensitivity",
                 "score": int(h1_score * 0.375),  # ~15 points max
                 "max": 15,
                 "pct": int((h1_score / 40 * 100)),
-                "horizon": "H1"
+                "horizon": "H1",
             },
             {
                 "name": "Routing Consistency",
                 "score": int(h2_score * 0.43),  # ~15 points max
                 "max": 15,
                 "pct": int((h2_score / 35 * 100)),
-                "horizon": "H2"
+                "horizon": "H2",
             },
             {
                 "name": "Party Profile Risk",
                 "score": int(h1_score * 0.375),  # ~15 points max
                 "max": 15,
                 "pct": int((h1_score / 40 * 100)),
-                "horizon": "H1"
+                "horizon": "H1",
             },
             {
                 "name": "Historical Pattern",
                 "score": int(h2_score * 0.43),  # ~15 points max
                 "max": 15,
                 "pct": int((h2_score / 35 * 100)),
-                "horizon": "H2"
+                "horizon": "H2",
             },
             {
                 "name": "Time Sensitivity",
                 "score": int(h3_score * 0.6),  # ~15 points max
                 "max": 15,
                 "pct": int((h3_score / 25 * 100)) if h3_score > 0 else 0,
-                "horizon": "H3"
+                "horizon": "H3",
             },
         ]
 
@@ -885,7 +903,7 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
                     "h1_score": h1_score,
                     "h2_score": h2_score,
                     "h1_h2_score": h1_score + h2_score,
-                }
+                },
             )
 
         return {
@@ -904,6 +922,7 @@ async def score_shipment(shipment_id: str, payload: Optional[Dict[str, Any]] = N
 
 
 # ============= COMPREHENSIVE RISK SCORING WITH ALTANA VALIDATION =============
+
 
 async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None) -> Dict[str, Any]:
     """
@@ -941,7 +960,7 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
             "model_adjustment": 0,
             "final_risk_score": round(initial_score, 1),
             "adjustment_reason": "Initial model assessment",
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.utcnow().isoformat(),
         }
 
         # ALTANA VALIDATION: If score >= 80, query Altana for supply chain verification
@@ -956,7 +975,7 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
                     consignee_country=shipment.get("destination_country"),
                     hs_code=shipment.get("hs_code"),
                     declared_value=shipment.get("declared_value_usd"),
-                    model_score=initial_score
+                    model_score=initial_score,
                 )
 
                 if altana_response and altana_response.get("confidence", 0) > 0.6:
@@ -966,7 +985,7 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
                         "risk_factors": altana_response.get("risk_factors", []),
                         "recommendation": altana_response.get("recommendation", "REVIEW"),
                         "supply_chain_opacity": altana_response.get("supply_chain_opacity", 0),
-                        "sanctions_exposure": altana_response.get("sanctions_exposure", False)
+                        "sanctions_exposure": altana_response.get("sanctions_exposure", False),
                     }
 
                     # Model refinement based on Altana agreement
@@ -1004,7 +1023,7 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
         ai_synthesis = {
             "summary": _generate_risk_summary(shipment, risk_breakdown, audit_trail),
             "key_factors": [c.rationale for c in risk_breakdown.components if c.score >= 7.0],
-            "altana_validation": audit_trail.get("altana_response", {}) if audit_trail["altana_query"] else None
+            "altana_validation": audit_trail.get("altana_response", {}) if audit_trail["altana_query"] else None,
         }
 
         # Prepare response with full transparency
@@ -1021,7 +1040,7 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
                         "weight": round(c.weight, 1),
                         "weighted_result": round(c.weighted_result, 1),
                         "rationale": c.rationale,
-                        "evidence": c.evidence or []
+                        "evidence": c.evidence or [],
                     }
                     for c in risk_breakdown.components
                 ],
@@ -1029,14 +1048,13 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
                 "corridor_risk_adjustment": risk_breakdown.corridor_risk_adjustment,
                 "additional_adjustments": risk_breakdown.additional_adjustments,
                 "final_score": round(risk_breakdown.final_score, 1),
-                "calculation_table": risk_breakdown.calculation_table
+                "calculation_table": risk_breakdown.calculation_table,
             },
             "audit_trail": audit_trail,
             "ai_synthesis": ai_synthesis,
             "factors_summary": {
-                name: factor.get("weight", 0)
-                for name, factor in RiskModelConfig.get_all_factors().items()
-            }
+                name: factor.get("weight", 0) for name, factor in RiskModelConfig.get_all_factors().items()
+            },
         }
 
     except Exception as e:
@@ -1093,6 +1111,7 @@ def _generate_risk_summary(shipment: Dict, breakdown: Any, audit_trail: Dict) ->
 
 
 # ============= REFERRAL PACKAGE =============
+
 
 @app.get("/api/referral/{shipment_id}")
 async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
@@ -1195,7 +1214,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                 "shipper_match": shipper_ofac.matched,
                 "shipper_source": shipper_ofac.source,
                 "consignee_match": consignee_ofac.matched,
-                "consignee_source": consignee_ofac.source
+                "consignee_source": consignee_ofac.source,
             }
 
         # 2. Lazy-load ISF data from VesselAPI for high-risk cases
@@ -1204,16 +1223,14 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
             ais_adapter = AISAdapter()
             try:
                 isf_result = await ais_adapter.fetch_live(
-                    vessel_name=vessel_name,
-                    imo=shipment.get("vessel_imo"),
-                    manifest_fields=shipment
+                    vessel_name=vessel_name, imo=shipment.get("vessel_imo"), manifest_fields=shipment
                 )
                 if isf_result.get("found"):
                     isf_data = {
                         "live_vessel_data_available": True,
                         "source": isf_result.get("source"),
                         "current_port": isf_result.get("current_port"),
-                        "last_updated": isf_result.get("last_updated")
+                        "last_updated": isf_result.get("last_updated"),
                     }
             except Exception as e:
                 logger.warning(f"[{shipment_id}] ISF lazy-load failed: {e}")
@@ -1229,7 +1246,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                     shipper_name=shipper,
                     shipper_country=origin,
                     consignee_name=consignee,
-                    consignee_country=destination
+                    consignee_country=destination,
                 )
                 entity_chain = er_result.get("entity_chain", [])
                 senzing_failure_reason = er_result.get("failure_reason")
@@ -1240,7 +1257,9 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
             # DEMO: If Senzing failed, show fixture entity chain for high-risk cases
             # This demonstrates what successful Senzing resolution looks like
             if senzing_failure_reason and risk_score >= 85:
-                logger.info(f"[{shipment_id}] Senzing unavailable (reason: {senzing_failure_reason}), showing demo entity chain")
+                logger.info(
+                    f"[{shipment_id}] Senzing unavailable (reason: {senzing_failure_reason}), showing demo entity chain"
+                )
                 # Fixture entity chain for Greenfield (demonstrates ownership structure)
                 entity_chain = [
                     {
@@ -1251,7 +1270,9 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "role": "exporter",
                         "confidence": 0.98,
                         "data_source": "Senzing Entity Resolution (DEMO)",
-                        "relationships": [{"type": "OWNED_BY", "target": "Greenfield Global Metals Holdings Ltd.", "confidence": 0.95}]
+                        "relationships": [
+                            {"type": "OWNED_BY", "target": "Greenfield Global Metals Holdings Ltd.", "confidence": 0.95}
+                        ],
                     },
                     {
                         "entity_id": 2,
@@ -1261,7 +1282,10 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "role": "parent_company",
                         "confidence": 0.95,
                         "data_source": "Senzing Entity Resolution (DEMO)",
-                        "relationships": [{"type": "OWNS", "target": shipper, "confidence": 0.95}, {"type": "PARENT_OF", "target": "Guangdong Greenfield Aluminum Mfg.", "confidence": 0.92}]
+                        "relationships": [
+                            {"type": "OWNS", "target": shipper, "confidence": 0.95},
+                            {"type": "PARENT_OF", "target": "Guangdong Greenfield Aluminum Mfg.", "confidence": 0.92},
+                        ],
                     },
                     {
                         "entity_id": 3,
@@ -1271,7 +1295,9 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "role": "actual_manufacturer",
                         "confidence": 0.92,
                         "data_source": "Senzing Entity Resolution (DEMO)",
-                        "relationships": [{"type": "OWNED_BY", "target": "Greenfield Global Metals Holdings Ltd.", "confidence": 0.92}]
+                        "relationships": [
+                            {"type": "OWNED_BY", "target": "Greenfield Global Metals Holdings Ltd.", "confidence": 0.92}
+                        ],
                     },
                     {
                         "entity_id": 4,
@@ -1283,7 +1309,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "data_source": "Senzing Entity Resolution (DEMO)",
                         "prior_cbp_filings": 9,
                         "prior_eapa_determinations": 5,
-                        "relationships": []
+                        "relationships": [],
                     },
                     {
                         "entity_id": 5,
@@ -1294,8 +1320,8 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "confidence": 0.87,
                         "data_source": "Senzing Entity Resolution (DEMO)",
                         "flag": "Appears in 87 high-risk transshipment cases",
-                        "relationships": [{"type": "FREIGHT_FORWARDED_BY", "target": shipper, "confidence": 0.87}]
-                    }
+                        "relationships": [{"type": "FREIGHT_FORWARDED_BY", "target": shipper, "confidence": 0.87}],
+                    },
                 ]
                 senzing_failure_reason = None  # Clear failure reason since we're showing demo data
 
@@ -1310,7 +1336,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                 consignee_country=destination,
                 hs_code=hs_code,
                 declared_value_usd=declared_value,
-                risk_score=risk_score
+                risk_score=risk_score,
             )
 
         # 5. Calculate comprehensive risk breakdown with 7-factor model
@@ -1335,9 +1361,9 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "h3_score": h3_score,
                         "element9_mismatch": element9_is_mismatch,
                         "dwell_anomaly": dwell_days and dwell_days > 8,
-                        "ad_cvd_active": ad_cvd_applicable
+                        "ad_cvd_active": ad_cvd_applicable,
                     },
-                    risk_score=risk_score
+                    risk_score=risk_score,
                 )
             except Exception as e:
                 logger.warning(f"[{shipment_id}] Vertex AI evidence generation failed: {e}")
@@ -1354,10 +1380,11 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                 "altana_findings": altana_findings if altana_findings else None,
                 "isf_lazy_load": isf_data if isf_data else None,
                 "vertex_ai_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None,
-                "senzing_resolution": {
-                    "available": not senzing_failure_reason,
-                    "failure_reason": senzing_failure_reason
-                } if risk_score >= 70 else None
+                "senzing_resolution": (
+                    {"available": not senzing_failure_reason, "failure_reason": senzing_failure_reason}
+                    if risk_score >= 70
+                    else None
+                ),
             },
             "sections": {
                 "section_3_1_shipment_identification": {
@@ -1382,7 +1409,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                             "unit": "shipment",
                             "declared_value": declared_value,
                         }
-                    ]
+                    ],
                 },
                 "section_3_3_routing_history": {
                     "title": "Table 3-3: AIS Routing History",
@@ -1391,52 +1418,70 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                     "route": port_calls or [origin, "SG", destination],
                     "dwell_days": dwell_days,
                     "dwell_baseline": 2.1 if hs_code and str(hs_code).startswith("760") else 2.5,
-                    "dwell_anomaly": "HIGH" if dwell_days and dwell_days > 8 else ("MEDIUM" if dwell_days and dwell_days > 4 else "NORMAL"),
+                    "dwell_anomaly": (
+                        "HIGH"
+                        if dwell_days and dwell_days > 8
+                        else ("MEDIUM" if dwell_days and dwell_days > 4 else "NORMAL")
+                    ),
                     "ais_gaps": 0 if dwell_days and dwell_days < 5 else 2,
-                    "summary": f"Vessel {vessel_name}: {' → '.join(str(p) for p in (port_calls or [origin, 'SG', destination])[:3])} → {destination}. Dwell: {dwell_days}d vs baseline {2.1 if hs_code and str(hs_code).startswith('760') else 2.5}d."
+                    "summary": f"Vessel {vessel_name}: {' → '.join(str(p) for p in (port_calls or [origin, 'SG', destination])[:3])} → {destination}. Dwell: {dwell_days}d vs baseline {2.1 if hs_code and str(hs_code).startswith('760') else 2.5}d.",
                 },
                 "section_3_4_parties_and_roles": {
                     "title": "Table 3-4: Parties and Roles",
                     "parties": [
                         {"entity": shipper, "role": "SHIPPER", "country": origin},
                         {"entity": consignee, "role": "CONSIGNEE", "country": destination},
-                        {"entity": vessel_name, "role": "CARRIER", "country": "ZZ"}
-                    ]
+                        {"entity": vessel_name, "role": "CARRIER", "country": "ZZ"},
+                    ],
                 },
                 "section_3_5_entity_ownership_chain": {
                     "title": "Table 3-5: Entity Ownership Chain",
-                    "chain": entity_chain if entity_chain else [
-                        {
-                            "entity": shipper,
-                            "country": origin,
-                            "role": "EXPORTER/SHIPPER",
-                            "entity_type": "MANUFACTURER" if shipper_age_months and shipper_age_months < 24 else "ESTABLISHED",
-                            "ofac_match": ofac_findings.get("shipper_match", False),
-                            "ofac_source": ofac_findings.get("shipper_source", "")
-                        },
-                        {
-                            "entity": consignee,
-                            "country": destination,
-                            "role": "IMPORTER/CONSIGNEE",
-                            "entity_type": "DISTRIBUTOR",
-                            "ofac_match": ofac_findings.get("consignee_match", False),
-                            "ofac_source": ofac_findings.get("consignee_source", "")
-                        }
-                    ],
+                    "chain": (
+                        entity_chain
+                        if entity_chain
+                        else [
+                            {
+                                "entity": shipper,
+                                "country": origin,
+                                "role": "EXPORTER/SHIPPER",
+                                "entity_type": (
+                                    "MANUFACTURER" if shipper_age_months and shipper_age_months < 24 else "ESTABLISHED"
+                                ),
+                                "ofac_match": ofac_findings.get("shipper_match", False),
+                                "ofac_source": ofac_findings.get("shipper_source", ""),
+                            },
+                            {
+                                "entity": consignee,
+                                "country": destination,
+                                "role": "IMPORTER/CONSIGNEE",
+                                "entity_type": "DISTRIBUTOR",
+                                "ofac_match": ofac_findings.get("consignee_match", False),
+                                "ofac_source": ofac_findings.get("consignee_source", ""),
+                            },
+                        ]
+                    ),
                     "summary": f"{shipper} ({origin}) exports to {consignee} ({destination})",
-                    "senzing_resolution": {
-                        "status": "completed" if entity_chain else "unavailable",
-                        "failure_reason": senzing_failure_reason,
-                        "entities_resolved": len(entity_chain)
-                    } if risk_score >= 70 else None
+                    "senzing_resolution": (
+                        {
+                            "status": "completed" if entity_chain else "unavailable",
+                            "failure_reason": senzing_failure_reason,
+                            "entities_resolved": len(entity_chain),
+                        }
+                        if risk_score >= 70
+                        else None
+                    ),
                 },
                 "section_3_6_historical_import_pattern": {
                     "title": "Table 3-6: Historical Import Pattern Analysis",
                     "origin": origin,
                     "destination": destination,
-                    "pattern": vertex_ai_evidence.get("section_3_6_historical_pattern", "") if vertex_ai_evidence else "Analyze import trends for this shipper/consignee pair",
+                    "pattern": (
+                        vertex_ai_evidence.get("section_3_6_historical_pattern", "")
+                        if vertex_ai_evidence
+                        else "Analyze import trends for this shipper/consignee pair"
+                    ),
                     "llm_generated": bool(vertex_ai_evidence),
-                    "llm_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None
+                    "llm_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None,
                 },
                 "section_3_7_trade_flow_intelligence": {
                     "title": "Table 3-7: Trade Flow Intelligence",
@@ -1447,9 +1492,13 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                     "ad_cvd_rate": f"{ad_cvd_rate * 100:.2f}%" if ad_cvd_applicable else "0%",
                     "prior_filings": 12 if origin == "CN" and hs_code and str(hs_code).startswith("760") else 3,
                     "origin_shift_trend": "INCREASING" if origin == "VN" or origin == "MY" else "STABLE",
-                    "summary": vertex_ai_evidence.get("section_3_7_trade_flow", "") if vertex_ai_evidence else f"HTS {hs_code} ({commodity_name}) from {origin}: {'Active AD/CVD orders' if ad_cvd_applicable else 'No AD/CVD'} at {ad_cvd_rate*100:.2f}% duty. {12 if origin == 'CN' else 3} prior filings detected.",
+                    "summary": (
+                        vertex_ai_evidence.get("section_3_7_trade_flow", "")
+                        if vertex_ai_evidence
+                        else f"HTS {hs_code} ({commodity_name}) from {origin}: {'Active AD/CVD orders' if ad_cvd_applicable else 'No AD/CVD'} at {ad_cvd_rate*100:.2f}% duty. {12 if origin == 'CN' else 3} prior filings detected."
+                    ),
                     "llm_generated": bool(vertex_ai_evidence),
-                    "llm_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None
+                    "llm_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None,
                 },
                 "section_3_8_document_review": {
                     "title": "Table 3-8: Document Review Checklist",
@@ -1457,8 +1506,8 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         {"document": "Commercial Invoice", "status": "RECEIVED"},
                         {"document": "Packing List", "status": "RECEIVED"},
                         {"document": "Bill of Lading", "status": "RECEIVED"},
-                        {"document": "Factory Records", "status": "MISSING"}
-                    ]
+                        {"document": "Factory Records", "status": "MISSING"},
+                    ],
                 },
                 "section_3_9_document_consistency": {
                     "title": "Table 3-9: Document Consistency Matrix (ISF Element 9 Check)",
@@ -1467,64 +1516,80 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "actual_stuffing_country": element9_actual or ais_stuffing_country,
                         "is_mismatch": element9_is_mismatch,
                         "mismatch_confidence": 0.98 if element9_is_mismatch else 0.0,
-                        "evidence": [
-                            f"ISF declared origin: {element9_declared}",
-                            f"Actual stuffing location (AIS): {element9_actual or ais_stuffing_country}",
-                            f"Port dwell evidence supports {element9_actual or ais_stuffing_country} origin"
-                        ] if element9_is_mismatch else ["No mismatch detected"]
+                        "evidence": (
+                            [
+                                f"ISF declared origin: {element9_declared}",
+                                f"Actual stuffing location (AIS): {element9_actual or ais_stuffing_country}",
+                                f"Port dwell evidence supports {element9_actual or ais_stuffing_country} origin",
+                            ]
+                            if element9_is_mismatch
+                            else ["No mismatch detected"]
+                        ),
                     },
-                    "summary": f"ISF Element 9 {'MISMATCH' if element9_is_mismatch else 'CONSISTENT'}: Declared {element9_declared}, Actual {element9_actual or ais_stuffing_country}"
+                    "summary": f"ISF Element 9 {'MISMATCH' if element9_is_mismatch else 'CONSISTENT'}: Declared {element9_declared}, Actual {element9_actual or ais_stuffing_country}",
                 },
                 "section_3_10_supplier_verification": {
                     "title": "Table 3-10: Supplier Manufacturing Verification",
                     "shipper": shipper,
                     "shipper_age_months": shipper_age_months,
-                    "shipper_age_risk": "VERY_NEW" if shipper_age_months and shipper_age_months < 12 else ("NEW" if shipper_age_months and shipper_age_months < 24 else "ESTABLISHED"),
+                    "shipper_age_risk": (
+                        "VERY_NEW"
+                        if shipper_age_months and shipper_age_months < 12
+                        else ("NEW" if shipper_age_months and shipper_age_months < 24 else "ESTABLISHED")
+                    ),
                     "declared_volume_kg": declared_weight,
-                    "capacity_assessment": "UNVERIFIED - newly established entity" if shipper_age_months and shipper_age_months < 12 else "CAPABLE - established manufacturer",
-                    "summary": f"Shipper {shipper} age: {shipper_age_months} months. {'HIGH RISK - newly established, capacity unverified' if shipper_age_months and shipper_age_months < 12 else 'NORMAL - established manufacturer'}"
+                    "capacity_assessment": (
+                        "UNVERIFIED - newly established entity"
+                        if shipper_age_months and shipper_age_months < 12
+                        else "CAPABLE - established manufacturer"
+                    ),
+                    "summary": f"Shipper {shipper} age: {shipper_age_months} months. {'HIGH RISK - newly established, capacity unverified' if shipper_age_months and shipper_age_months < 12 else 'NORMAL - established manufacturer'}",
                 },
                 "section_3_11_risk_indicators": {
                     "title": "Table 3-11: Risk Indicator Summary",
-                    "indicators": vertex_ai_evidence.get("section_3_11_risk_indicators", []) if vertex_ai_evidence else [
-                        {
-                            "indicator": "High-Risk Corridor",
-                            "present": h1_score > 0,
-                            "evidence": f"{origin}→{destination} with AD/CVD {'ACTIVE' if ad_cvd_applicable else 'NONE'}",
-                            "authority": "19 CFR 165, Tariff analysis"
-                        },
-                        {
-                            "indicator": "ISF Element 9 Mismatch",
-                            "present": element9_is_mismatch,
-                            "evidence": f"Declared {element9_declared}, actual {element9_actual or ais_stuffing_country}",
-                            "authority": "ISF pre-arrival filing analysis"
-                        },
-                        {
-                            "indicator": "Vessel Dwell Anomaly",
-                            "present": h2_score > 0 and dwell_days and dwell_days > 8,
-                            "evidence": f"Dwell {dwell_days}d vs baseline 2-3d (percentile 99)",
-                            "authority": "AIS vessel tracking data"
-                        },
-                        {
-                            "indicator": "New Shipper/Exporter",
-                            "present": shipper_age_months and shipper_age_months < 24,
-                            "evidence": f"Shipper established {shipper_age_months} months ago",
-                            "authority": "Enterprise registry, D&B data"
-                        },
-                        {
-                            "indicator": "AD/CVD Active",
-                            "present": ad_cvd_applicable,
-                            "evidence": f"{commodity_name} duty rate {ad_cvd_rate*100:.2f}%",
-                            "authority": "ITAR Database, 19 CFR 704"
-                        },
-                        {
-                            "indicator": "Transshipment Indicators",
-                            "present": element9_is_mismatch or (dwell_days and dwell_days > 8),
-                            "evidence": f"{'ISF mismatch' if element9_is_mismatch else ''} {'+ extended dwell' if dwell_days and dwell_days > 8 else ''}",
-                            "authority": "EAPA statutory standard, 19 USC § 1516a"
-                        }
-                    ],
-                    "llm_generated": bool(vertex_ai_evidence)
+                    "indicators": (
+                        vertex_ai_evidence.get("section_3_11_risk_indicators", [])
+                        if vertex_ai_evidence
+                        else [
+                            {
+                                "indicator": "High-Risk Corridor",
+                                "present": h1_score > 0,
+                                "evidence": f"{origin}→{destination} with AD/CVD {'ACTIVE' if ad_cvd_applicable else 'NONE'}",
+                                "authority": "19 CFR 165, Tariff analysis",
+                            },
+                            {
+                                "indicator": "ISF Element 9 Mismatch",
+                                "present": element9_is_mismatch,
+                                "evidence": f"Declared {element9_declared}, actual {element9_actual or ais_stuffing_country}",
+                                "authority": "ISF pre-arrival filing analysis",
+                            },
+                            {
+                                "indicator": "Vessel Dwell Anomaly",
+                                "present": h2_score > 0 and dwell_days and dwell_days > 8,
+                                "evidence": f"Dwell {dwell_days}d vs baseline 2-3d (percentile 99)",
+                                "authority": "AIS vessel tracking data",
+                            },
+                            {
+                                "indicator": "New Shipper/Exporter",
+                                "present": shipper_age_months and shipper_age_months < 24,
+                                "evidence": f"Shipper established {shipper_age_months} months ago",
+                                "authority": "Enterprise registry, D&B data",
+                            },
+                            {
+                                "indicator": "AD/CVD Active",
+                                "present": ad_cvd_applicable,
+                                "evidence": f"{commodity_name} duty rate {ad_cvd_rate*100:.2f}%",
+                                "authority": "ITAR Database, 19 CFR 704",
+                            },
+                            {
+                                "indicator": "Transshipment Indicators",
+                                "present": element9_is_mismatch or (dwell_days and dwell_days > 8),
+                                "evidence": f"{'ISF mismatch' if element9_is_mismatch else ''} {'+ extended dwell' if dwell_days and dwell_days > 8 else ''}",
+                                "authority": "EAPA statutory standard, 19 USC § 1516a",
+                            },
+                        ]
+                    ),
+                    "llm_generated": bool(vertex_ai_evidence),
                 },
                 "section_3_12_score_breakdown": {
                     "title": "Table 3-12: Risk Score Breakdown (ML Model)",
@@ -1540,14 +1605,25 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                                 "weight": round(c.weight, 1),
                                 "weighted_result": round(c.weighted_result, 1),
                                 "rationale": c.rationale,
-                                "evidence": c.evidence or []
+                                "evidence": c.evidence or [],
                             }
                             for c in risk_breakdown.components
-                        ] if risk_breakdown
+                        ]
+                        if risk_breakdown
                         else [
                             {"name": "H1 Corridor Risk", "score": shipment.get("h1_score") or 0, "max": 40},
                             {"name": "H2 Anomaly Detection", "score": shipment.get("h2_score") or 0, "max": 35},
-                            {"name": "H3 Intelligence", "score": min(max(0, risk_score - (shipment.get("h1_score") or 0) - (shipment.get("h2_score") or 0)), 25), "max": 25},
+                            {
+                                "name": "H3 Intelligence",
+                                "score": min(
+                                    max(
+                                        0,
+                                        risk_score - (shipment.get("h1_score") or 0) - (shipment.get("h2_score") or 0),
+                                    ),
+                                    25,
+                                ),
+                                "max": 25,
+                            },
                         ]
                     ),
                     "confidence_interval": risk_breakdown.confidence_interval if risk_breakdown else "UNKNOWN",
@@ -1555,8 +1631,12 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         "threshold": 70,
                         "current_score": risk_breakdown.final_score if risk_breakdown else risk_score,
                         "invoked": (risk_breakdown.final_score >= 70 if risk_breakdown else risk_score >= 70),
-                        "stub_response": "CLEAR" if (risk_breakdown and risk_breakdown.final_score < 70) or risk_score < 70 else "PENDING"
-                    }
+                        "stub_response": (
+                            "CLEAR"
+                            if (risk_breakdown and risk_breakdown.final_score < 70) or risk_score < 70
+                            else "PENDING"
+                        ),
+                    },
                 },
                 "section_3_13_what_if_scenarios": {
                     "title": "Table 3-13: What-If Scenarios (Counterfactual Analysis)",
@@ -1565,27 +1645,31 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                             "scenario": f"If ISF Element 9 origin matched declared ({element9_declared})",
                             "impact": "Remove ISF mismatch penalty",
                             "revised_score": max(0, risk_score - 15) if element9_is_mismatch else risk_score,
-                            "confidence": "HIGH if documentation is legitimate"
+                            "confidence": "HIGH if documentation is legitimate",
                         },
                         {
                             "scenario": f"If shipper age > 5 years (currently {shipper_age_months} months)",
                             "impact": "Remove new shipper premium",
-                            "revised_score": max(0, risk_score - 10) if shipper_age_months and shipper_age_months < 60 else risk_score,
-                            "confidence": "HIGH if shipper history is verifiable"
+                            "revised_score": (
+                                max(0, risk_score - 10)
+                                if shipper_age_months and shipper_age_months < 60
+                                else risk_score
+                            ),
+                            "confidence": "HIGH if shipper history is verifiable",
                         },
                         {
                             "scenario": f"If no AD/CVD active on {hs_code}",
                             "impact": "Remove tariff order incentive",
                             "revised_score": max(0, risk_score - 12) if ad_cvd_applicable else risk_score,
-                            "confidence": "CERTAIN - tariff analysis"
+                            "confidence": "CERTAIN - tariff analysis",
                         },
                         {
                             "scenario": f"If vessel dwell was normal (< 3 days, not {dwell_days}d)",
                             "impact": "Remove anomaly-based suspicion",
                             "revised_score": max(0, risk_score - 10) if dwell_days and dwell_days > 8 else risk_score,
-                            "confidence": "HIGH if AIS data is reliable"
-                        }
-                    ]
+                            "confidence": "HIGH if AIS data is reliable",
+                        },
+                    ],
                 },
                 "section_3_14_data_sources": {
                     "title": "Table 3-14: Data Sources and Uses",
@@ -1593,8 +1677,11 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                         {"source": "ISF Pre-Arrival Filing", "use": "Stuffing location and origin verification"},
                         {"source": "AIS Vessel Tracking", "use": "Dwell time and routing anomaly detection"},
                         {"source": "Tariff Database", "use": "AD/CVD rate and duty analysis"},
-                        {"source": "Senzing Entity Resolution", "use": "Ownership chain and entity relationship mapping"},
-                    ]
+                        {
+                            "source": "Senzing Entity Resolution",
+                            "use": "Ownership chain and entity relationship mapping",
+                        },
+                    ],
                 },
             },
             "recommendation": recommended_action,
@@ -1604,12 +1691,14 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
 
     except Exception as e:
         import traceback
+
         logger.error(f"Error generating referral package: {e}")
         logger.error(traceback.format_exc())
         return {"error": str(e), "status": "failed"}
 
 
 # ============= COMMAND CENTER ENDPOINTS =============
+
 
 @app.get("/api/ports/{port}/vessels-of-interest")
 async def get_vessels_of_interest(port: str, time_window: str = "7d") -> Dict[str, Any]:
@@ -1678,17 +1767,19 @@ async def get_vessels_of_interest(port: str, time_window: str = "7d") -> Dict[st
             else:
                 cargo_risk_level = "LOW"
 
-            vessels.append({
-                "vessel_id": vessel["vessel_id"],
-                "vessel_name": vessel["vessel_name"],
-                "flag_state": vessel["flag_state"],
-                "current_port": vessel["current_port"],
-                "status": vessel["status"],
-                "cargo_risk_level": cargo_risk_level,
-                "avg_risk_score": round(avg_risk, 1),
-                "manifest_count": len(vessel["manifests"]),
-                "eta": "2026-05-23T14:30:00Z",
-            })
+            vessels.append(
+                {
+                    "vessel_id": vessel["vessel_id"],
+                    "vessel_name": vessel["vessel_name"],
+                    "flag_state": vessel["flag_state"],
+                    "current_port": vessel["current_port"],
+                    "status": vessel["status"],
+                    "cargo_risk_level": cargo_risk_level,
+                    "avg_risk_score": round(avg_risk, 1),
+                    "manifest_count": len(vessel["manifests"]),
+                    "eta": "2026-05-23T14:30:00Z",
+                }
+            )
 
         # If no vessels from data, use fixture data for demo
         if not vessels:
@@ -1749,7 +1840,9 @@ async def get_vessels_of_interest(port: str, time_window: str = "7d") -> Dict[st
 
 
 @app.get("/api/risk-corridors/{corridor_id}/timeline")
-async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
+async def get_corridor_timeline(
+    corridor_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None
+) -> Dict[str, Any]:
     """Get timeline of signal events for a risk corridor.
 
     Returns chronological events showing entity discovery, relationship links, shipments, and alerts.
@@ -1772,8 +1865,9 @@ async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = No
             await client.aclose()
 
         # Filter to corridor_id
-        corridor_shipments = [s for s in shipments
-                             if corridor_factory.create_corridor_from_shipment(s).get("corridor_id") == corridor_id]
+        corridor_shipments = [
+            s for s in shipments if corridor_factory.create_corridor_from_shipment(s).get("corridor_id") == corridor_id
+        ]
 
         # Build timeline from shipment evidence data
         timeline_events = []
@@ -1785,11 +1879,13 @@ async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = No
 
             # Entity discovery event
             if shipper:
-                timeline_events.append({
-                    "date": filing_date,
-                    "event": f"{shipper} manifest filed (ID: {manifest_id})",
-                    "type": "entity",
-                })
+                timeline_events.append(
+                    {
+                        "date": filing_date,
+                        "event": f"{shipper} manifest filed (ID: {manifest_id})",
+                        "type": "entity",
+                    }
+                )
 
             # ISF Element 9 evidence
             element9 = shipment.get("element_9", {})
@@ -1797,11 +1893,13 @@ async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = No
                 declared = element9.get("declared_country", "?")
                 actual = element9.get("actual_stuffing_country", "?")
                 confidence = element9.get("mismatch_confidence", 0) * 100
-                timeline_events.append({
-                    "date": filing_date,
-                    "event": f"ISF Element 9 mismatch: declared {declared}, actual stuffing {actual} ({confidence:.0f}% confidence)",
-                    "type": "alert",
-                })
+                timeline_events.append(
+                    {
+                        "date": filing_date,
+                        "event": f"ISF Element 9 mismatch: declared {declared}, actual stuffing {actual} ({confidence:.0f}% confidence)",
+                        "type": "alert",
+                    }
+                )
 
             # Dwell anomaly
             if element9.get("dwell_days"):
@@ -1809,28 +1907,34 @@ async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = No
                 baseline = element9.get("baseline_dwell_days", 1)
                 if dwell > baseline * 2:
                     ratio = dwell / baseline
-                    timeline_events.append({
-                        "date": filing_date,
-                        "event": f"Port dwell anomaly: {dwell}d ({ratio:.1f}× baseline {baseline}d)",
-                        "type": "alert",
-                    })
+                    timeline_events.append(
+                        {
+                            "date": filing_date,
+                            "event": f"Port dwell anomaly: {dwell}d ({ratio:.1f}× baseline {baseline}d)",
+                            "type": "alert",
+                        }
+                    )
 
             # Risk score
             risk_score = shipment.get("risk_score", 0)
             if risk_score >= 70:
-                timeline_events.append({
-                    "date": filing_date,
-                    "event": f"High-risk signal: {risk_score}/100 (Examine on Arrival recommended)",
-                    "type": "alert",
-                })
+                timeline_events.append(
+                    {
+                        "date": filing_date,
+                        "event": f"High-risk signal: {risk_score}/100 (Examine on Arrival recommended)",
+                        "type": "alert",
+                    }
+                )
 
         # If no events, provide fallback
         if not timeline_events:
-            timeline_events = [{
-                "date": "2026-05-20",
-                "event": f"Corridor {corridor_id} - no signal events recorded",
-                "type": "entity",
-            }]
+            timeline_events = [
+                {
+                    "date": "2026-05-20",
+                    "event": f"Corridor {corridor_id} - no signal events recorded",
+                    "type": "entity",
+                }
+            ]
 
         # Sort chronologically
         timeline_events.sort(key=lambda e: e["date"])
@@ -1845,6 +1949,7 @@ async def get_corridor_timeline(corridor_id: str, start_date: Optional[str] = No
     except Exception as e:
         logger.error(f"Error fetching corridor timeline: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return {
             "corridor_id": corridor_id,
@@ -1890,6 +1995,7 @@ async def generate_referral_package(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 class PDFExportRequest(BaseModel):
     """Request model for PDF export"""
+
     case_id: str
     shipment_id: str
     risk_score: int
@@ -1912,113 +2018,120 @@ async def export_referral_pdf(request: PDFExportRequest) -> StreamingResponse:
 
         # Build comprehensive sections data (combining actual and mock data)
         sections = {
-            'section_3_1_shipment_identification': {
-                'commodity': request.commodity_name,
-                'hs_code': '8541.40',
-                'route': f"{request.origin_country} → {request.destination_country}",
-                'shipper': request.shipper_name,
-                'consignee': 'Gulf Coast Industrial',
-                'vessel': 'MV Seamless Journey',
-                'value_usd': 8177.41,
-                'weight_kg': 11624.0
+            "section_3_1_shipment_identification": {
+                "commodity": request.commodity_name,
+                "hs_code": "8541.40",
+                "route": f"{request.origin_country} → {request.destination_country}",
+                "shipper": request.shipper_name,
+                "consignee": "Gulf Coast Industrial",
+                "vessel": "MV Seamless Journey",
+                "value_usd": 8177.41,
+                "weight_kg": 11624.0,
             },
-            'section_3_2_line_items': {
-                'items': [{
-                    'hs_code': '8541.40',
-                    'description': request.commodity_name,
-                    'quantity': 1,
-                    'unit': 'shipment',
-                    'declared_value': 8177.41
-                }]
-            },
-            'section_3_3_routing_history': {
-                'summary': f'Vessel MV Seamless Journey: {request.origin_country} → SG → {request.destination_country}. High-risk corridor with elevated dwell times.',
-                'vessel': 'MV Seamless Journey',
-                'route': [request.origin_country, 'SG', request.destination_country],
-                'dwell_days': 0,
-                'dwell_baseline': 2.5,
-                'dwell_anomaly': 'NORMAL',
-                'ais_gaps': 2
-            },
-            'section_3_4_parties_and_roles': {
-                'parties': [
-                    {'entity': request.shipper_name, 'role': 'SHIPPER', 'country': request.origin_country},
-                    {'entity': 'Gulf Coast Industrial', 'role': 'CONSIGNEE', 'country': request.destination_country},
+            "section_3_2_line_items": {
+                "items": [
+                    {
+                        "hs_code": "8541.40",
+                        "description": request.commodity_name,
+                        "quantity": 1,
+                        "unit": "shipment",
+                        "declared_value": 8177.41,
+                    }
                 ]
-            }
+            },
+            "section_3_3_routing_history": {
+                "summary": f"Vessel MV Seamless Journey: {request.origin_country} → SG → {request.destination_country}. High-risk corridor with elevated dwell times.",
+                "vessel": "MV Seamless Journey",
+                "route": [request.origin_country, "SG", request.destination_country],
+                "dwell_days": 0,
+                "dwell_baseline": 2.5,
+                "dwell_anomaly": "NORMAL",
+                "ais_gaps": 2,
+            },
+            "section_3_4_parties_and_roles": {
+                "parties": [
+                    {"entity": request.shipper_name, "role": "SHIPPER", "country": request.origin_country},
+                    {"entity": "Gulf Coast Industrial", "role": "CONSIGNEE", "country": request.destination_country},
+                ]
+            },
         }
 
         # Create PDF in memory
         pdf_buffer = io.BytesIO()
-        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
+        doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, topMargin=0.5 * inch, bottomMargin=0.5 * inch)
 
         # Define styles
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
-            'CustomTitle',
-            parent=styles['Heading1'],
+            "CustomTitle",
+            parent=styles["Heading1"],
             fontSize=14,
-            textColor=colors.HexColor('#005EA2'),
+            textColor=colors.HexColor("#005EA2"),
             spaceAfter=4,
             alignment=TA_CENTER,
-            fontName='Helvetica-Bold'
+            fontName="Helvetica-Bold",
         )
 
         subtitle_style = ParagraphStyle(
-            'CustomSubtitle',
-            parent=styles['Normal'],
+            "CustomSubtitle",
+            parent=styles["Normal"],
             fontSize=8,
-            textColor=colors.HexColor('#666666'),
+            textColor=colors.HexColor("#666666"),
             spaceAfter=10,
             alignment=TA_CENTER,
-            fontName='Helvetica'
+            fontName="Helvetica",
         )
 
         heading_style = ParagraphStyle(
-            'CustomHeading',
-            parent=styles['Heading2'],
+            "CustomHeading",
+            parent=styles["Heading2"],
             fontSize=10,
-            textColor=colors.HexColor('#005EA2'),
+            textColor=colors.HexColor("#005EA2"),
             spaceAfter=6,
             spaceBefore=6,
-            fontName='Helvetica-Bold'
+            fontName="Helvetica-Bold",
         )
 
         normal_style = ParagraphStyle(
-            'CustomNormal',
-            parent=styles['Normal'],
+            "CustomNormal",
+            parent=styles["Normal"],
             fontSize=8,
-            textColor=colors.HexColor('#333333'),
+            textColor=colors.HexColor("#333333"),
             spaceAfter=4,
-            leading=10
+            leading=10,
         )
 
         table_header_style = ParagraphStyle(
-            'TableHeader',
-            parent=styles['Normal'],
+            "TableHeader",
+            parent=styles["Normal"],
             fontSize=8,
-            textColor=colors.HexColor('#FFFFFF'),
-            fontName='Helvetica-Bold',
-            alignment=TA_CENTER
+            textColor=colors.HexColor("#FFFFFF"),
+            fontName="Helvetica-Bold",
+            alignment=TA_CENTER,
         )
 
         # Build document content
         content = []
 
         # Cover page
-        content.append(Spacer(1, 1*inch))
+        content.append(Spacer(1, 1 * inch))
         content.append(Paragraph("CBP ENHANCED PENALTY ASSESSMENT (EAPA)", title_style))
         content.append(Paragraph("REFERRAL PACKAGE", title_style))
-        content.append(Spacer(1, 0.3*inch))
+        content.append(Spacer(1, 0.3 * inch))
         content.append(Paragraph(f"Case ID: {request.case_id}", normal_style))
         content.append(Paragraph(f"Shipment ID: {request.shipment_id}", normal_style))
         content.append(Paragraph(f"Date Submitted: {datetime.now().strftime('%m/%d/%Y')}", normal_style))
-        content.append(Spacer(1, 0.5*inch))
+        content.append(Spacer(1, 0.5 * inch))
 
         # Risk assessment box
-        risk_color = '#D83933' if request.risk_score >= 80 else '#FFBE2E' if request.risk_score >= 50 else '#07A41E'
-        content.append(Paragraph(f"RISK SCORE: <font color='{risk_color}'><b>{request.risk_score}/100</b></font> — {request.recommendation}", heading_style))
-        content.append(Spacer(1, 0.5*inch))
+        risk_color = "#D83933" if request.risk_score >= 80 else "#FFBE2E" if request.risk_score >= 50 else "#07A41E"
+        content.append(
+            Paragraph(
+                f"RISK SCORE: <font color='{risk_color}'><b>{request.risk_score}/100</b></font> — {request.recommendation}",
+                heading_style,
+            )
+        )
+        content.append(Spacer(1, 0.5 * inch))
 
         # Page break
         content.append(PageBreak())
@@ -2026,154 +2139,202 @@ async def export_referral_pdf(request: PDFExportRequest) -> StreamingResponse:
         # Table of Contents / Executive Summary
         content.append(Paragraph("EXECUTIVE SUMMARY", heading_style))
         content.append(Paragraph(f"<b>Shipper:</b> {request.shipper_name}", normal_style))
-        content.append(Paragraph(f"<b>Consignee:</b> {sections.get('section_3_1_shipment_identification', {}).get('consignee', 'Unknown')}", normal_style))
+        content.append(
+            Paragraph(
+                f"<b>Consignee:</b> {sections.get('section_3_1_shipment_identification', {}).get('consignee', 'Unknown')}",
+                normal_style,
+            )
+        )
         content.append(Paragraph(f"<b>Commodity:</b> {request.commodity_name}", normal_style))
-        content.append(Paragraph(f"<b>HS Code:</b> {sections.get('section_3_1_shipment_identification', {}).get('hs_code', 'Unknown')}", normal_style))
-        content.append(Paragraph(f"<b>Route:</b> {request.origin_country} → {request.destination_country}", normal_style))
-        content.append(Spacer(1, 0.15*inch))
+        content.append(
+            Paragraph(
+                f"<b>HS Code:</b> {sections.get('section_3_1_shipment_identification', {}).get('hs_code', 'Unknown')}",
+                normal_style,
+            )
+        )
+        content.append(
+            Paragraph(f"<b>Route:</b> {request.origin_country} → {request.destination_country}", normal_style)
+        )
+        content.append(Spacer(1, 0.15 * inch))
 
         # Table 3-1: Shipment Identification
-        s31 = sections.get('section_3_1_shipment_identification', {})
+        s31 = sections.get("section_3_1_shipment_identification", {})
         if s31:
             content.append(PageBreak())
             content.append(Paragraph("TABLE 3-1: SHIPMENT IDENTIFICATION", heading_style))
             s31_table = [
-                ['Commodity', s31.get('commodity', 'N/A')],
-                ['HS Code', s31.get('hs_code', 'N/A')],
-                ['Route', s31.get('route', 'N/A')],
-                ['Shipper', s31.get('shipper', 'N/A')],
-                ['Consignee', s31.get('consignee', 'N/A')],
-                ['Vessel', s31.get('vessel', 'N/A')],
-                ['Value (USD)', f"${s31.get('value_usd', 0):,.2f}"],
-                ['Weight (kg)', f"{s31.get('weight_kg', 0):,.0f}"],
+                ["Commodity", s31.get("commodity", "N/A")],
+                ["HS Code", s31.get("hs_code", "N/A")],
+                ["Route", s31.get("route", "N/A")],
+                ["Shipper", s31.get("shipper", "N/A")],
+                ["Consignee", s31.get("consignee", "N/A")],
+                ["Vessel", s31.get("vessel", "N/A")],
+                ["Value (USD)", f"${s31.get('value_usd', 0):,.2f}"],
+                ["Weight (kg)", f"{s31.get('weight_kg', 0):,.0f}"],
             ]
-            s31_table_obj = Table(s31_table, colWidths=[2*inch, 4*inch])
-            s31_table_obj.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E8F0F8')),
-                ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ]))
+            s31_table_obj = Table(s31_table, colWidths=[2 * inch, 4 * inch])
+            s31_table_obj.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E8F0F8")),
+                        ("TEXTCOLOR", (0, 0), (-1, -1), colors.black),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                        ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                    ]
+                )
+            )
             content.append(s31_table_obj)
-            content.append(Spacer(1, 0.2*inch))
+            content.append(Spacer(1, 0.2 * inch))
 
         # Table 3-2: Line Items
-        s32 = sections.get('section_3_2_line_items', {})
-        if s32 and s32.get('items'):
+        s32 = sections.get("section_3_2_line_items", {})
+        if s32 and s32.get("items"):
             content.append(Paragraph("TABLE 3-2: LINE-ITEM DETAIL", heading_style))
-            items = s32.get('items', [])
-            s32_data = [['HS Code', 'Description', 'Quantity', 'Unit', 'Value']]
+            items = s32.get("items", [])
+            s32_data = [["HS Code", "Description", "Quantity", "Unit", "Value"]]
             for item in items:
-                s32_data.append([
-                    item.get('hs_code', ''),
-                    item.get('description', '')[:40],
-                    str(item.get('quantity', '')),
-                    item.get('unit', ''),
-                    f"${item.get('declared_value', 0):,.2f}",
-                ])
-            s32_table = Table(s32_data, colWidths=[1*inch, 2*inch, 0.8*inch, 0.7*inch, 1.5*inch])
-            s32_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#005EA2')),
-                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ]))
+                s32_data.append(
+                    [
+                        item.get("hs_code", ""),
+                        item.get("description", "")[:40],
+                        str(item.get("quantity", "")),
+                        item.get("unit", ""),
+                        f"${item.get('declared_value', 0):,.2f}",
+                    ]
+                )
+            s32_table = Table(s32_data, colWidths=[1 * inch, 2 * inch, 0.8 * inch, 0.7 * inch, 1.5 * inch])
+            s32_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#005EA2")),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                        ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                    ]
+                )
+            )
             content.append(s32_table)
-            content.append(Spacer(1, 0.2*inch))
+            content.append(Spacer(1, 0.2 * inch))
 
         # Table 3-3: Routing History
-        s33 = sections.get('section_3_3_routing_history', {})
+        s33 = sections.get("section_3_3_routing_history", {})
         if s33:
             content.append(Paragraph("TABLE 3-3: AIS ROUTING HISTORY", heading_style))
-            content.append(Paragraph(s33.get('summary', 'No routing data available'), normal_style))
+            content.append(Paragraph(s33.get("summary", "No routing data available"), normal_style))
             route_data = [
-                ['Vessel', s33.get('vessel', 'N/A')],
-                ['Route', ' → '.join(s33.get('route', []))],
-                ['Dwell Days', f"{s33.get('dwell_days', 0)}d (baseline: {s33.get('dwell_baseline', 0)}d)"],
-                ['Dwell Anomaly', s33.get('dwell_anomaly', 'N/A')],
-                ['AIS Gaps', str(s33.get('ais_gaps', 0))],
+                ["Vessel", s33.get("vessel", "N/A")],
+                ["Route", " → ".join(s33.get("route", []))],
+                ["Dwell Days", f"{s33.get('dwell_days', 0)}d (baseline: {s33.get('dwell_baseline', 0)}d)"],
+                ["Dwell Anomaly", s33.get("dwell_anomaly", "N/A")],
+                ["AIS Gaps", str(s33.get("ais_gaps", 0))],
             ]
-            route_table = Table(route_data, colWidths=[2*inch, 4*inch])
-            route_table.setStyle(TableStyle([
-                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#E8F0F8')),
-                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
-                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ]))
+            route_table = Table(route_data, colWidths=[2 * inch, 4 * inch])
+            route_table.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E8F0F8")),
+                        ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+                        ("FONTSIZE", (0, 0), (-1, -1), 8),
+                        ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                    ]
+                )
+            )
             content.append(route_table)
-            content.append(Spacer(1, 0.2*inch))
+            content.append(Spacer(1, 0.2 * inch))
 
         # Table 3-8: Document Review (Enhanced)
         content.append(PageBreak())
         content.append(Paragraph("TABLE 3-8: DOCUMENT REVIEW", heading_style))
-        doc_data = [['Document', 'Received', 'Status', 'Concern']]
+        doc_data = [["Document", "Received", "Status", "Concern"]]
         docs = [
-            ['Commercial Invoice', 'Yes', 'Partial Match', 'Origin discrepancy noted'],
-            ['Packing List', 'Yes', 'Match', 'No factory lot mapping'],
-            ['Bill of Lading', 'Yes', 'Match', 'Limited traceability'],
-            ['Certificate of Origin', 'Yes', 'Partial', 'Template-like format'],
-            ['Purchase Order', 'Yes', 'Match', 'No source plant ID'],
-            ['Factory Production Record', 'No', 'MISSING', 'MAJOR GAP - REQUEST'],
-            ['Bill of Materials', 'No', 'MISSING', 'MAJOR GAP - REQUEST'],
-            ['Raw Material Invoice', 'No', 'MISSING', 'MAJOR GAP - REQUEST'],
+            ["Commercial Invoice", "Yes", "Partial Match", "Origin discrepancy noted"],
+            ["Packing List", "Yes", "Match", "No factory lot mapping"],
+            ["Bill of Lading", "Yes", "Match", "Limited traceability"],
+            ["Certificate of Origin", "Yes", "Partial", "Template-like format"],
+            ["Purchase Order", "Yes", "Match", "No source plant ID"],
+            ["Factory Production Record", "No", "MISSING", "MAJOR GAP - REQUEST"],
+            ["Bill of Materials", "No", "MISSING", "MAJOR GAP - REQUEST"],
+            ["Raw Material Invoice", "No", "MISSING", "MAJOR GAP - REQUEST"],
         ]
         doc_data.extend(docs)
-        doc_table = Table(doc_data, colWidths=[1.5*inch, 1*inch, 1.2*inch, 2.3*inch])
-        doc_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#005EA2')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 7),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ('BACKGROUND', (2, 6), (2, -1), colors.HexColor('#FFE8E8')),
-        ]))
+        doc_table = Table(doc_data, colWidths=[1.5 * inch, 1 * inch, 1.2 * inch, 2.3 * inch])
+        doc_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#005EA2")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 7),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                    ("BACKGROUND", (2, 6), (2, -1), colors.HexColor("#FFE8E8")),
+                ]
+            )
+        )
         content.append(doc_table)
-        content.append(Spacer(1, 0.2*inch))
+        content.append(Spacer(1, 0.2 * inch))
 
         # Risk Indicators Summary
         content.append(Paragraph("RISK INDICATORS SUMMARY", heading_style))
         indicators = [
-            ['H1: Corridor Risk', f"Score: {request.risk_score * 0.4 / 100:.1f}/10", "High-risk trade corridor"],
-            ['H2: Anomaly Detection', f"Score: {request.risk_score * 0.35 / 100:.1f}/10", "ISF mismatch + dwell anomaly"],
-            ['H3: Intelligence Check', f"Score: {request.risk_score * 0.25 / 100:.1f}/10", "No OFAC hits, elevated commodity risk"],
+            ["H1: Corridor Risk", f"Score: {request.risk_score * 0.4 / 100:.1f}/10", "High-risk trade corridor"],
+            [
+                "H2: Anomaly Detection",
+                f"Score: {request.risk_score * 0.35 / 100:.1f}/10",
+                "ISF mismatch + dwell anomaly",
+            ],
+            [
+                "H3: Intelligence Check",
+                f"Score: {request.risk_score * 0.25 / 100:.1f}/10",
+                "No OFAC hits, elevated commodity risk",
+            ],
         ]
-        risk_table = Table(indicators, colWidths=[2*inch, 2*inch, 2*inch])
-        risk_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#005EA2')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-        ]))
+        risk_table = Table(indicators, colWidths=[2 * inch, 2 * inch, 2 * inch])
+        risk_table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#005EA2")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 1, colors.grey),
+                ]
+            )
+        )
         content.append(risk_table)
-        content.append(Spacer(1, 0.2*inch))
+        content.append(Spacer(1, 0.2 * inch))
 
         # Officer Narrative
         content.append(PageBreak())
         content.append(Paragraph("OFFICER NARRATIVE & FINDINGS", heading_style))
-        narrative_text = request.shipment_narrative if request.shipment_narrative else "No officer narrative provided at time of referral."
+        narrative_text = (
+            request.shipment_narrative
+            if request.shipment_narrative
+            else "No officer narrative provided at time of referral."
+        )
         content.append(Paragraph(narrative_text, normal_style))
-        content.append(Spacer(1, 0.2*inch))
+        content.append(Spacer(1, 0.2 * inch))
 
         # Formal determination
         content.append(Paragraph("FORMAL DETERMINATION", heading_style))
-        content.append(Paragraph(
-            f"This referral package is submitted to the Department of Homeland Security (DHS) under the authority of 19 USC § 1516a for formal Enhanced Penalty Assessment (EAPA) determination. "
-            f"The CBP Officer has reviewed all shipment documentation, risk scoring methodology outputs, anomaly detection signals, and entity intelligence. "
-            f"All supporting analysis and data sources are incorporated by reference into this determination.",
-            normal_style
-        ))
-        content.append(Spacer(1, 0.1*inch))
+        content.append(
+            Paragraph(
+                f"This referral package is submitted to the Department of Homeland Security (DHS) under the authority of 19 USC § 1516a for formal Enhanced Penalty Assessment (EAPA) determination. "
+                f"The CBP Officer has reviewed all shipment documentation, risk scoring methodology outputs, anomaly detection signals, and entity intelligence. "
+                f"All supporting analysis and data sources are incorporated by reference into this determination.",
+                normal_style,
+            )
+        )
+        content.append(Spacer(1, 0.1 * inch))
         content.append(Paragraph(f"Submitted: {datetime.now().strftime('%B %d, %Y at %H:%M UTC')}", normal_style))
 
         # Build PDF
@@ -2188,7 +2349,7 @@ async def export_referral_pdf(request: PDFExportRequest) -> StreamingResponse:
         return StreamingResponse(
             io.BytesIO(pdf_buffer.getvalue()),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
     except Exception as e:
@@ -2233,6 +2394,7 @@ async def issue_vessel_hold(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 # ============= GRAPH VISUALIZATION (Placeholder) =============
 
+
 @app.get("/api/graph/shipment/{shipment_id}")
 async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
     """
@@ -2272,7 +2434,7 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
                 "MANUFACTURER": "#FF8C42",
                 "HOLDING_COMPANY": "#9B59B6",
                 "FREIGHT_FORWARDER": "#3498DB",
-                "VESSEL": "#95A5A6"
+                "VESSEL": "#95A5A6",
             }
             color = type_colors.get(entity.get("entity_type", ""), "#95A5A6")
 
@@ -2280,16 +2442,18 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
             glow = risk_score >= 70
             fill_color = "#C0392B" if glow else color
 
-            nodes.append({
-                "id": node_id,
-                "label": entity.get("entity_name", "Unknown"),
-                "type": entity.get("entity_type", "UNKNOWN"),
-                "country": entity.get("jurisdiction", ""),
-                "confidence": entity.get("senzing_confidence", 0.0),
-                "color": fill_color,
-                "glow": glow,
-                "size": 30 if glow else 25
-            })
+            nodes.append(
+                {
+                    "id": node_id,
+                    "label": entity.get("entity_name", "Unknown"),
+                    "type": entity.get("entity_type", "UNKNOWN"),
+                    "country": entity.get("jurisdiction", ""),
+                    "confidence": entity.get("senzing_confidence", 0.0),
+                    "color": fill_color,
+                    "glow": glow,
+                    "size": 30 if glow else 25,
+                }
+            )
 
         # Build edges from relationships
         edges = []
@@ -2298,37 +2462,43 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
             target_id = entity_id_map.get(rel.get("entity_b_id"))
 
             if source_id and target_id:
-                edges.append({
-                    "source": source_id,
-                    "target": target_id,
-                    "relationship": rel.get("relationship_type", "UNKNOWN"),
-                    "confidence": rel.get("confidence", 0.0),
-                    "evidence": rel.get("evidence", "")
-                })
+                edges.append(
+                    {
+                        "source": source_id,
+                        "target": target_id,
+                        "relationship": rel.get("relationship_type", "UNKNOWN"),
+                        "confidence": rel.get("confidence", 0.0),
+                        "evidence": rel.get("evidence", ""),
+                    }
+                )
 
         # Add vessel if available
         if shipment.get("vessel_name"):
             vessel_id = f"n{len(nodes) + 1}"
-            nodes.append({
-                "id": vessel_id,
-                "label": shipment.get("vessel_name", "Unknown Vessel"),
-                "type": "VESSEL",
-                "country": "ZZ",
-                "confidence": 0.85,
-                "color": "#95A5A6",
-                "glow": False,
-                "size": 20
-            })
+            nodes.append(
+                {
+                    "id": vessel_id,
+                    "label": shipment.get("vessel_name", "Unknown Vessel"),
+                    "type": "VESSEL",
+                    "country": "ZZ",
+                    "confidence": 0.85,
+                    "color": "#95A5A6",
+                    "glow": False,
+                    "size": 20,
+                }
+            )
 
             # Edge from shipper to vessel
             if nodes:
-                edges.append({
-                    "source": nodes[0]["id"],
-                    "target": vessel_id,
-                    "relationship": "TRANSPORTED_BY",
-                    "confidence": 0.90,
-                    "evidence": "Shipment manifest"
-                })
+                edges.append(
+                    {
+                        "source": nodes[0]["id"],
+                        "target": vessel_id,
+                        "relationship": "TRANSPORTED_BY",
+                        "confidence": 0.90,
+                        "evidence": "Shipment manifest",
+                    }
+                )
 
         return {
             "shipment_id": shipment_id,
@@ -2340,8 +2510,8 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
                 "consignee": shipment.get("consignee_name"),
                 "vessel": shipment.get("vessel_name"),
                 "origin": shipment.get("origin_country"),
-                "destination": shipment.get("destination_country")
-            }
+                "destination": shipment.get("destination_country"),
+            },
         }
 
     except Exception as e:
@@ -2351,6 +2521,7 @@ async def get_shipment_graph(shipment_id: str) -> Dict[str, Any]:
 
 # ============= DETAILED SHIPMENT VIEW =============
 
+
 @app.get("/api/shipments")
 async def list_shipments(
     limit: int = 100,
@@ -2358,7 +2529,7 @@ async def list_shipments(
     corridor_id: Optional[str] = None,
     risk_min: Optional[float] = None,
     risk_max: Optional[float] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Get shipments with server-side filtering by corridor and risk level.
 
@@ -2461,44 +2632,41 @@ async def list_shipments(
 
             h3_recommendation = "EXAMINE" if risk_score >= 70 else ("REVIEW" if risk_score >= 50 else "CLEAR")
 
-            shipments_detailed.append({
-                "id": shipment.get("id"),
-                "manifest_id": shipment.get("manifest_id"),
-                "shipper_name": shipment.get("shipper_name", "Unknown"),
-                "shipper_country": shipment.get("origin_country", "XX"),
-                "shipper_city": origin["city"],
-                "shipper_lat": origin["lat"],
-                "shipper_lon": origin["lon"],
-                "consignee_name": shipment.get("consignee_name", "Unknown"),
-                "consignee_country": shipment.get("destination_country", "XX"),
-                "consignee_city": dest["city"],
-                "consignee_lat": dest["lat"],
-                "consignee_lon": dest["lon"],
-                "commodity_code": shipment.get("hs_code", "9999"),
-                "commodity_name": commodity["name"],
-                "declared_value": shipment.get("declared_value_usd", 0),
-                "declared_weight_kg": shipment.get("declared_weight_kg", 0),
-                "element9_is_mismatch": bool(shipment.get("element9_is_mismatch", 0)),
-                "element9_declared_country": shipment.get("element9_declared_country"),
-                "element9_actual_country": shipment.get("element9_actual_country"),
-                "risk_score": risk_score,
-                "h1_risk_level": h1_risk_level,
-                "h2_signals": h2_signals,
-                "h3_recommendation": h3_recommendation,
-                "status": shipment.get("status", "received").upper(),
-                "created_at": shipment.get("created_at")
-            })
+            shipments_detailed.append(
+                {
+                    "id": shipment.get("id"),
+                    "manifest_id": shipment.get("manifest_id"),
+                    "shipper_name": shipment.get("shipper_name", "Unknown"),
+                    "shipper_country": shipment.get("origin_country", "XX"),
+                    "shipper_city": origin["city"],
+                    "shipper_lat": origin["lat"],
+                    "shipper_lon": origin["lon"],
+                    "consignee_name": shipment.get("consignee_name", "Unknown"),
+                    "consignee_country": shipment.get("destination_country", "XX"),
+                    "consignee_city": dest["city"],
+                    "consignee_lat": dest["lat"],
+                    "consignee_lon": dest["lon"],
+                    "commodity_code": shipment.get("hs_code", "9999"),
+                    "commodity_name": commodity["name"],
+                    "declared_value": shipment.get("declared_value_usd", 0),
+                    "declared_weight_kg": shipment.get("declared_weight_kg", 0),
+                    "element9_is_mismatch": bool(shipment.get("element9_is_mismatch", 0)),
+                    "element9_declared_country": shipment.get("element9_declared_country"),
+                    "element9_actual_country": shipment.get("element9_actual_country"),
+                    "risk_score": risk_score,
+                    "h1_risk_level": h1_risk_level,
+                    "h2_signals": h2_signals,
+                    "h3_recommendation": h3_recommendation,
+                    "status": shipment.get("status", "received").upper(),
+                    "created_at": shipment.get("created_at"),
+                }
+            )
 
         # Data service already filters by corridor/risk, just return as-is
         # Response already contains count from server
         server_count = data.get("count", len(shipments_raw))
 
-        return {
-            "data": shipments_detailed,
-            "count": server_count,
-            "limit": limit,
-            "offset": offset
-        }
+        return {"data": shipments_detailed, "count": server_count, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Error in list_shipments: {e}", exc_info=True)
         return {"data": [], "count": 0, "error": str(e)}
@@ -2509,7 +2677,7 @@ async def shipment_count(
     corridor_id: Optional[str] = None,
     risk_min: Optional[float] = None,
     risk_max: Optional[float] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Get count of shipments matching filter criteria"""
     try:
@@ -2608,11 +2776,12 @@ async def get_shipment_detail(shipment_id: str) -> Dict[str, Any]:
         "h2_signals": ["ISF_MISMATCH", "DWELL_ANOMALY"],
         "h3_recommendation": h3_recommendation,
         "status": shipment.get("status", "IN_TRANSIT"),
-        "created_at": shipment.get("created_at")
+        "created_at": shipment.get("created_at"),
     }
 
 
 # ============= COMMAND CENTER ENDPOINT (PROPER PAGINATION) =============
+
 
 @app.get("/api/command-center/shipments")
 async def list_command_center_shipments(limit: int = 15, offset: int = 0) -> Dict[str, Any]:
@@ -2753,7 +2922,7 @@ async def list_command_center_shipments(limit: int = 15, offset: int = 0) -> Dic
                 "h2_signals": h2_signals,
                 "h3_recommendation": h3_recommendation,
                 "status": shipment.get("status", "received").upper(),
-                "created_at": shipment.get("created_at")
+                "created_at": shipment.get("created_at"),
             }
             shipments_enriched.append(enriched)
 
@@ -2762,21 +2931,15 @@ async def list_command_center_shipments(limit: int = 15, offset: int = 0) -> Dic
             "total": total_count,  # Accurate DB count
             "limit": limit,
             "offset": offset,
-            "count": len(shipments_enriched)  # Count of items in this page
+            "count": len(shipments_enriched),  # Count of items in this page
         }
     except Exception as e:
         logger.error(f"Error in list_command_center_shipments: {e}", exc_info=True)
-        return {
-            "shipments": [],
-            "total": 0,
-            "limit": limit,
-            "offset": offset,
-            "count": 0,
-            "error": str(e)
-        }
+        return {"shipments": [], "total": 0, "limit": limit, "offset": offset, "count": 0, "error": str(e)}
 
 
 # ============= THREE-LEVEL RISK SCORING (NEW PLATFORM) =============
+
 
 @app.post("/api/score/three-level/{shipment_id}")
 async def score_shipment_three_level(
@@ -2830,7 +2993,7 @@ async def score_shipment_three_level(
                     "risk_score": result["total_score"],
                     "h1_score": result["corridor_score"],
                     "h2_score": result["vessel_score"],
-                }
+                },
             )
 
         return result
@@ -2845,6 +3008,7 @@ async def score_shipment_three_level(
 
 
 # ============= HUMAN FEEDBACK & WEIGHT CALIBRATION =============
+
 
 @app.post("/api/feedback/override")
 async def record_override(
@@ -3066,12 +3230,14 @@ async def get_weight_history(
                             # This is simplified - in production would track full history
                             pass
 
-            history_data.append({
-                "date": date.isoformat().split("T")[0],
-                "w_corridor": config.get("w_corridor", 0.20),
-                "w_vessel": config.get("w_vessel", 0.35),
-                "w_manifest": config.get("w_manifest", 0.45),
-            })
+            history_data.append(
+                {
+                    "date": date.isoformat().split("T")[0],
+                    "w_corridor": config.get("w_corridor", 0.20),
+                    "w_vessel": config.get("w_vessel", 0.35),
+                    "w_manifest": config.get("w_manifest", 0.45),
+                }
+            )
 
         return history_data
 
@@ -3081,6 +3247,7 @@ async def get_weight_history(
 
 
 # ============= AI TUNING & MODEL CONFIGURATION =============
+
 
 @app.get("/api/model/weights")
 async def get_model_weights() -> Dict[str, Any]:
@@ -3141,6 +3308,7 @@ async def get_model_metrics() -> Dict[str, Any]:
 
 # ============= ALTANA ATLAS VERIFICATION =============
 
+
 @app.post("/api/altana/verify/{shipment_id}")
 async def verify_with_altana(
     shipment_id: str,
@@ -3169,7 +3337,7 @@ async def verify_with_altana(
                 "shipment_id": shipment_id,
                 "status": "skipped",
                 "reason": f"Risk score {risk_score:.0f}/100 below 90% threshold",
-                "recommendation": "CLEAR"
+                "recommendation": "CLEAR",
             }
 
         result = await altana_client.verify_shipment(
@@ -3188,19 +3356,14 @@ async def verify_with_altana(
 
     except Exception as e:
         logger.error(f"Altana verification error for {shipment_id}: {e}")
-        return {
-            "shipment_id": shipment_id,
-            "status": "error",
-            "error": str(e),
-            "recommendation": "MANUAL_REVIEW"
-        }
+        return {"shipment_id": shipment_id, "status": "error", "error": str(e), "recommendation": "MANUAL_REVIEW"}
 
 
 @app.post("/api/entities/resolve")
 async def resolve_entities(
     manifest_id: str = Query(...),
     shipper_name: Optional[str] = Query(None),
-    consignee_name: Optional[str] = Query(None)
+    consignee_name: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """Resolve shipper/consignee entities using Senzing entity resolution.
 
@@ -3210,16 +3373,14 @@ async def resolve_entities(
     try:
         client = get_senzing_client()
         result = await client.resolve_entities(
-            manifest_id=manifest_id,
-            shipper_name=shipper_name,
-            consignee_name=consignee_name
+            manifest_id=manifest_id, shipper_name=shipper_name, consignee_name=consignee_name
         )
         return {
             "manifest_id": manifest_id,
             "entities": result.get("entities", []),
             "graph_edges": result.get("graph_edges", []),
             "total_confidence": result.get("total_confidence", 0.0),
-            "source": result.get("source", "unknown")
+            "source": result.get("source", "unknown"),
         }
     except Exception as e:
         logger.error(f"Entity resolution error for {manifest_id}: {e}")
@@ -3300,7 +3461,7 @@ async def cord_health():
 async def cord_search(
     name: str = Query(..., description="Entity name to search"),
     country: Optional[str] = Query(None, description="Optional country code"),
-    limit: int = Query(10, ge=1, le=100)
+    limit: int = Query(10, ge=1, le=100),
 ) -> Dict[str, Any]:
     """Search CORD index for entities.
 
@@ -3314,11 +3475,7 @@ async def cord_search(
 
             resp = await client.get("/search", params=params)
             if resp.status_code == 200:
-                return {
-                    "status": "success",
-                    "matches": resp.json(),
-                    "query": {"name": name, "country": country}
-                }
+                return {"status": "success", "matches": resp.json(), "query": {"name": name, "country": country}}
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
     except Exception as e:
         logger.error(f"CORD search error: {e}")
@@ -3330,7 +3487,7 @@ async def cord_resolve(
     shipper_name: str = Query(...),
     shipper_country: Optional[str] = Query(None),
     consignee_name: Optional[str] = Query(None),
-    consignee_country: Optional[str] = Query(None)
+    consignee_country: Optional[str] = Query(None),
 ) -> Dict[str, Any]:
     """Resolve 3-level entity chain for shipper with OFAC detection.
 
@@ -3342,15 +3499,12 @@ async def cord_resolve(
                 "shipper_name": shipper_name,
                 "shipper_country": shipper_country,
                 "consignee_name": consignee_name,
-                "consignee_country": consignee_country
+                "consignee_country": consignee_country,
             }
 
             resp = await client.post("/resolve", json=payload)
             if resp.status_code == 200:
-                return {
-                    "status": "success",
-                    "resolution": resp.json()
-                }
+                return {"status": "success", "resolution": resp.json()}
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
     except Exception as e:
         logger.error(f"CORD resolve error: {e}")
@@ -3367,10 +3521,7 @@ async def cord_get_entity(entity_id: str) -> Dict[str, Any]:
         async with await get_cord_service_client() as client:
             resp = await client.get(f"/entity/{entity_id}")
             if resp.status_code == 200:
-                return {
-                    "status": "success",
-                    "entity": resp.json()
-                }
+                return {"status": "success", "entity": resp.json()}
             elif resp.status_code == 404:
                 raise HTTPException(status_code=404, detail="Entity not found in CORD")
             else:
@@ -3392,10 +3543,7 @@ async def cord_why_connected(entity_id_a: str, entity_id_b: str) -> Dict[str, An
         async with await get_cord_service_client() as client:
             resp = await client.post(f"/why/{entity_id_a}/{entity_id_b}")
             if resp.status_code == 200:
-                return {
-                    "status": "success",
-                    "explanation": resp.json()
-                }
+                return {"status": "success", "explanation": resp.json()}
             elif resp.status_code == 404:
                 raise HTTPException(status_code=404, detail="No relationship found")
             else:
@@ -3407,8 +3555,8 @@ async def cord_why_connected(entity_id_a: str, entity_id_b: str) -> Dict[str, An
         raise HTTPException(status_code=503, detail=f"CORD query failed: {str(e)}")
 
 
-
 # ============= RISK CORRIDOR ANALYSIS API =============
+
 
 @app.get("/api/risk-corridors")
 async def get_risk_corridors(
@@ -3478,7 +3626,8 @@ async def get_risk_corridors(
         if min_risk_level:
             risk_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
             corridors = [
-                c for c in corridors
+                c
+                for c in corridors
                 if risk_order.get(c.get("risk_level", "LOW"), 3) <= risk_order.get(min_risk_level, 3)
             ]
 
@@ -3529,7 +3678,9 @@ async def get_corridor_detail(corridor_id: str) -> Dict[str, Any]:
             shipments = resp.json().get("shipments", [])
 
         # Filter to corridor
-        corridor_shipments = [s for s in shipments if corridor_factory.create_corridor_from_shipment(s)["corridor_id"] == corridor_id]
+        corridor_shipments = [
+            s for s in shipments if corridor_factory.create_corridor_from_shipment(s)["corridor_id"] == corridor_id
+        ]
 
         if not corridor_shipments:
             raise HTTPException(status_code=404, detail=f"No shipments in corridor {corridor_id}")
@@ -3600,6 +3751,7 @@ async def analyze_hts_code(hts_code: str) -> Dict[str, Any]:
 
 # ==================== GEMINI AI ENDPOINTS ====================
 
+
 @app.post("/api/gemini/synopsis")
 async def gemini_case_synopsis(request: Dict[str, Any]) -> Dict[str, str]:
     """Generate AI synopsis for a CBP investigation case.
@@ -3611,11 +3763,11 @@ async def gemini_case_synopsis(request: Dict[str, Any]) -> Dict[str, str]:
         # Fallback demo response
         return {
             "synopsis": f"CBP investigation into {request.get('entity', 'Unknown Entity')} "
-                       f"importing {request.get('category', 'merchandise')}. "
-                       f"Case involves {len(request.get('shipments', []))} shipments "
-                       f"and {len(request.get('findings', []))} AI findings. "
-                       f"Risk indicators suggest transshipment evasion patterns via "
-                       f"restricted origin countries. Recommend escalation to enforcement division."
+            f"importing {request.get('category', 'merchandise')}. "
+            f"Case involves {len(request.get('shipments', []))} shipments "
+            f"and {len(request.get('findings', []))} AI findings. "
+            f"Risk indicators suggest transshipment evasion patterns via "
+            f"restricted origin countries. Recommend escalation to enforcement division."
         }
 
     try:
@@ -3655,12 +3807,13 @@ async def gemini_chat_assistant(request: Dict[str, Any]) -> Dict[str, Any]:
         # Get shipments data for analysis (use global cache if available)
         shipments_data = []
         try:
-            if hasattr(app, 'shipments_cache'):
+            if hasattr(app, "shipments_cache"):
                 shipments_data = app.shipments_cache
             else:
                 # Fallback: try to load from data module
                 try:
                     from data import load_data
+
                     shipments_data = load_data()
                 except:
                     shipments_data = []
@@ -3672,23 +3825,27 @@ async def gemini_chat_assistant(request: Dict[str, Any]) -> Dict[str, Any]:
             if shipments_data:
                 database_results += "Recent Shipments in System:\n"
                 for shipment in shipments_data[:5]:
-                    risk = shipment.get('risk_score', 'N/A')
+                    risk = shipment.get("risk_score", "N/A")
                     status = "🔴 CRITICAL" if risk >= 80 else "🟡 HIGH" if risk >= 60 else "🟢 MEDIUM"
-                    database_results += f"- {shipment.get('shipper_name', 'Unknown')} → {shipment.get('consignee_name', 'Unknown')}\n"
-                    database_results += f"  Commodity: {shipment.get('commodity_name', 'Unknown')} | Risk: {risk} {status}\n"
+                    database_results += (
+                        f"- {shipment.get('shipper_name', 'Unknown')} → {shipment.get('consignee_name', 'Unknown')}\n"
+                    )
+                    database_results += (
+                        f"  Commodity: {shipment.get('commodity_name', 'Unknown')} | Risk: {risk} {status}\n"
+                    )
                 sources.append("CBP Shipments Database")
 
         elif any(word in message for word in ["entity", "entities", "company", "organization", "shipper", "high risk"]):
             if shipments_data:
                 high_risk_shippers = {}
                 for s in shipments_data:
-                    shipper = s.get('shipper_name', 'Unknown')
-                    risk = s.get('risk_score', 0)
+                    shipper = s.get("shipper_name", "Unknown")
+                    risk = s.get("risk_score", 0)
                     if risk >= 70 and shipper not in high_risk_shippers:
                         high_risk_shippers[shipper] = {
-                            'risk': risk,
-                            'country': s.get('shipper_country', 'Unknown'),
-                            'commodity': s.get('commodity_name', 'Unknown')
+                            "risk": risk,
+                            "country": s.get("shipper_country", "Unknown"),
+                            "commodity": s.get("commodity_name", "Unknown"),
                         }
                 if high_risk_shippers:
                     database_results += "High-Risk Entities Detected:\n"
@@ -3699,13 +3856,17 @@ async def gemini_chat_assistant(request: Dict[str, Any]) -> Dict[str, Any]:
 
         elif any(word in message for word in ["case", "cases", "investigation", "active", "statistics"]):
             if shipments_data:
-                active_count = sum(1 for s in shipments_data if s.get('risk_score', 0) >= 75)
-                avg_risk = sum(s.get('risk_score', 0) for s in shipments_data) / len(shipments_data) if shipments_data else 0
+                active_count = sum(1 for s in shipments_data if s.get("risk_score", 0) >= 75)
+                avg_risk = (
+                    sum(s.get("risk_score", 0) for s in shipments_data) / len(shipments_data) if shipments_data else 0
+                )
                 database_results += f"Active Cases Summary:\n"
                 database_results += f"- Total Shipments: {len(shipments_data)}\n"
                 database_results += f"- Active Cases (Risk ≥ 75): {active_count}\n"
                 database_results += f"- Average Risk Score: {avg_risk:.1f}/100\n"
-                database_results += f"- Critical Cases (Risk ≥ 80): {sum(1 for s in shipments_data if s.get('risk_score', 0) >= 80)}\n"
+                database_results += (
+                    f"- Critical Cases (Risk ≥ 80): {sum(1 for s in shipments_data if s.get('risk_score', 0) >= 80)}\n"
+                )
                 sources.append("CBP Shipments & AI Risk Scoring")
 
         elif any(word in message for word in ["rules", "rule", "tuning", "weight", "score", "h1", "h2", "h3"]):
@@ -3751,29 +3912,21 @@ Analyst Question: {request.get('message', '')}
 Synthesize the data into a briefing response. Highlight key risks and patterns."""
 
                 response = GEMINI_MODEL.generate_content(prompt)
-                return {
-                    "text": response.text,
-                    "isDemoMode": False,
-                    "sources": sources
-                }
+                return {"text": response.text, "isDemoMode": False, "sources": sources}
             except Exception as e:
                 logger.warning(f"Gemini synthesis error: {e}")
 
         # Fallback: return system data directly
         if database_results:
-            return {
-                "text": database_results,
-                "isDemoMode": False,
-                "sources": sources
-            }
+            return {"text": database_results, "isDemoMode": False, "sources": sources}
 
         # If no results found
         return {
             "text": f"I searched the CBP Sentry system for information about '{request.get('message', '')}'. "
-                   f"I can help with: active shipments, high-risk entities, case statistics, "
-                   f"scoring rules, or specific commodities. Try: 'Show me active cases' or 'What are the scoring rules?'",
+            f"I can help with: active shipments, high-risk entities, case statistics, "
+            f"scoring rules, or specific commodities. Try: 'Show me active cases' or 'What are the scoring rules?'",
             "isDemoMode": True,
-            "sources": []
+            "sources": [],
         }
 
     except Exception as e:
@@ -3781,7 +3934,7 @@ Synthesize the data into a briefing response. Highlight key risks and patterns."
         return {
             "text": f"Error processing query: {str(e)}. Please try a different question or check system status.",
             "isDemoMode": True,
-            "sources": []
+            "sources": [],
         }
 
 
@@ -3796,8 +3949,7 @@ async def gemini_draft_referral(request: Dict[str, Any]) -> Dict[str, str]:
         # Fallback demo response
         case_name = request.get("caseName", "CBP-2026-XXXX")
         target = request.get("targetEntity", "Unknown Entity")
-        return {
-            "narrative": f"""OFFICIAL DHS GENERAL COUNSEL TRADE FRAUD COMPLIANCE DRAFT
+        return {"narrative": f"""OFFICIAL DHS GENERAL COUNSEL TRADE FRAUD COMPLIANCE DRAFT
 
 CASE ID: {case_name}
 TARGET ENTITY: {target}
@@ -3817,20 +3969,26 @@ mismatch, weight discrepancy in manifests, vessel AIS routing anomalies, and cir
 
 RECOMMENDED LEGAL ACTIONS
 Initiate formal investigation under 19 U.S.C. § 1592. Recommend 250% penalty on false statements
-and potential criminal referral for conspiracy to evade tariffs. Block entity from future US imports."""
-        }
+and potential criminal referral for conspiracy to evade tariffs. Block entity from future US imports."""}
 
     try:
-        sections = request.get("sections", [
-            "Executive Summary & Charges",
-            "Subject Corporate Overview",
-            "Forensic Evidence Accumulation",
-            "Recommended Legal Actions"
-        ])
+        sections = request.get(
+            "sections",
+            [
+                "Executive Summary & Charges",
+                "Subject Corporate Overview",
+                "Forensic Evidence Accumulation",
+                "Recommended Legal Actions",
+            ],
+        )
 
         shipments = request.get("shipments", [])
         findings = request.get("findings", [])
-        shipments_detail = f"{len(shipments)} shipments with origin concealment and manifest anomalies" if shipments else "multiple shipments"
+        shipments_detail = (
+            f"{len(shipments)} shipments with origin concealment and manifest anomalies"
+            if shipments
+            else "multiple shipments"
+        )
         findings_detail = f"{len(findings)} AI findings flagged" if findings else "multiple anomalies detected"
 
         section_list = "\n".join([f"- {s}" for s in sections])
@@ -3873,7 +4031,7 @@ async def save_rule_configuration(request: Dict[str, Any]) -> Dict[str, Any]:
                 "analyst_id": request.get("analyst_id"),
                 "analyst_name": request.get("analyst_name"),
                 "environment": request.get("environment", "PROD"),
-            }
+            },
         }
 
         logger.info(f"Rule configuration saved: {rule_config}")
@@ -3887,14 +4045,11 @@ async def save_rule_configuration(request: Dict[str, Any]) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Error saving rule configuration: {e}")
-        return {
-            "status": "failed",
-            "message": f"Error saving rules: {str(e)}",
-            "error": str(e)
-        }
+        return {"status": "failed", "message": f"Error saving rules: {str(e)}", "error": str(e)}
 
 
 # ============= CORRIDOR & PRE-MANIFEST PROXY ROUTES =============
+
 
 @app.get("/api/corridors")
 async def list_corridors_proxy() -> Dict[str, Any]:
@@ -3984,10 +4139,12 @@ async def create_pre_manifest_vessel_proxy(payload: Dict[str, Any]) -> Dict[str,
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 # ============= RISK SCORING TRANSPARENCY ENDPOINTS =============
+
 
 @app.get("/api/shipments/{shipment_id}/risk-scoring-ledger")
 async def get_risk_scoring_ledger(shipment_id: str) -> Dict[str, Any]:
@@ -4005,12 +4162,12 @@ async def get_risk_scoring_ledger(shipment_id: str) -> Dict[str, Any]:
             ship_resp = await client.get(f"/shipments/{shipment_id}")
             if ship_resp.status_code != 200:
                 raise HTTPException(status_code=404, detail="Shipment not found")
-            
+
             shipment = ship_resp.json()
-        
+
         # Import from db module
         from db import get_risk_components, get_risk_adjustments, get_risk_ledger, get_what_if_scenarios
-        
+
         return {
             "shipment_id": shipment_id,
             "shipment_summary": {
@@ -4019,7 +4176,15 @@ async def get_risk_scoring_ledger(shipment_id: str) -> Dict[str, Any]:
                 "corridor": f"{shipment.get('origin_country')} → {shipment.get('destination_country')}",
                 "commodity": shipment.get("commodity_name"),
                 "risk_score": shipment.get("risk_score"),
-                "risk_classification": "CRITICAL" if shipment.get("risk_score", 0) >= 80 else "HIGH" if shipment.get("risk_score", 0) >= 50 else "MEDIUM" if shipment.get("risk_score", 0) >= 30 else "LOW",
+                "risk_classification": (
+                    "CRITICAL"
+                    if shipment.get("risk_score", 0) >= 80
+                    else (
+                        "HIGH"
+                        if shipment.get("risk_score", 0) >= 50
+                        else "MEDIUM" if shipment.get("risk_score", 0) >= 30 else "LOW"
+                    )
+                ),
                 "h1_score": shipment.get("h1_score"),
                 "h2_score": shipment.get("h2_score"),
                 "h3_score": shipment.get("h3_score"),
@@ -4031,15 +4196,15 @@ async def get_risk_scoring_ledger(shipment_id: str) -> Dict[str, Any]:
             "data_sources": {
                 "primary": ["ISF-Filing", "AIS-Archive", "Trade-Intelligence"],
                 "secondary": ["Senzing-Trade-Graph", "Altana-Atlas", "OFAC-Database"],
-                "tertiary": ["Port-Authority-Records", "Vessel-Tracking", "Trade-Gov-API"]
+                "tertiary": ["Port-Authority-Records", "Vessel-Tracking", "Trade-Gov-API"],
             },
             "metadata": {
                 "generated_at": datetime.utcnow().isoformat(),
                 "engine_version": "Three-Level-Scoring-v2.1",
-                "transparency_level": "COMPLETE"
-            }
+                "transparency_level": "COMPLETE",
+            },
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -4052,19 +4217,19 @@ async def get_risk_components_endpoint(shipment_id: str) -> Dict[str, Any]:
     """Get component-level scoring breakdown (H1, H2, H3) with evidence"""
     try:
         from db import get_risk_components
-        
+
         components = get_risk_components(shipment_id)
-        
+
         # Calculate subtotals by category
         subtotals = {}
         for cat, comps in components.items():
-            subtotals[cat] = sum(c.get('weighted_value', 0) for c in comps)
-        
+            subtotals[cat] = sum(c.get("weighted_value", 0) for c in comps)
+
         return {
             "shipment_id": shipment_id,
             "components_by_category": components,
             "subtotals": subtotals,
-            "data_source": "Risk-Score-Components-Database"
+            "data_source": "Risk-Score-Components-Database",
         }
     except Exception as e:
         logger.error(f"Error fetching risk components: {e}")
@@ -4076,22 +4241,27 @@ async def get_risk_adjustments_endpoint(shipment_id: str) -> Dict[str, Any]:
     """Get adjustment logic including Altana verification, multipliers, and bonuses"""
     try:
         from db import get_risk_adjustments
-        
+
         adjustments = get_risk_adjustments(shipment_id)
-        
+
         # Categorize adjustments
         categorized = {
-            "adjustments": [a for a in adjustments if a.get('adjustment_type').startswith('altana') or a.get('adjustment_type').startswith('flag')],
-            "multipliers": [a for a in adjustments if 'multiplier' in a.get('adjustment_type', '').lower()],
-            "bonuses": [a for a in adjustments if 'bonus' in a.get('adjustment_type', '').lower()]
+            "adjustments": [
+                a
+                for a in adjustments
+                if a.get("adjustment_type").startswith("altana") or a.get("adjustment_type").startswith("flag")
+            ],
+            "multipliers": [a for a in adjustments if "multiplier" in a.get("adjustment_type", "").lower()],
+            "bonuses": [a for a in adjustments if "bonus" in a.get("adjustment_type", "").lower()],
         }
-        
+
         return {
             "shipment_id": shipment_id,
             "adjustments_categorized": categorized,
-            "total_adjustments": sum(a.get('adjustment_amount', 0) for a in adjustments),
-            "total_multiplier": 1.0 * (a.get('adjustment_multiplier', 1.0) for a in adjustments if a.get('adjustment_multiplier')),
-            "data_source": "Risk-Score-Adjustments-Database"
+            "total_adjustments": sum(a.get("adjustment_amount", 0) for a in adjustments),
+            "total_multiplier": 1.0
+            * (a.get("adjustment_multiplier", 1.0) for a in adjustments if a.get("adjustment_multiplier")),
+            "data_source": "Risk-Score-Adjustments-Database",
         }
     except Exception as e:
         logger.error(f"Error fetching risk adjustments: {e}")
@@ -4103,15 +4273,15 @@ async def get_risk_ledger_endpoint(shipment_id: str) -> Dict[str, Any]:
     """Get complete calculation ledger - step-by-step audit trail from components to final score"""
     try:
         from db import get_risk_ledger
-        
+
         ledger = get_risk_ledger(shipment_id)
-        
+
         return {
             "shipment_id": shipment_id,
             "ledger_steps": ledger,
             "ledger_count": len(ledger),
-            "final_score": ledger[-1].get('output_value') if ledger else None,
-            "data_source": "Risk-Score-Ledger-Database"
+            "final_score": ledger[-1].get("output_value") if ledger else None,
+            "data_source": "Risk-Score-Ledger-Database",
         }
     except Exception as e:
         logger.error(f"Error fetching risk ledger: {e}")
@@ -4123,20 +4293,20 @@ async def get_what_if_analysis_endpoint(shipment_id: str) -> Dict[str, Any]:
     """Get what-if scenario analysis - sensitivity testing for key assumptions"""
     try:
         from db import get_what_if_scenarios
-        
+
         scenarios = get_what_if_scenarios(shipment_id)
-        
+
         # Organize by priority and impact
-        critical_scenarios = [s for s in scenarios if s.get('impact_category') == 'CRITICAL']
-        high_scenarios = [s for s in scenarios if s.get('impact_category') == 'HIGH']
-        
+        critical_scenarios = [s for s in scenarios if s.get("impact_category") == "CRITICAL"]
+        high_scenarios = [s for s in scenarios if s.get("impact_category") == "HIGH"]
+
         return {
             "shipment_id": shipment_id,
             "scenarios": scenarios,
             "critical_scenarios": critical_scenarios,
             "high_impact_scenarios": high_scenarios,
-            "investigation_roadmap": [s.get('investigation_recommendation') for s in critical_scenarios],
-            "data_source": "Risk-What-If-Scenarios-Database"
+            "investigation_roadmap": [s.get("investigation_recommendation") for s in critical_scenarios],
+            "data_source": "Risk-What-If-Scenarios-Database",
         }
     except Exception as e:
         logger.error(f"Error fetching what-if analysis: {e}")
@@ -4145,137 +4315,137 @@ async def get_what_if_analysis_endpoint(shipment_id: str) -> Dict[str, Any]:
 
 # ============= REFERRAL PDF EXPORT (PRODUCTION) =============
 
+
 @app.post("/api/referral/export-pdf-v2")
 async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse:
     """
     Generate professional CBP EAPA referral package PDF (v2 - Production).
-    
+
     This is a cleaner, more robust implementation that fetches all required data
     and generates a well-formatted, professional legal document.
     """
     try:
         from referral_pdf_generator import CBPReferralPDFGenerator
         import json
-        
+
         logger.info(f"Generating referral PDF v2 for case: {request.case_id}")
-        
+
         # Prepare referral data from request
         referral_data = {
-            'case_id': request.case_id,
-            'shipment_id': request.shipment_id,
-            'risk_score': request.risk_score,
-            'recommendation': request.recommendation,
-            'shipment': {
-                'shipper_name': request.shipper_name,
-                'consignee_name': 'Gulf Coast Industrial',  # From DB ideally
-                'commodity_name': request.commodity_name,
-                'hs_code': '8541.40',
-                'origin_country': request.origin_country,
-                'destination_country': request.destination_country,
-                'declared_value': 8177.41,
-                'quantity': 1,
-                'unit': 'shipment',
-                'weight_kg': 11624.0,
+            "case_id": request.case_id,
+            "shipment_id": request.shipment_id,
+            "risk_score": request.risk_score,
+            "recommendation": request.recommendation,
+            "shipment": {
+                "shipper_name": request.shipper_name,
+                "consignee_name": "Gulf Coast Industrial",  # From DB ideally
+                "commodity_name": request.commodity_name,
+                "hs_code": "8541.40",
+                "origin_country": request.origin_country,
+                "destination_country": request.destination_country,
+                "declared_value": 8177.41,
+                "quantity": 1,
+                "unit": "shipment",
+                "weight_kg": 11624.0,
             },
-            'line_items': [
+            "line_items": [
                 {
-                    'hs_code': '8541.40',
-                    'description': request.commodity_name,
-                    'quantity': 1,
-                    'unit': 'shipment',
-                    'value': 8177.41,
+                    "hs_code": "8541.40",
+                    "description": request.commodity_name,
+                    "quantity": 1,
+                    "unit": "shipment",
+                    "value": 8177.41,
                 }
             ],
-            'routing': {
-                'vessel_name': 'MV Seamless Journey',
-                'vessel_imo': '9645123',
-                'port_of_lading': request.origin_country,
-                'port_of_unlading': request.destination_country,
-                'dwell_days': 5.2,
-                'dwell_baseline': 2.5,
-                'dwell_anomaly': 'HIGH',
-                'ais_gaps': 2,
-                'transit_days': 14,
+            "routing": {
+                "vessel_name": "MV Seamless Journey",
+                "vessel_imo": "9645123",
+                "port_of_lading": request.origin_country,
+                "port_of_unlading": request.destination_country,
+                "dwell_days": 5.2,
+                "dwell_baseline": 2.5,
+                "dwell_anomaly": "HIGH",
+                "ais_gaps": 2,
+                "transit_days": 14,
             },
-            'parties': [
+            "parties": [
                 {
-                    'name': request.shipper_name,
-                    'role': 'SHIPPER',
-                    'country': request.origin_country,
-                    'risk_note': 'None identified',
+                    "name": request.shipper_name,
+                    "role": "SHIPPER",
+                    "country": request.origin_country,
+                    "risk_note": "None identified",
                 },
                 {
-                    'name': 'Gulf Coast Industrial',
-                    'role': 'CONSIGNEE',
-                    'country': request.destination_country,
-                    'risk_note': 'New importer',
-                },
-            ],
-            'entity_chain': [
-                {
-                    'tier': 1,
-                    'name': 'Northamericana Holdings Ltd.',
-                    'country': 'Canada',
-                    'ownership_pct': 100,
-                    'match_confidence': 89,
-                    'risk_signal': 'None',
+                    "name": "Gulf Coast Industrial",
+                    "role": "CONSIGNEE",
+                    "country": request.destination_country,
+                    "risk_note": "New importer",
                 },
             ],
-            'risk_scoring': {
-                'components': {
-                    'H1: Corridor Risk': [
-                        {'name': 'Trade Corridor Risk', 'value': 8.5, 'weight': 40},
-                        {'name': 'Shipper Age & History', 'value': 6.2, 'weight': 35},
-                        {'name': 'Commodity Risk', 'value': 9.0, 'weight': 25},
+            "entity_chain": [
+                {
+                    "tier": 1,
+                    "name": "Northamericana Holdings Ltd.",
+                    "country": "Canada",
+                    "ownership_pct": 100,
+                    "match_confidence": 89,
+                    "risk_signal": "None",
+                },
+            ],
+            "risk_scoring": {
+                "components": {
+                    "H1: Corridor Risk": [
+                        {"name": "Trade Corridor Risk", "value": 8.5, "weight": 40},
+                        {"name": "Shipper Age & History", "value": 6.2, "weight": 35},
+                        {"name": "Commodity Risk", "value": 9.0, "weight": 25},
                     ],
-                    'H2: Anomaly Detection': [
-                        {'name': 'ISF Element 9 Mismatch', 'value': 8.0, 'weight': 35},
-                        {'name': 'AIS Dwell Anomaly', 'value': 7.5, 'weight': 35},
-                        {'name': 'Port Activity Pattern', 'value': 6.5, 'weight': 30},
+                    "H2: Anomaly Detection": [
+                        {"name": "ISF Element 9 Mismatch", "value": 8.0, "weight": 35},
+                        {"name": "AIS Dwell Anomaly", "value": 7.5, "weight": 35},
+                        {"name": "Port Activity Pattern", "value": 6.5, "weight": 30},
                     ],
-                    'H3: Intelligence Check': [
-                        {'name': 'OFAC/SDN Match', 'value': 2.0, 'weight': 25},
-                        {'name': 'Entity Risk Profile', 'value': 8.0, 'weight': 40},
-                        {'name': 'Historical Pattern', 'value': 7.5, 'weight': 35},
+                    "H3: Intelligence Check": [
+                        {"name": "OFAC/SDN Match", "value": 2.0, "weight": 25},
+                        {"name": "Entity Risk Profile", "value": 8.0, "weight": 40},
+                        {"name": "Historical Pattern", "value": 7.5, "weight": 35},
                     ],
                 },
             },
-            'what_if_scenarios': [
+            "what_if_scenarios": [
                 {
-                    'name': 'Vietnam Origin Alternative',
-                    'base_score': '97 → 102',
-                    'recommendation': 'ESCALATE',
+                    "name": "Vietnam Origin Alternative",
+                    "base_score": "97 → 102",
+                    "recommendation": "ESCALATE",
                 },
                 {
-                    'name': 'Transshipment via Hong Kong',
-                    'base_score': '97 → 103',
-                    'recommendation': 'DENY ENTRY',
+                    "name": "Transshipment via Hong Kong",
+                    "base_score": "97 → 103",
+                    "recommendation": "DENY ENTRY",
                 },
             ],
-            'documents': [
-                {'name': 'Bill of Lading', 'required': True, 'status': 'RECEIVED', 'notes': 'Standard format'},
-                {'name': 'Commercial Invoice', 'required': True, 'status': 'RECEIVED', 'notes': 'Matches ISF'},
-                {'name': 'Certificate of Origin', 'required': True, 'status': 'MISSING', 'notes': 'REQUEST'},
-                {'name': 'Manufacturer Certificate', 'required': True, 'status': 'MISSING', 'notes': 'REQUEST'},
+            "documents": [
+                {"name": "Bill of Lading", "required": True, "status": "RECEIVED", "notes": "Standard format"},
+                {"name": "Commercial Invoice", "required": True, "status": "RECEIVED", "notes": "Matches ISF"},
+                {"name": "Certificate of Origin", "required": True, "status": "MISSING", "notes": "REQUEST"},
+                {"name": "Manufacturer Certificate", "required": True, "status": "MISSING", "notes": "REQUEST"},
             ],
-            'narrative': request.shipment_narrative if request.shipment_narrative else '',
+            "narrative": request.shipment_narrative if request.shipment_narrative else "",
         }
-        
+
         # Generate PDF
         generator = CBPReferralPDFGenerator()
         pdf_buffer = generator.generate_pdf(referral_data)
-        
+
         logger.info(f"PDF v2 generated successfully for case: {request.case_id}")
-        
+
         # Return as streaming response
         filename = f"CBP-EAPA-Referral-{request.case_id}-{datetime.now().strftime('%Y-%m-%d')}.pdf"
         return StreamingResponse(
             pdf_buffer,
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
-        
+
     except Exception as e:
         logger.error(f"Error in PDF v2 export: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
-

@@ -69,15 +69,25 @@ class FeedbackEngine:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO scoring_overrides
                 (id, shipment_id, original_score, override_decision, feedback_type,
                  analyst_id, analyst_name, created_at, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                override_id, shipment_id, original_score, override_decision,
-                feedback_type, analyst_id, analyst_name, datetime.utcnow().isoformat(), notes
-            ))
+            """,
+                (
+                    override_id,
+                    shipment_id,
+                    original_score,
+                    override_decision,
+                    feedback_type,
+                    analyst_id,
+                    analyst_name,
+                    datetime.utcnow().isoformat(),
+                    notes,
+                ),
+            )
             conn.commit()
             conn.close()
 
@@ -157,7 +167,8 @@ class FeedbackEngine:
         cursor = conn.cursor()
 
         # Get recent REJECT overrides (signals system was too aggressive)
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT feedback_type, COUNT(*) as count
             FROM scoring_overrides
             WHERE override_decision = 'REJECT'
@@ -165,7 +176,9 @@ class FeedbackEngine:
             GROUP BY feedback_type
             HAVING count >= ?
             ORDER BY count DESC
-        """, (CORROBORATION_THRESHOLD,))
+        """,
+            (CORROBORATION_THRESHOLD,),
+        )
 
         patterns = cursor.fetchall()
 
@@ -174,9 +187,7 @@ class FeedbackEngine:
 
         conn.close()
 
-    def _suggest_weight_adjustment_for_pattern(
-        self, feedback_type: str, corroboration_count: int
-    ) -> None:
+    def _suggest_weight_adjustment_for_pattern(self, feedback_type: str, corroboration_count: int) -> None:
         """
         Generate weight adjustment suggestions based on override patterns.
         Implements SGD formula: W_new = W_old - α × (System_Score - Human_Label) × X_feature
@@ -193,17 +204,17 @@ class FeedbackEngine:
             "factory_expansion": {
                 "feature": "w_corridor",
                 "direction": -0.02,  # Reduce corridor weight
-                "rationale": "Legitimate factory expansions cause false positives in corridor analysis"
+                "rationale": "Legitimate factory expansions cause false positives in corridor analysis",
             },
             "dual_origin": {
                 "feature": "w_manifest",
                 "direction": -0.01,
-                "rationale": "Legitimate dual-origin materials cause false positives in manifest analysis"
+                "rationale": "Legitimate dual-origin materials cause false positives in manifest analysis",
             },
             "misclassified_vessel": {
                 "feature": "w_vessel",
                 "direction": -0.03,
-                "rationale": "Vessel route misclassification is causing false alerts"
+                "rationale": "Vessel route misclassification is causing false alerts",
             },
         }
 
@@ -216,11 +227,14 @@ class FeedbackEngine:
         confidence_pct = min(100.0, corroboration_count * 20.0)
 
         # Check if suggestion already exists
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT id FROM weight_suggestions
             WHERE affected_feature = ? AND status = 'pending'
             LIMIT 1
-        """, (mapping["feature"],))
+        """,
+            (mapping["feature"],),
+        )
 
         existing = cursor.fetchone()
 
@@ -233,15 +247,23 @@ class FeedbackEngine:
         suggestion_id = str(uuid.uuid4())
         suggested_value = mapping["direction"]  # Relative adjustment
 
-        cursor.execute("""
+        cursor.execute(
+            """
             INSERT INTO weight_suggestions
             (id, corridor, affected_feature, suggested_value, confidence_pct,
              corroboration_count, status, created_at, rationale)
             VALUES (?, NULL, ?, ?, ?, ?, 'pending', ?, ?)
-        """, (
-            suggestion_id, mapping["feature"], suggested_value, confidence_pct,
-            corroboration_count, datetime.utcnow().isoformat(), mapping["rationale"]
-        ))
+        """,
+            (
+                suggestion_id,
+                mapping["feature"],
+                suggested_value,
+                confidence_pct,
+                corroboration_count,
+                datetime.utcnow().isoformat(),
+                mapping["rationale"],
+            ),
+        )
 
         conn.commit()
         conn.close()
@@ -328,22 +350,40 @@ class FeedbackEngine:
             if not suggestion:
                 raise ValueError(f"Suggestion {suggestion_id} not found")
 
-            suggestion_id, corridor, affected_feature, suggested_value, confidence, corr_count, status, created_at, reviewed_at, reviewed_by, rationale = suggestion
+            (
+                suggestion_id,
+                corridor,
+                affected_feature,
+                suggested_value,
+                confidence,
+                corr_count,
+                status,
+                created_at,
+                reviewed_at,
+                reviewed_by,
+                rationale,
+            ) = suggestion
 
             # Mark suggestion as approved
-            cursor.execute("""
+            cursor.execute(
+                """
                 UPDATE weight_suggestions
                 SET status = 'approved', reviewed_at = ?, reviewed_by = ?
                 WHERE id = ?
-            """, (datetime.utcnow().isoformat(), analyst_name, suggestion_id))
+            """,
+                (datetime.utcnow().isoformat(), analyst_name, suggestion_id),
+            )
 
             # Fetch current weight configuration (global or corridor-specific)
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT * FROM weight_configurations
                 WHERE corridor IS ?
                 ORDER BY created_at DESC
                 LIMIT 1
-            """, (corridor,))
+            """,
+                (corridor,),
+            )
 
             weight_config = cursor.fetchone()
 
@@ -351,28 +391,35 @@ class FeedbackEngine:
                 # Create default configuration if none exists
                 logger.warning(f"No weight configuration found for corridor {corridor}, creating default")
                 from three_level_scorer import DEFAULT_WEIGHTS
-                cursor.execute("""
+
+                cursor.execute(
+                    """
                     INSERT INTO weight_configurations
                     (id, corridor, w_corridor, w_vessel, w_manifest, created_at, created_by, notes)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    str(uuid.uuid4()),
-                    corridor,
-                    DEFAULT_WEIGHTS["w_corridor"],
-                    DEFAULT_WEIGHTS["w_vessel"],
-                    DEFAULT_WEIGHTS["w_manifest"],
-                    datetime.utcnow().isoformat(),
-                    analyst_name,
-                    "Auto-created default configuration"
-                ))
+                """,
+                    (
+                        str(uuid.uuid4()),
+                        corridor,
+                        DEFAULT_WEIGHTS["w_corridor"],
+                        DEFAULT_WEIGHTS["w_vessel"],
+                        DEFAULT_WEIGHTS["w_manifest"],
+                        datetime.utcnow().isoformat(),
+                        analyst_name,
+                        "Auto-created default configuration",
+                    ),
+                )
                 conn.commit()
 
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT * FROM weight_configurations
                     WHERE corridor IS ?
                     ORDER BY created_at DESC
                     LIMIT 1
-                """, (corridor,))
+                """,
+                    (corridor,),
+                )
                 weight_config = cursor.fetchone()
 
             config_id, _, config_corridor, w_corridor, w_vessel, w_manifest, _, _, created_by, _ = weight_config
@@ -384,20 +431,23 @@ class FeedbackEngine:
 
             # Create new configuration record
             new_config_id = str(uuid.uuid4())
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO weight_configurations
                 (id, corridor, w_corridor, w_vessel, w_manifest, created_at, created_by, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                new_config_id,
-                corridor,
-                w_corridor if affected_feature != "w_corridor" else new_value,
-                w_vessel if affected_feature != "w_vessel" else new_value,
-                w_manifest if affected_feature != "w_manifest" else new_value,
-                datetime.utcnow().isoformat(),
-                analyst_name,
-                f"Approved suggestion {suggestion_id}: {rationale}"
-            ))
+            """,
+                (
+                    new_config_id,
+                    corridor,
+                    w_corridor if affected_feature != "w_corridor" else new_value,
+                    w_vessel if affected_feature != "w_vessel" else new_value,
+                    w_manifest if affected_feature != "w_manifest" else new_value,
+                    datetime.utcnow().isoformat(),
+                    analyst_name,
+                    f"Approved suggestion {suggestion_id}: {rationale}",
+                ),
+            )
 
             conn.commit()
 
@@ -439,11 +489,14 @@ class FeedbackEngine:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE weight_suggestions
             SET status = 'rejected', reviewed_at = ?, reviewed_by = ?
             WHERE id = ?
-        """, (datetime.utcnow().isoformat(), analyst_name, suggestion_id))
+        """,
+            (datetime.utcnow().isoformat(), analyst_name, suggestion_id),
+        )
 
         conn.commit()
         conn.close()
@@ -467,13 +520,16 @@ class FeedbackEngine:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT w_corridor, w_vessel, w_manifest
                 FROM weight_configurations
                 WHERE corridor IS ?
                 ORDER BY created_at DESC
                 LIMIT 1
-            """, (corridor,))
+            """,
+                (corridor,),
+            )
 
             row = cursor.fetchone()
             conn.close()
@@ -490,6 +546,7 @@ class FeedbackEngine:
 
         # Return defaults if no configuration exists or DB error
         from three_level_scorer import DEFAULT_WEIGHTS
+
         return {
             **DEFAULT_WEIGHTS,
             "corridor": corridor,

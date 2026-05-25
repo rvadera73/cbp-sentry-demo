@@ -3,6 +3,7 @@
 Wraps Senzing REST API for entity matching and why-explanation queries.
 Supports both live Senzing service and fixture mode for offline demo.
 """
+
 import httpx
 import os
 import json
@@ -39,16 +40,16 @@ class SenzingClient:
                         "name": "Greenfield Global Metals Holdings Ltd.",
                         "country": "HK",
                         "relationship": "OWNED_BY",
-                        "confidence": 0.95
+                        "confidence": 0.95,
                     },
                     {
                         "entity_id": "ENT-GF-CN-001",
                         "name": "Guangdong Greenfield Aluminum Mfg. Co., Ltd.",
                         "country": "CN",
                         "relationship": "PARENT_COMPANY",
-                        "confidence": 0.92
-                    }
-                ]
+                        "confidence": 0.92,
+                    },
+                ],
             },
             "sunpath_us": {
                 "entity_id": "ENT-SP-US-001",
@@ -59,8 +60,8 @@ class SenzingClient:
                 "confidence": 0.99,
                 "prior_filings": [
                     {"case_id": "2023-EAPA-001", "determination": "evasion"},
-                    {"case_id": "2023-AD-CV-002", "determination": "duty"}
-                ]
+                    {"case_id": "2023-AD-CV-002", "determination": "duty"},
+                ],
             },
             "solaria_my": {
                 "entity_id": "ENT-SOL-MY-001",
@@ -76,13 +77,15 @@ class SenzingClient:
                         "name": "Guangdong Solaria New Energy Technology Co.",
                         "country": "CN",
                         "relationship": "PARENT_COMPANY",
-                        "confidence": 0.87
+                        "confidence": 0.87,
                     }
-                ]
-            }
+                ],
+            },
         }
 
-    async def resolve_entities(self, manifest_id: str, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None) -> Dict:
+    async def resolve_entities(
+        self, manifest_id: str, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None
+    ) -> Dict:
         """Resolve shipper/consignee entities and return entity chain.
 
         Returns entity objects with ownership relationships and confidence scores.
@@ -92,7 +95,9 @@ class SenzingClient:
         else:
             return await self._resolve_entities_live(shipper_name, consignee_name)
 
-    async def _resolve_entities_fixture(self, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None) -> Dict:
+    async def _resolve_entities_fixture(
+        self, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None
+    ) -> Dict:
         """Fixture implementation for offline demo."""
         entities = []
 
@@ -112,10 +117,12 @@ class SenzingClient:
             "entities": entities,
             "graph_edges": self._build_edges_from_entities(entities),
             "total_confidence": self._avg_confidence(entities),
-            "source": "fixture"
+            "source": "fixture",
         }
 
-    async def _resolve_entities_live(self, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None) -> Dict:
+    async def _resolve_entities_live(
+        self, shipper_name: Optional[str] = None, consignee_name: Optional[str] = None
+    ) -> Dict:
         """Live Senzing API implementation."""
         try:
             async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
@@ -141,7 +148,7 @@ class SenzingClient:
                     "entities": entities,
                     "graph_edges": self._build_edges_from_entities(entities),
                     "total_confidence": self._avg_confidence(entities),
-                    "source": "senzing"
+                    "source": "senzing",
                 }
         except Exception as e:
             logger.warning(f"Senzing connection failed: {e}, falling back to fixtures")
@@ -152,14 +159,16 @@ class SenzingClient:
         edges = []
         for entity in entities:
             for related in entity.get("related_entities", []):
-                edges.append({
-                    "source_id": entity.get("entity_id"),
-                    "target_id": related.get("entity_id"),
-                    "source_name": entity.get("name"),
-                    "target_name": related.get("name"),
-                    "relationship": related.get("relationship"),
-                    "confidence": related.get("confidence")
-                })
+                edges.append(
+                    {
+                        "source_id": entity.get("entity_id"),
+                        "target_id": related.get("entity_id"),
+                        "source_name": entity.get("name"),
+                        "target_name": related.get("name"),
+                        "relationship": related.get("relationship"),
+                        "confidence": related.get("confidence"),
+                    }
+                )
         return edges
 
     def _avg_confidence(self, entities: List[Dict]) -> float:
@@ -192,21 +201,21 @@ class SenzingClient:
                     {
                         "type": "DIRECTOR_SHARED",
                         "details": "Director Li Wei appears in both corporate registries",
-                        "confidence": 0.94
+                        "confidence": 0.94,
                     },
                     {
                         "type": "FREIGHT_FORWARDER_SHARED",
                         "details": "Both entities use Pan-Pacific Logistics, Inc. (freight forwarder ID: FRW-98765)",
-                        "confidence": 0.87
+                        "confidence": 0.87,
                     },
                     {
                         "type": "REGISTERED_AGENT",
                         "details": "Both entities list same registered agent: China Trade Services, Room 1204, Lippo Centre",
-                        "confidence": 0.91
-                    }
+                        "confidence": 0.91,
+                    },
                 ],
                 "confidence": 0.91,
-                "relationship": "OWNED_BY"
+                "relationship": "OWNED_BY",
             }
         elif ("GF-HK" in entity_id_a and "GF-CN" in entity_id_b) or ("GF-CN" in entity_id_a and "GF-HK" in entity_id_b):
             return {
@@ -218,21 +227,21 @@ class SenzingClient:
                     {
                         "type": "OWNERSHIP_STAKE",
                         "details": "Greenfield HK owns 88% of Guangdong Greenfield per SAMR registry",
-                        "confidence": 0.96
+                        "confidence": 0.96,
                     },
                     {
                         "type": "BOARD_OVERLAP",
                         "details": "Chairman Zhang appears on boards of both entities",
-                        "confidence": 0.89
+                        "confidence": 0.89,
                     },
                     {
                         "type": "FACILITY_LOCATION",
                         "details": "Both entities operate from Guangzhou Industrial Zone, Nansha District",
-                        "confidence": 0.93
-                    }
+                        "confidence": 0.93,
+                    },
                 ],
                 "confidence": 0.93,
-                "relationship": "PARENT_COMPANY"
+                "relationship": "PARENT_COMPANY",
             }
         else:
             return {
@@ -241,7 +250,7 @@ class SenzingClient:
                 "why_key": "NOT_CONNECTED",
                 "explanation": "No direct connection found between these entities",
                 "evidence": [],
-                "confidence": 0.0
+                "confidence": 0.0,
             }
 
     async def _get_why_connected_live(self, entity_id_a: str, entity_id_b: str) -> Dict:

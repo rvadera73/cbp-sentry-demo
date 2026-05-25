@@ -16,9 +16,11 @@ import os
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class OFACMatch:
     """Result from OFAC SDN check"""
+
     matched: bool
     entity_name: str
     sdn_name: Optional[str] = None
@@ -28,6 +30,7 @@ class OFACMatch:
     source: str = "OFAC SDN List"
     last_updated: Optional[str] = None
     failure_reason: Optional[str] = None  # Explicit reason if check failed
+
 
 class OFACService:
     """Service for checking entities against live OFAC SDN lists"""
@@ -44,6 +47,7 @@ class OFACService:
         """Initialize CORD engine as fallback (lazy import to avoid circular deps)."""
         try:
             from cord_engine import get_cord_engine
+
             self.cord_engine = get_cord_engine()
             logger.info("OFAC service initialized with CORD engine fallback")
         except Exception as e:
@@ -90,7 +94,7 @@ class OFACService:
                         programs=programs,
                         confidence_pct=98.0 if cord_match.get("matched") else 0.0,
                         source="CORD OFAC SDN Database (1,877 entries)",
-                        last_updated=datetime.utcnow().isoformat()
+                        last_updated=datetime.utcnow().isoformat(),
                     )
             except Exception as e:
                 logger.debug(f"CORD OFAC check failed: {e}")
@@ -101,7 +105,7 @@ class OFACService:
             entity_name=entity_name,
             confidence_pct=0.0,
             source="OFAC Demo (fixture mode)",
-            last_updated=datetime.utcnow().isoformat()
+            last_updated=datetime.utcnow().isoformat(),
         )
 
     async def _check_live_treasury_api(self, entity_name: str, country: Optional[str] = None) -> Optional[OFACMatch]:
@@ -118,7 +122,7 @@ class OFACService:
                     "UserIdentifier": "CBP-Sentry-Demo",
                     "RequestID": str(datetime.utcnow().timestamp()),
                     "SortBy": "MatchScore",
-                    "format": "JSON"
+                    "format": "JSON",
                 }
 
                 # Add name as search parameter
@@ -130,7 +134,7 @@ class OFACService:
                 response = await client.get(
                     self.ofac_api_url,
                     params={**params, "SearchText": search_value},
-                    headers={"User-Agent": "CBP-Sentry/1.0"}
+                    headers={"User-Agent": "CBP-Sentry/1.0"},
                 )
 
                 if response.status_code == 200:
@@ -150,7 +154,7 @@ class OFACService:
                             programs=programs,
                             confidence_pct=float(top_match.get("MatchScore", 90.0)),
                             source="Treasury.gov Consolidated SDN List (LIVE)",
-                            last_updated=data.get("Record_LastUpdated", datetime.utcnow().isoformat())
+                            last_updated=data.get("Record_LastUpdated", datetime.utcnow().isoformat()),
                         )
                 else:
                     logger.warning(f"Treasury API returned status {response.status_code}")

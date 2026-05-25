@@ -1,6 +1,7 @@
 """
 Horizon 2 API Adapters — Pre-Intelligence Data (AIS/vessel tracking, Port authorities)
 """
+
 import logging
 import json
 from typing import Any, Dict
@@ -16,9 +17,12 @@ class AISAdapter(BaseAPIAdapter):
     def __init__(self):
         super().__init__("ais")
         import os
+
         self.vesselfinder_api_key = os.getenv("VESSELAPI_KEY", "")
 
-    async def fetch_live(self, vessel_name: str = None, imo: str = None, mmsi: str = None, manifest_fields: Dict = None) -> Dict[str, Any]:
+    async def fetch_live(
+        self, vessel_name: str = None, imo: str = None, mmsi: str = None, manifest_fields: Dict = None
+    ) -> Dict[str, Any]:
         """
         Fetch AIS data with priority:
         1. Use manifest-stored fields (PRIMARY - no API call needed)
@@ -27,7 +31,9 @@ class AISAdapter(BaseAPIAdapter):
         """
         # Step 1: Prefer manifest-stored fields (dwell_days, ais_stuffing_country, port_calls already in DB)
         if manifest_fields and manifest_fields.get("dwell_days"):
-            logger.info(f"Using manifest AIS data: dwell_days={manifest_fields.get('dwell_days')} days, stuffing={manifest_fields.get('ais_stuffing_country')}")
+            logger.info(
+                f"Using manifest AIS data: dwell_days={manifest_fields.get('dwell_days')} days, stuffing={manifest_fields.get('ais_stuffing_country')}"
+            )
             return self._build_from_manifest(manifest_fields)
 
         # Step 2: Query VesselFinder API if key is configured and imo provided
@@ -63,10 +69,10 @@ class AISAdapter(BaseAPIAdapter):
                             "current_port": data.get("position", {}).get("port", ""),
                             "current_position": {
                                 "lat": data.get("position", {}).get("latitude"),
-                                "lon": data.get("position", {}).get("longitude")
+                                "lon": data.get("position", {}).get("longitude"),
                             },
                             "last_updated": data.get("position", {}).get("timestamp", ""),
-                            "source": "VesselFinder API"
+                            "source": "VesselFinder API",
                         }
                     else:
                         logger.warning(f"VesselFinder returned {resp.status}")
@@ -84,17 +90,19 @@ class AISAdapter(BaseAPIAdapter):
             except:
                 port_calls = []
 
-        return self.add_data_source_metadata({
-            "found": True,
-            "source": "Manifest (ISF Element 9 + AIS archive)",
-            "name": manifest_fields.get("vessel_name", ""),
-            "imo": manifest_fields.get("vessel_imo", ""),
-            "dwell_days": manifest_fields.get("dwell_days", 0),
-            "ais_stuffing_country": manifest_fields.get("ais_stuffing_country", ""),
-            "port_calls": port_calls,
-            "baseline_dwell_days": 2.0,
-            "dwell_anomaly_percentile": self._calculate_dwell_percentile(manifest_fields.get("dwell_days", 0), 2.0)
-        })
+        return self.add_data_source_metadata(
+            {
+                "found": True,
+                "source": "Manifest (ISF Element 9 + AIS archive)",
+                "name": manifest_fields.get("vessel_name", ""),
+                "imo": manifest_fields.get("vessel_imo", ""),
+                "dwell_days": manifest_fields.get("dwell_days", 0),
+                "ais_stuffing_country": manifest_fields.get("ais_stuffing_country", ""),
+                "port_calls": port_calls,
+                "baseline_dwell_days": 2.0,
+                "dwell_anomaly_percentile": self._calculate_dwell_percentile(manifest_fields.get("dwell_days", 0), 2.0),
+            }
+        )
 
     def fetch_fixture(self, vessel_name: str = None, imo: str = None, mmsi: str = None) -> Dict[str, Any]:
         """Return fixture AIS/vessel data with dwell anomalies"""
@@ -153,10 +161,14 @@ class AISAdapter(BaseAPIAdapter):
     @staticmethod
     def _calculate_percentile(ratio: float) -> int:
         """Convert dwell ratio to percentile (rough estimate)"""
-        if ratio > 5: return 99
-        if ratio > 3: return 95
-        if ratio > 2: return 80
-        if ratio > 1.5: return 60
+        if ratio > 5:
+            return 99
+        if ratio > 3:
+            return 95
+        if ratio > 2:
+            return 80
+        if ratio > 1.5:
+            return 60
         return 40
 
     @staticmethod

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Default baseline weights (can be overridden per corridor)
 DEFAULT_WEIGHTS = {
     "w_corridor": 0.20,  # Level 1: Corridor Risk (20%)
-    "w_vessel": 0.35,    # Level 2: Vessel Risk (35%)
+    "w_vessel": 0.35,  # Level 2: Vessel Risk (35%)
     "w_manifest": 0.45,  # Level 3: Manifest Risk (45%)
 }
 
@@ -33,26 +33,29 @@ DATA_SERVICE_URL = "http://localhost:8005"
 @dataclass
 class CorridorRiskSignals:
     """Signals for Level 1: Corridor Risk Assessment"""
+
     macro_volume_spike: float  # 0-100: Volume surge >2σ above 3-year average
-    regulatory_delta: float    # 0-100: Recent sanctions or protective tariffs
-    confidence: float          # 0-100: Overall confidence in signals
+    regulatory_delta: float  # 0-100: Recent sanctions or protective tariffs
+    confidence: float  # 0-100: Overall confidence in signals
 
 
 @dataclass
 class VesselRiskSignals:
     """Signals for Level 2: Pre-Manifest Vessel Risk"""
-    ftz_loitering: float      # 0-100: Vessel dwell >10 days in transshipment port
+
+    ftz_loitering: float  # 0-100: Vessel dwell >10 days in transshipment port
     ais_dark_activity: float  # 0-100: Missing AIS telemetry near sensitive areas
-    confidence: float         # 0-100: Overall confidence in signals
+    confidence: float  # 0-100: Overall confidence in signals
 
 
 @dataclass
 class ManifestRiskSignals:
     """Signals for Level 3: Manifest Risk Assessment"""
+
     entity_resolution_match: float  # 0-100: Senzing hit on shell/proxy entities
-    hs_code_weight_delta: float     # 0-100: Cargo weight variance >±15%
-    network_anomaly: float          # 0-100: First-time importer via unfamiliar port
-    confidence: float               # 0-100: Overall confidence in signals
+    hs_code_weight_delta: float  # 0-100: Cargo weight variance >±15%
+    network_anomaly: float  # 0-100: First-time importer via unfamiliar port
+    confidence: float  # 0-100: Overall confidence in signals
 
 
 class ThreeLevelScorer:
@@ -97,29 +100,30 @@ class ThreeLevelScorer:
 
         try:
             # Level 1: Corridor Risk
-            corridor_signals = await self._assess_corridor_risk(
-                shipper_country, consignee_country, hs_code
-            )
+            corridor_signals = await self._assess_corridor_risk(shipper_country, consignee_country, hs_code)
             corridor_score = self._calculate_corridor_score(corridor_signals)
 
             # Level 2: Vessel Risk
-            vessel_signals = await self._assess_vessel_risk(
-                vessel_name, shipper_country, consignee_country
-            )
+            vessel_signals = await self._assess_vessel_risk(vessel_name, shipper_country, consignee_country)
             vessel_score = self._calculate_vessel_score(vessel_signals)
 
             # Level 3: Manifest Risk
             manifest_signals = await self._assess_manifest_risk(
-                shipper_name, shipper_country, consignee_name, consignee_country,
-                hs_code, declared_value_usd, declared_weight_kg
+                shipper_name,
+                shipper_country,
+                consignee_name,
+                consignee_country,
+                hs_code,
+                declared_value_usd,
+                declared_weight_kg,
             )
             manifest_score = self._calculate_manifest_score(manifest_signals)
 
             # Calculate weighted total
             total_score = (
-                weights["w_corridor"] * corridor_score +
-                weights["w_vessel"] * vessel_score +
-                weights["w_manifest"] * manifest_score
+                weights["w_corridor"] * corridor_score
+                + weights["w_vessel"] * vessel_score
+                + weights["w_manifest"] * manifest_score
             ) * 100  # Scale to 0-100
 
             # Determine risk level
@@ -133,9 +137,7 @@ class ThreeLevelScorer:
                 risk_level = "LOW"
 
             # Generate XAI factors
-            xai_factors = self._generate_xai_factors(
-                corridor_signals, vessel_signals, manifest_signals, weights
-            )
+            xai_factors = self._generate_xai_factors(corridor_signals, vessel_signals, manifest_signals, weights)
 
             result = {
                 "shipment_id": shipment_id,
@@ -162,7 +164,7 @@ class ThreeLevelScorer:
                         "hs_code_weight_delta": manifest_signals.hs_code_weight_delta,
                         "network_anomaly": manifest_signals.network_anomaly,
                         "confidence": manifest_signals.confidence,
-                    }
+                    },
                 },
                 "xai_factors": xai_factors,
                 "timestamp": datetime.utcnow().isoformat(),
@@ -175,9 +177,7 @@ class ThreeLevelScorer:
             logger.error(f"Error scoring shipment {shipment_id}: {e}")
             raise
 
-    async def _assess_corridor_risk(
-        self, origin_country: str, dest_country: str, hs_code: str
-    ) -> CorridorRiskSignals:
+    async def _assess_corridor_risk(self, origin_country: str, dest_country: str, hs_code: str) -> CorridorRiskSignals:
         """
         Level 1: Assess macro-level corridor risk.
         Evaluates trade lane capacity and regulatory environment.
@@ -207,9 +207,7 @@ class ThreeLevelScorer:
         # Fallback: Rule-based assessment
         return self._corridor_risk_baseline(origin_country, dest_country, hs_code)
 
-    def _corridor_risk_baseline(
-        self, origin: str, destination: str, hs_code: str
-    ) -> CorridorRiskSignals:
+    def _corridor_risk_baseline(self, origin: str, destination: str, hs_code: str) -> CorridorRiskSignals:
         """Baseline rule-based corridor risk assessment"""
         # High-risk corridors for transshipment
         high_risk_corridors = ["VN-US", "MY-US", "KH-US", "TH-US", "CN-MY", "CN-VN"]
@@ -227,9 +225,7 @@ class ThreeLevelScorer:
             confidence=75.0,
         )
 
-    async def _assess_vessel_risk(
-        self, vessel_name: Optional[str], origin: str, destination: str
-    ) -> VesselRiskSignals:
+    async def _assess_vessel_risk(self, vessel_name: Optional[str], origin: str, destination: str) -> VesselRiskSignals:
         """
         Level 2: Assess pre-manifest vessel anomalies.
         Evaluates AIS patterns, port dwell times, and routing anomalies.
@@ -371,6 +367,7 @@ class ThreeLevelScorer:
             return None
         try:
             from dateutil import parser as dateutil_parser
+
             incorp_date = dateutil_parser.parse(incorporation_date)
             age_days = (datetime.utcnow() - incorp_date).days
             return age_days
@@ -381,9 +378,9 @@ class ThreeLevelScorer:
         """Assess if cargo weight deviates significantly from HS code averages"""
         # Known HS code weight benchmarks (kg per unit)
         weight_benchmarks = {
-            "7604": 2.5,   # Aluminum extrusions
-            "8541": 0.3,   # Solar modules
-            "7610": 2.8,   # Aluminum structures
+            "7604": 2.5,  # Aluminum extrusions
+            "8541": 0.3,  # Solar modules
+            "7610": 2.8,  # Aluminum structures
         }
 
         hs_prefix = hs_code[:4]
@@ -415,9 +412,9 @@ class ThreeLevelScorer:
         """Calculate Level 3 manifest risk score (0-1.0)"""
         # Weight: 50% entity match, 30% weight delta, 20% network anomaly
         score = (
-            0.50 * signals.entity_resolution_match +
-            0.30 * signals.hs_code_weight_delta +
-            0.20 * signals.network_anomaly
+            0.50 * signals.entity_resolution_match
+            + 0.30 * signals.hs_code_weight_delta
+            + 0.20 * signals.network_anomaly
         ) / 100
         return min(score, 1.0)
 
@@ -445,9 +442,13 @@ class ThreeLevelScorer:
 
         # Level 3 factors
         if manifest.entity_resolution_match > 50:
-            factors.append(f"Senzing entity resolution match to shell/proxy entities: {manifest.entity_resolution_match:.0f}%")
+            factors.append(
+                f"Senzing entity resolution match to shell/proxy entities: {manifest.entity_resolution_match:.0f}%"
+            )
         if manifest.hs_code_weight_delta > 15:
-            factors.append(f"Cargo weight variance exceeds ±15% tolerance: {manifest.hs_code_weight_delta:.0f}% deviation")
+            factors.append(
+                f"Cargo weight variance exceeds ±15% tolerance: {manifest.hs_code_weight_delta:.0f}% deviation"
+            )
         if manifest.network_anomaly > 50:
             factors.append("First-time importer detected via unfamiliar port routing")
 

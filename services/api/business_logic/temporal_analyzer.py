@@ -143,9 +143,7 @@ class TemporalAnalyzer:
                 "signal": "Historical average is zero",
             }
 
-        deviation_pct = (
-            ((current_period_value - historical_avg) / historical_avg) * 100
-        )
+        deviation_pct = ((current_period_value - historical_avg) / historical_avg) * 100
         anomaly_detected = abs(deviation_pct) > 50  # Flag > 50% deviation
 
         return {
@@ -157,9 +155,7 @@ class TemporalAnalyzer:
             f"({current_period_value:.0f} vs {historical_avg:.0f})",
         }
 
-    def calculate_trend(
-        self, time_series: List[Tuple[str, float]], window_days: int = 7
-    ) -> Dict[str, Any]:
+    def calculate_trend(self, time_series: List[Tuple[str, float]], window_days: int = 7) -> Dict[str, Any]:
         """Calculate trend direction (up/down/flat) over time series.
 
         **Use case**: Detect if a corridor is consistently ramping up activity,
@@ -226,9 +222,7 @@ class TemporalAnalyzer:
             "data_points": n,
         }
 
-    def detect_cyclical_pattern(
-        self, time_series: List[Tuple[str, float]]
-    ) -> Dict[str, Any]:
+    def detect_cyclical_pattern(self, time_series: List[Tuple[str, float]]) -> Dict[str, Any]:
         """Detect if corridor shows cyclical shipping pattern.
 
         **Use case**: Some evasion tactics operate on cycles (e.g., ship weekly

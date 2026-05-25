@@ -1,6 +1,7 @@
 """
 Base adapter class for external APIs with live/fixture support
 """
+
 import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional
@@ -56,7 +57,9 @@ class BaseAPIAdapter(ABC):
                 headers["Authorization"] = f"Bearer {self.api_key}"
 
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(
+                    url, params=params, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
                     if resp.status == 200:
                         return await resp.json()
                     else:

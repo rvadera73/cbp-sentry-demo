@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 # Attempt to import Gemini SDK
 try:
     import google.generativeai as genai
+
     GEMINI_AVAILABLE = True
 except ImportError:
     logger.warning("Gemini SDK not available, using fixture mode")
@@ -57,9 +58,7 @@ class VertexAIClient:
                 logger.warning("GOOGLE_API_KEY not set, using fixture mode")
 
     async def extract_from_document(
-        self,
-        document_url: str,
-        document_type: str = "invoice"  # invoice, certificate_of_origin, packing_list, email
+        self, document_url: str, document_type: str = "invoice"  # invoice, certificate_of_origin, packing_list, email
     ) -> Dict[str, Any]:
         """
         Extract structured data from document using Gemini vision.
@@ -101,18 +100,10 @@ class VertexAIClient:
 
         except Exception as e:
             logger.error(f"Document extraction failed: {e}")
-            return {
-                "extracted": False,
-                "error": str(e),
-                "confidence": 0.0
-            }
+            return {"extracted": False, "error": str(e), "confidence": 0.0}
 
     async def generate_evidence_narrative(
-        self,
-        shipment_id: str,
-        entities: List[Dict[str, Any]],
-        signals: Dict[str, Any],
-        risk_score: float
+        self, shipment_id: str, entities: List[Dict[str, Any]], signals: Dict[str, Any], risk_score: float
     ) -> Dict[str, Any]:
         """
         Generate natural language evidence narratives for referral package sections.
@@ -149,16 +140,10 @@ class VertexAIClient:
 
         except Exception as e:
             logger.error(f"Evidence narrative generation failed: {e}")
-            return {
-                "error": str(e),
-                "confidence": 0.0
-            }
+            return {"error": str(e), "confidence": 0.0}
 
     async def detect_entity_aliases(
-        self,
-        primary_name: str,
-        documents: List[str],
-        country: Optional[str] = None
+        self, primary_name: str, documents: List[str], country: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Detect entity name aliases and transliterations from unstructured documents.
@@ -195,11 +180,7 @@ class VertexAIClient:
 
         except Exception as e:
             logger.error(f"Alias detection failed: {e}")
-            return {
-                "aliases": [],
-                "error": str(e),
-                "confidence": 0.0
-            }
+            return {"aliases": [], "error": str(e), "confidence": 0.0}
 
     # Fixture implementations (demo mode)
 
@@ -219,11 +200,11 @@ class VertexAIClient:
                     "weights": {"net_kg": 5000, "gross_kg": 5200},
                     "alert_signals": [
                         "Declared price 33% below market comparable",
-                        "Supplier incorporated 8 months ago (new entity)"
-                    ]
+                        "Supplier incorporated 8 months ago (new entity)",
+                    ],
                 },
                 "confidence": 0.92,
-                "model": "Gemini 1.5 Flash (fixture)"
+                "model": "Gemini 1.5 Flash (fixture)",
             },
             "certificate_of_origin": {
                 "extracted": True,
@@ -233,12 +214,10 @@ class VertexAIClient:
                     "manufacturer_address": "Hanoi, Vietnam",
                     "shipper_address": "Guangzhou, China",
                     "exporter_date": "2026-02-20",
-                    "alert_signals": [
-                        "ISF Element 9 mismatch: declared VN, actual stuffing China"
-                    ]
+                    "alert_signals": ["ISF Element 9 mismatch: declared VN, actual stuffing China"],
                 },
                 "confidence": 0.88,
-                "model": "Gemini 1.5 Flash (fixture)"
+                "model": "Gemini 1.5 Flash (fixture)",
             },
             "packing_list": {
                 "extracted": True,
@@ -247,23 +226,17 @@ class VertexAIClient:
                     "container_count": 450,
                     "containers": {"containers_per_20ft": 450},
                     "weights": {"total_net_kg": 5000},
-                    "alert_signals": []
+                    "alert_signals": [],
                 },
                 "confidence": 0.95,
-                "model": "Gemini 1.5 Flash (fixture)"
-            }
+                "model": "Gemini 1.5 Flash (fixture)",
+            },
         }
-        return fixtures.get(document_type, {
-            "extracted": False,
-            "document_type": document_type,
-            "confidence": 0.0
-        })
+        return fixtures.get(document_type, {"extracted": False, "document_type": document_type, "confidence": 0.0})
 
     @staticmethod
     def _fixture_generate_evidence_narrative(
-        shipment_id: str,
-        entities: List[Dict[str, Any]],
-        signals: Dict[str, Any]
+        shipment_id: str, entities: List[Dict[str, Any]], signals: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Return fixture evidence narrative for demo."""
         return {
@@ -284,30 +257,30 @@ class VertexAIClient:
                     "indicator": "ISF Element 9 Mismatch",
                     "risk_level": "HIGH",
                     "evidence": "Declared origin Vietnam; actual port of loading Guangzhou, China",
-                    "authority": "19 CFR 149.2(c) — ISF must state accurate origin"
+                    "authority": "19 CFR 149.2(c) — ISF must state accurate origin",
                 },
                 {
                     "indicator": "Shipper Age + Volume",
                     "risk_level": "HIGH",
                     "evidence": "Shipper incorporated 8 months ago; declaring $50K+ shipments immediately",
-                    "authority": "EAPA (19 USC 1517) — sudden large-volume new entities"
+                    "authority": "EAPA (19 USC 1517) — sudden large-volume new entities",
                 },
                 {
                     "indicator": "Dwell Time Anomaly",
                     "risk_level": "MEDIUM",
                     "evidence": "11.2 days in Guangzhou port vs 2.1 day baseline (5.3× normal)",
-                    "authority": "AIS tracking, CBP-OP manifest review protocols"
-                }
+                    "authority": "AIS tracking, CBP-OP manifest review protocols",
+                },
             ],
             "section_3_13_what_if_scenarios": [
                 {
                     "scenario": "If origin truly Vietnamese: score would be 12/100 (LOW)",
                     "supporting_facts": "Vietnam Aluminum Corp (established 2009) scores 18/100 with similar volume",
-                    "counterfactual_analysis": "Shipper age and corridor alone do not justify HIGH risk"
+                    "counterfactual_analysis": "Shipper age and corridor alone do not justify HIGH risk",
                 }
             ],
             "model": "Gemini 1.5 Flash (fixture)",
-            "confidence": 0.87
+            "confidence": 0.87,
         }
 
     @staticmethod
@@ -316,28 +289,18 @@ class VertexAIClient:
         if "greenfield" in primary_name.lower() and country == "VN":
             return {
                 "primary_name": primary_name,
-                "aliases": [
-                    "Greenfield Industrial",
-                    "Greenfield Vietnam",
-                    "GF Industrial Trading"
-                ],
-                "transliterations": [
-                    {
-                        "script": "Chinese",
-                        "names": ["綠田工業", "绿田工业"],
-                        "confidence": 0.78
-                    }
-                ],
+                "aliases": ["Greenfield Industrial", "Greenfield Vietnam", "GF Industrial Trading"],
+                "transliterations": [{"script": "Chinese", "names": ["綠田工業", "绿田工业"], "confidence": 0.78}],
                 "obfuscation_risk": 0.45,
                 "model": "Gemini 1.5 Flash (fixture)",
-                "confidence": 0.84
+                "confidence": 0.84,
             }
         return {
             "primary_name": primary_name,
             "aliases": [],
             "transliterations": [],
             "obfuscation_risk": 0.0,
-            "confidence": 0.0
+            "confidence": 0.0,
         }
 
 

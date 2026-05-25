@@ -1,6 +1,7 @@
 """
 ML Models for H1 & H2 Scoring
 """
+
 import logging
 import numpy as np
 from typing import Dict, Any
@@ -99,10 +100,14 @@ class H1CorridorRiskScorer:
             price_ratio = declared_unit_price / benchmark_price
             if price_ratio < 0.6:  # 40% below market = extreme
                 pricing_score = 10
-                factors.append({"name": "EXTREME_UNDERVALUATION", "points": pricing_score, "ratio": round(price_ratio, 2)})
+                factors.append(
+                    {"name": "EXTREME_UNDERVALUATION", "points": pricing_score, "ratio": round(price_ratio, 2)}
+                )
             elif price_ratio < 0.75:  # 25% below market = suspicious
                 pricing_score = 6
-                factors.append({"name": "SUSPICIOUS_UNDERVALUATION", "points": pricing_score, "ratio": round(price_ratio, 2)})
+                factors.append(
+                    {"name": "SUSPICIOUS_UNDERVALUATION", "points": pricing_score, "ratio": round(price_ratio, 2)}
+                )
             elif price_ratio < 0.9:  # 10% below market = notable
                 pricing_score = 2
                 factors.append({"name": "SLIGHT_UNDERVALUATION", "points": pricing_score})
@@ -162,7 +167,14 @@ class H2AnomalyScorer:
 
         if anomaly_ratio > 5:
             dwell_score = 12
-            anomalies.append({"name": "EXTREME_DWELL_ANOMALY", "points": dwell_score, "ratio": round(anomaly_ratio, 1), "percentile": dwell_anomaly_percentile})
+            anomalies.append(
+                {
+                    "name": "EXTREME_DWELL_ANOMALY",
+                    "points": dwell_score,
+                    "ratio": round(anomaly_ratio, 1),
+                    "percentile": dwell_anomaly_percentile,
+                }
+            )
         elif anomaly_ratio > 3:
             dwell_score = 8
             anomalies.append({"name": "HIGH_DWELL_ANOMALY", "points": dwell_score, "ratio": round(anomaly_ratio, 1)})
@@ -182,10 +194,20 @@ class H2AnomalyScorer:
         if declared_origin and actual_stuffing and declared_origin != actual_stuffing:
             if isf_confidence > 0.95:
                 isf_score = 12
-                anomalies.append({"name": "ISF_ELEMENT_9_MISMATCH", "points": isf_score, "declared": declared_origin, "actual": actual_stuffing, "confidence": isf_confidence})
+                anomalies.append(
+                    {
+                        "name": "ISF_ELEMENT_9_MISMATCH",
+                        "points": isf_score,
+                        "declared": declared_origin,
+                        "actual": actual_stuffing,
+                        "confidence": isf_confidence,
+                    }
+                )
             elif isf_confidence > 0.80:
                 isf_score = 8
-                anomalies.append({"name": "ISF_ELEMENT_9_DISCREPANCY", "points": isf_score, "confidence": isf_confidence})
+                anomalies.append(
+                    {"name": "ISF_ELEMENT_9_DISCREPANCY", "points": isf_score, "confidence": isf_confidence}
+                )
             else:
                 isf_score = 3
                 anomalies.append({"name": "ISF_ELEMENT_9_POSSIBLE_MISMATCH", "points": isf_score})

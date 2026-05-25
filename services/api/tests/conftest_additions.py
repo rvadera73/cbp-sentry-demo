@@ -1,4 +1,5 @@
 """Additional fixtures for entity resolution testing"""
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -22,7 +23,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_vn_001",
             "senzing_confidence": 0.95,
             "risk_score": 45,
-            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"}
+            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"},
         },
         "sibling_vn": {
             "id": "ENT-VN-002",
@@ -39,7 +40,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_vn_002",
             "senzing_confidence": 0.88,
             "risk_score": 38,
-            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"}
+            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"},
         },
         "parent_hk": {
             "id": "ENT-HK-001",
@@ -56,7 +57,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_hk_001",
             "senzing_confidence": 0.92,
             "risk_score": 52,
-            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"}
+            "metadata": {"freight_forwarder": "Saigon Global Logistics", "source": "CBP Manifest"},
         },
         "parent_cn": {
             "id": "ENT-CN-001",
@@ -73,7 +74,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_cn_001",
             "senzing_confidence": 0.98,
             "risk_score": 68,
-            "metadata": {"aluminum_exporter": True, "ad_cvd_history": True, "source": "CBP Manifest"}
+            "metadata": {"aluminum_exporter": True, "ad_cvd_history": True, "source": "CBP Manifest"},
         },
         "consignee_us": {
             "id": "ENT-US-001",
@@ -90,7 +91,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_us_001",
             "senzing_confidence": 0.85,
             "risk_score": 25,
-            "metadata": {"source": "CBP Manifest"}
+            "metadata": {"source": "CBP Manifest"},
         },
         "vessel": {
             "id": "ENT-VESSEL-001",
@@ -108,7 +109,7 @@ def greenfield_entities():
             "senzing_record_id": "rec_vessel_001",
             "senzing_confidence": 0.99,
             "risk_score": 0,
-            "metadata": {"source": "AIS Data"}
+            "metadata": {"source": "AIS Data"},
         },
         "port_terminal": {
             "id": "ENT-PORT-001",
@@ -124,8 +125,8 @@ def greenfield_entities():
             "senzing_record_id": "rec_port_001",
             "senzing_confidence": 0.99,
             "risk_score": 15,
-            "metadata": {"port_of_call": True, "dwell_days": 11.2, "anomaly_ratio": 5.3, "source": "Port Authority"}
-        }
+            "metadata": {"port_of_call": True, "dwell_days": 11.2, "anomaly_ratio": 5.3, "source": "Port Authority"},
+        },
     }
 
 
@@ -144,13 +145,15 @@ def mock_senzing():
         matches = []
         if "Greenfield" in entity_data.get("name", ""):
             if entity_data.get("country") == "VN":
-                matches = [{
-                    "record_id": "rec_cn_001",
-                    "name": "Guangdong Greenfield Aluminum Mfg. Co., Ltd.",
-                    "country": "CN",
-                    "confidence": 0.98,
-                    "match_key": "NAME_MATCH_ADMIN"
-                }]
+                matches = [
+                    {
+                        "record_id": "rec_cn_001",
+                        "name": "Guangdong Greenfield Aluminum Mfg. Co., Ltd.",
+                        "country": "CN",
+                        "confidence": 0.98,
+                        "match_key": "NAME_MATCH_ADMIN",
+                    }
+                ]
         return matches
 
     mock_client.search_entity = MagicMock(side_effect=search_entity_side_effect)
@@ -165,8 +168,8 @@ def mock_senzing():
                 {"match_key": "ADMIN", "score": 0.91, "detail": "Shared director: Nguyen Van Hung"},
                 {"match_key": "PHONE", "score": 0.85, "detail": "Shared phone: +84-8-3826-8888"},
                 {"match_key": "RELATIONSHIP", "score": 0.87, "detail": "Freight forwarder: Saigon Global Logistics"},
-                {"match_key": "COMMERCIAL_RECORDS", "score": 0.98, "detail": "Prior CBP filings: 18"}
-            ]
+                {"match_key": "COMMERCIAL_RECORDS", "score": 0.98, "detail": "Prior CBP filings: 18"},
+            ],
         }
 
     mock_client.why_entities = MagicMock(side_effect=why_entities_side_effect)
@@ -175,7 +178,7 @@ def mock_senzing():
         related_map = {
             "rec_vn_001": ["rec_hk_001", "rec_cn_001"],
             "rec_hk_001": ["rec_vn_001", "rec_cn_001"],
-            "rec_cn_001": ["rec_hk_001", "rec_vn_001", "rec_vn_002"]
+            "rec_cn_001": ["rec_hk_001", "rec_vn_001", "rec_vn_002"],
         }
         return related_map.get(entity_id, [])
 
@@ -207,11 +210,15 @@ def mock_neo4j():
         elif "CREATE" in query:
             return run_create_node(query, **params)
         elif "MATCH" in query and "shortest" in query.lower():
-            return [MagicMock(nodes=[
-                MagicMock(id=1, labels=["Entity"], properties={"name": "VN Shipper"}),
-                MagicMock(id=2, labels=["Entity"], properties={"name": "HK Holding"}),
-                MagicMock(id=3, labels=["Entity"], properties={"name": "CN Manufacturer"})
-            ])]
+            return [
+                MagicMock(
+                    nodes=[
+                        MagicMock(id=1, labels=["Entity"], properties={"name": "VN Shipper"}),
+                        MagicMock(id=2, labels=["Entity"], properties={"name": "HK Holding"}),
+                        MagicMock(id=3, labels=["Entity"], properties={"name": "CN Manufacturer"}),
+                    ]
+                )
+            ]
         return []
 
     mock_session.run = MagicMock(side_effect=run_query)

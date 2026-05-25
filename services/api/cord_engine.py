@@ -1,4 +1,5 @@
 """CORD FTS Index Engine — Search 244K entities efficiently without eval limits."""
+
 import sqlite3
 import json
 import logging
@@ -166,20 +167,36 @@ class CORDEngine:
 
         # Insert into FTS5
         try:
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO cord_fts (record_id, data_source, record_type, name_primary, names_aka, country, ofac_program, sanctions_topic, raw_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (record_id, data_source, record_type, name_primary, names_aka, country, ofac_program, sanctions_topic, raw_json))
+            """,
+                (
+                    record_id,
+                    data_source,
+                    record_type,
+                    name_primary,
+                    names_aka,
+                    country,
+                    ofac_program,
+                    sanctions_topic,
+                    raw_json,
+                ),
+            )
         except sqlite3.IntegrityError:
             pass  # Duplicate, skip
 
         # If OFAC, also insert into ofac_sdn for faster SDN checks
         if data_source == "OFAC":
             try:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO ofac_sdn (record_id, name_primary, names_aka, sdn_program, entity_type, raw_json)
                     VALUES (?, ?, ?, ?, ?, ?)
-                """, (record_id, name_primary, names_aka, ofac_program, record_type, raw_json))
+                """,
+                    (record_id, name_primary, names_aka, ofac_program, record_type, raw_json),
+                )
             except sqlite3.IntegrityError:
                 pass
 
@@ -201,29 +218,37 @@ class CORDEngine:
 
         try:
             if country:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT record_id, data_source, name_primary, country, raw_json
                     FROM cord_fts
                     WHERE cord_fts MATCH ? AND country = ?
                     LIMIT ?
-                """, (name, country, limit))
+                """,
+                    (name, country, limit),
+                )
             else:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     SELECT record_id, data_source, name_primary, country, raw_json
                     FROM cord_fts
                     WHERE cord_fts MATCH ?
                     LIMIT ?
-                """, (name, limit))
+                """,
+                    (name, limit),
+                )
 
             results = []
             for row in cursor.fetchall():
-                results.append({
-                    "record_id": row["record_id"],
-                    "data_source": row["data_source"],
-                    "name": row["name_primary"],
-                    "country": row["country"],
-                    "raw_json": json.loads(row["raw_json"])
-                })
+                results.append(
+                    {
+                        "record_id": row["record_id"],
+                        "data_source": row["data_source"],
+                        "name": row["name_primary"],
+                        "country": row["country"],
+                        "raw_json": json.loads(row["raw_json"]),
+                    }
+                )
 
             logger.debug(f"CORD search '{name}' (country={country}) found {len(results)} matches")
             return results
@@ -248,12 +273,15 @@ class CORDEngine:
 
         try:
             # FTS search on OFAC table
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT record_id, name_primary, sdn_program, entity_type, raw_json
                 FROM ofac_sdn
                 WHERE name_primary LIKE ? OR names_aka LIKE ?
                 LIMIT 1
-            """, (f"%{name}%", f"%{name}%"))
+            """,
+                (f"%{name}%", f"%{name}%"),
+            )
 
             row = cursor.fetchone()
             if row:
@@ -265,7 +293,7 @@ class CORDEngine:
                     "program": row["sdn_program"],
                     "entity_type": row["entity_type"],
                     "source": "CORD OFAC SDN",
-                    "raw": json.loads(row["raw_json"])
+                    "raw": json.loads(row["raw_json"]),
                 }
 
             return None
@@ -294,11 +322,9 @@ class CORDEngine:
             for match in matches:
                 record_id = match["record_id"]
                 if record_id not in seen_ids and len(subset) < 20:
-                    subset.append({
-                        "DATA_SOURCE": match["data_source"],
-                        "RECORD_ID": record_id,
-                        "raw_record": match["raw_json"]
-                    })
+                    subset.append(
+                        {"DATA_SOURCE": match["data_source"], "RECORD_ID": record_id, "raw_record": match["raw_json"]}
+                    )
                     seen_ids.add(record_id)
 
         logger.info(f"Built Senzing subset: {len(subset)} records from {len(entities_to_search)} search queries")

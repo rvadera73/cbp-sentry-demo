@@ -273,9 +273,7 @@ class TestManifestIngestionEndToEnd:
     Integration tests for full ingestion pipeline.
     """
 
-    def test_ingest_greenfield_manifest_creates_shipment(
-        self, greenfield_manifest, mock_firestore
-    ):
+    def test_ingest_greenfield_manifest_creates_shipment(self, greenfield_manifest, mock_firestore):
         """
         GIVEN: Greenfield manifest file uploaded
         WHEN: Ingest service processes file

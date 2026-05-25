@@ -2,6 +2,7 @@
 H3 Intelligence Scorer - OFAC, Watch Lists, Watch List Entities, New Importer Signals
 Max: 25 points
 """
+
 import logging
 from typing import Dict, Any
 from datetime import datetime, timedelta
@@ -45,11 +46,9 @@ class H3IntelligenceScorer:
         if ofac_hit:
             ofac_score = 15
             score += ofac_score
-            factors.append({
-                "name": "OFAC_SDN_HIT",
-                "points": ofac_score,
-                "description": "Entity appears on OFAC SDN list"
-            })
+            factors.append(
+                {"name": "OFAC_SDN_HIT", "points": ofac_score, "description": "Entity appears on OFAC SDN list"}
+            )
         else:
             ofac_score = 0
 
@@ -58,20 +57,24 @@ class H3IntelligenceScorer:
         if prior_eapa_filings > 0:
             if prior_eapa_filings >= 3:
                 watch_score = 10
-                factors.append({
-                    "name": "WATCH_LIST_ENTITY",
-                    "points": watch_score,
-                    "prior_eapa_filings": prior_eapa_filings,
-                    "description": f"Entity has {prior_eapa_filings} prior EAPA involvement"
-                })
+                factors.append(
+                    {
+                        "name": "WATCH_LIST_ENTITY",
+                        "points": watch_score,
+                        "prior_eapa_filings": prior_eapa_filings,
+                        "description": f"Entity has {prior_eapa_filings} prior EAPA involvement",
+                    }
+                )
             elif prior_eapa_filings >= 1:
                 watch_score = 5
-                factors.append({
-                    "name": "WATCH_LIST_ENTITY",
-                    "points": watch_score,
-                    "prior_eapa_filings": prior_eapa_filings,
-                    "description": f"Entity has {prior_eapa_filings} prior EAPA involvement"
-                })
+                factors.append(
+                    {
+                        "name": "WATCH_LIST_ENTITY",
+                        "points": watch_score,
+                        "prior_eapa_filings": prior_eapa_filings,
+                        "description": f"Entity has {prior_eapa_filings} prior EAPA involvement",
+                    }
+                )
             else:
                 watch_score = 0
         else:
@@ -84,13 +87,15 @@ class H3IntelligenceScorer:
         if is_new_importer and declared_value > 50000:
             new_importer_score = 8
             score += new_importer_score
-            factors.append({
-                "name": "NEW_IMPORTER_HIGH_VOL",
-                "points": new_importer_score,
-                "importer_age_months": shipper_age_months,
-                "value_usd": declared_value,
-                "description": "New importer (< 1 year) importing high-value shipment"
-            })
+            factors.append(
+                {
+                    "name": "NEW_IMPORTER_HIGH_VOL",
+                    "points": new_importer_score,
+                    "importer_age_months": shipper_age_months,
+                    "value_usd": declared_value,
+                    "description": "New importer (< 1 year) importing high-value shipment",
+                }
+            )
         else:
             new_importer_score = 0
 
@@ -99,12 +104,14 @@ class H3IntelligenceScorer:
         if volume_surge_ratio > 3.0:
             surge_score = 5
             score += surge_score
-            factors.append({
-                "name": "SURGE_VOLUME",
-                "points": surge_score,
-                "surge_ratio": round(volume_surge_ratio, 1),
-                "description": f"Import volume surge ({round(volume_surge_ratio, 1)}x baseline)"
-            })
+            factors.append(
+                {
+                    "name": "SURGE_VOLUME",
+                    "points": surge_score,
+                    "surge_ratio": round(volume_surge_ratio, 1),
+                    "description": f"Import volume surge ({round(volume_surge_ratio, 1)}x baseline)",
+                }
+            )
         else:
             surge_score = 0
 

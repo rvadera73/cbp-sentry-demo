@@ -1,6 +1,7 @@
 """
 External API configuration — toggle between live and fixture modes
 """
+
 import os
 from typing import Literal
 

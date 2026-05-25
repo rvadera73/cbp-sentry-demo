@@ -242,9 +242,7 @@ class TestEndToEndScoring:
         assert response.confidence_tier == "HIGH"
         assert len(response.components) == 6
 
-    def test_score_includes_all_component_narratives(
-        self, greenfield_manifest, greenfield_entities
-    ):
+    def test_score_includes_all_component_narratives(self, greenfield_manifest, greenfield_entities):
         """Each component should include description"""
         service = ScoringService()
         response = service.score_shipment(greenfield_manifest, greenfield_entities)
@@ -253,9 +251,7 @@ class TestEndToEndScoring:
             assert component.description
             assert len(component.description) > 0
 
-    def test_score_includes_xai_assertions(
-        self, greenfield_manifest, greenfield_entities
-    ):
+    def test_score_includes_xai_assertions(self, greenfield_manifest, greenfield_entities):
         """Response should include XAI assertions"""
         service = ScoringService()
         response = service.score_shipment(greenfield_manifest, greenfield_entities)
@@ -265,9 +261,7 @@ class TestEndToEndScoring:
             assert assertion.text
             assert assertion.source
 
-    def test_revenue_impact_calculation(
-        self, greenfield_manifest, greenfield_entities
-    ):
+    def test_revenue_impact_calculation(self, greenfield_manifest, greenfield_entities):
         """Should calculate estimated duty evasion amount"""
         service = ScoringService()
         response = service.score_shipment(greenfield_manifest, greenfield_entities)

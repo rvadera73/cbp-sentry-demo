@@ -23,9 +23,7 @@ class TestReferralPackageStructure:
     Tables 3-1 through 3-14 from ARCHITECTURE.md
     """
 
-    def test_referral_package_has_all_required_sections(
-        self, greenfield_referral_package
-    ):
+    def test_referral_package_has_all_required_sections(self, greenfield_referral_package):
         """
         GIVEN: Greenfield referral package
         WHEN: Package is generated
@@ -64,9 +62,7 @@ class TestReferralPackageStructure:
         ]
 
         for nested_section in nested_sections:
-            assert nested_section in package["sections"], (
-                f"Missing nested section: {nested_section}"
-            )
+            assert nested_section in package["sections"], f"Missing nested section: {nested_section}"
 
     def test_shipment_id_table_3_1(self, greenfield_referral_package):
         """
@@ -157,9 +153,7 @@ class TestReferralPackageStructure:
             assert "jurisdiction" in item
             assert "relationship" in item
 
-    def test_score_breakdown_table_3_12(
-        self, greenfield_referral_package, greenfield_score_breakdown
-    ):
+    def test_score_breakdown_table_3_12(self, greenfield_referral_package, greenfield_score_breakdown):
         """
         GIVEN: Greenfield referral package and score breakdown
         WHEN: Accessing Table 3-12 (Score Breakdown)
@@ -172,9 +166,9 @@ class TestReferralPackageStructure:
 
         # Components must sum to total
         component_sum = sum(c["score"] for c in table_3_12["components"])
-        assert component_sum == table_3_12["total"], (
-            f"Components sum ({component_sum}) != total ({table_3_12['total']})"
-        )
+        assert (
+            component_sum == table_3_12["total"]
+        ), f"Components sum ({component_sum}) != total ({table_3_12['total']})"
 
     def test_data_sources_table_3_14(self, greenfield_referral_package):
         """
@@ -215,9 +209,7 @@ class TestConfidenceScoreCalculation:
         assert package["score"] == 91, "Greenfield score must be 91"
         assert package["confidence_level"] == "HIGH"
 
-    def test_confidence_score_range_is_0_to_100(
-        self, greenfield_referral_package
-    ):
+    def test_confidence_score_range_is_0_to_100(self, greenfield_referral_package):
         """
         GIVEN: Referral package
         WHEN: Confidence score is accessed
@@ -289,10 +281,7 @@ class TestComponentBreakdown:
         WHEN: Reviewing Greenfield breakdown
         THEN: Tier 4 (origin_doc_gap + time_sensitivity) accounts for ~39 pts
         """
-        tier_4_components = [
-            c for c in greenfield_score_breakdown["components"]
-            if c["tier"] == 4
-        ]
+        tier_4_components = [c for c in greenfield_score_breakdown["components"] if c["tier"] == 4]
 
         tier_4_sum = sum(c["score"] for c in tier_4_components)
         assert tier_4_sum > 30, "Tier 4 must dominate scoring"
@@ -309,9 +298,9 @@ class TestComponentBreakdown:
         THEN: score <= max for all components
         """
         for component in greenfield_score_breakdown["components"]:
-            assert component["score"] <= component["max"], (
-                f"{component['name']}: {component['score']} > {component['max']}"
-            )
+            assert (
+                component["score"] <= component["max"]
+            ), f"{component['name']}: {component['score']} > {component['max']}"
 
 
 class TestXAIAssertions:
@@ -319,9 +308,7 @@ class TestXAIAssertions:
     Test XAI (Explainable AI) assertions are present and meaningful.
     """
 
-    def test_referral_package_contains_xai_narratives(
-        self, greenfield_referral_package
-    ):
+    def test_referral_package_contains_xai_narratives(self, greenfield_referral_package):
         """
         GIVEN: Greenfield referral package
         WHEN: Checking for XAI content
@@ -332,22 +319,15 @@ class TestXAIAssertions:
         # Each component must have a description (XAI narrative)
         for component in breakdown["components"]:
             assert "description" in component
-            assert len(component["description"]) > 10, (
-                "Description must be meaningful, not empty"
-            )
+            assert len(component["description"]) > 10, "Description must be meaningful, not empty"
 
-    def test_xai_assertion_explains_why_not_just_number(
-        self, greenfield_score_breakdown
-    ):
+    def test_xai_assertion_explains_why_not_just_number(self, greenfield_score_breakdown):
         """
         GIVEN: Score breakdown
         WHEN: Accessing origin_doc_gap component
         THEN: Description explains WHY (ISF contradiction) not just score
         """
-        origin_doc_gap = next(
-            c for c in greenfield_score_breakdown["components"]
-            if c["name"] == "origin_doc_gap"
-        )
+        origin_doc_gap = next(c for c in greenfield_score_breakdown["components"] if c["name"] == "origin_doc_gap")
 
         description = origin_doc_gap["description"]
 
@@ -375,9 +355,7 @@ class TestRevenueImpactCalculation:
 
         # Duty should be ≈ value × rate (with rounding)
         calculated_duty = declared_value * duty_rate
-        assert abs(estimated_duty - calculated_duty) < 1, (
-            f"Duty mismatch: {estimated_duty} vs {calculated_duty}"
-        )
+        assert abs(estimated_duty - calculated_duty) < 1, f"Duty mismatch: {estimated_duty} vs {calculated_duty}"
 
     def test_greenfield_duty_impact_is_26k(self, greenfield_referral_package):
         """
@@ -391,13 +369,9 @@ class TestRevenueImpactCalculation:
 
         # From ARCHITECTURE.md: 374% AD/CVD rate
         # 72030 × 0.374 ≈ 26938
-        assert 25000 < estimated_duty < 28000, (
-            f"Greenfield duty impact should be ~$26.9k, got ${estimated_duty}"
-        )
+        assert 25000 < estimated_duty < 28000, f"Greenfield duty impact should be ~$26.9k, got ${estimated_duty}"
 
-    def test_revenue_impact_displayed_in_recommended_action(
-        self, greenfield_referral_package
-    ):
+    def test_revenue_impact_displayed_in_recommended_action(self, greenfield_referral_package):
         """
         GIVEN: Referral package
         WHEN: User sees recommended action
@@ -416,9 +390,7 @@ class TestRecommendedActionField:
     Test recommended action field and action logic.
     """
 
-    def test_recommended_action_is_examine_on_arrival(
-        self, greenfield_referral_package
-    ):
+    def test_recommended_action_is_examine_on_arrival(self, greenfield_referral_package):
         """
         GIVEN: Greenfield case (score 91/100)
         WHEN: Recommended action is determined
@@ -428,9 +400,7 @@ class TestRecommendedActionField:
 
         assert package["recommended_action"] == "EXAMINE_ON_ARRIVAL"
 
-    def test_recommended_action_is_one_of_valid_values(
-        self, greenfield_referral_package
-    ):
+    def test_recommended_action_is_one_of_valid_values(self, greenfield_referral_package):
         """
         GIVEN: Referral package
         WHEN: Accessing recommended_action
@@ -444,9 +414,7 @@ class TestRecommendedActionField:
         ]
 
         action = greenfield_referral_package["recommended_action"]
-        assert action in valid_actions, (
-            f"Invalid action: {action}"
-        )
+        assert action in valid_actions, f"Invalid action: {action}"
 
     def test_high_confidence_recommends_action(self, greenfield_referral_package):
         """
@@ -465,9 +433,7 @@ class TestReferralPackageIntegration:
     Integration tests for full referral package generation flow.
     """
 
-    def test_referral_package_is_json_serializable(
-        self, greenfield_referral_package
-    ):
+    def test_referral_package_is_json_serializable(self, greenfield_referral_package):
         """
         GIVEN: Referral package
         WHEN: Attempting to serialize to JSON
@@ -480,9 +446,7 @@ class TestReferralPackageIntegration:
         assert json_str is not None
         assert len(json_str) > 0
 
-    def test_greenfield_package_is_complete_for_presentation(
-        self, greenfield_referral_package
-    ):
+    def test_greenfield_package_is_complete_for_presentation(self, greenfield_referral_package):
         """
         GIVEN: Greenfield referral package
         WHEN: Preparing for CBP officer presentation
