@@ -11,6 +11,9 @@ RUN npm ci --prefer-offline --no-audit
 COPY src ./src
 COPY tsconfig.json tsconfig.node.json vite.config.ts tailwind.config.ts postcss.config.js index.html ./
 
+# Force rebuild on TypeScript fixes (cache invalidation)
+RUN echo "Build invalidation: 2026-05-25-ts-fixes"
+
 # Step 3: Build with optional API_URL for different environments
 # Local Docker:  docker build --build-arg API_URL=http://sentry-api:8000 ./ui
 # Staging:       docker build --build-arg API_URL=https://api.staging.example.com ./ui
