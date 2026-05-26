@@ -33,6 +33,7 @@ from altana_integration import altana_client, ALTANA_RISK_THRESHOLD
 from business_logic.corridor_factory import RiskCorridorFactory
 from risk_models import RiskModelConfig
 from risk_scoring_engine import RiskScoringEngine
+from referral_comprehensive_v2 import ComprehensiveReferralGenerator
 
 try:
     import google.generativeai as genai
@@ -216,6 +217,12 @@ app.add_middleware(
     allow_credentials=False,  # Using OIDC tokens, not cookies
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Initialize referral generator with CORD integration
+referral_gen = ComprehensiveReferralGenerator(
+    db_path="/app/data/cbp_sentry.db",
+    cord_url=os.getenv("CORD_SERVICE_URL", "http://localhost:8004")
 )
 
 # Include routers (refactored endpoints)
@@ -1230,23 +1237,70 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
             except Exception as e:
                 logger.warning(f"[{shipment_id}] ISF lazy-load failed: {e}")
 
-        # 3. Resolve entities using Search-First Senzing pattern (ALWAYS attempts)
+        # 3. Resolve entities using CORD directly (always attempts)
         entity_chain = []
         senzing_failure_reason = None
-        # Always attempt entity resolution for all shipments
-        sf_client = get_search_first_client()
+        cord_url = os.getenv("CORD_SERVICE_URL", "http://localhost:8004")
+
         try:
-            er_result = await sf_client.resolve_shipment_entities(
-                shipment_id=shipment_id,
-                shipper_name=shipper,
-                shipper_country=origin,
-                consignee_name=consignee,
-                consignee_country=destination,
-            )
-            entity_chain = er_result.get("entity_chain", [])
-            senzing_failure_reason = er_result.get("failure_reason")
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.post(
+                    f"{cord_url}/resolve",
+                    json={
+                        "shipper_name": shipper,
+                        "shipper_country": origin,
+                        "destination": destination
+                    }
+                )
+
+                if response.status_code == 200:
+                    cord_result = response.json()
+                    if cord_result.get("status") == "success":
+                        chain_data = cord_result.get("chain", {})
+
+                        # Extract 3-level chain from CORD response
+                        for level in range(1, 4):
+                            entity_key = f"level_{level}"
+                            if entity_key in chain_data and chain_data[entity_key]:
+                                entity = chain_data[entity_key]
+                                rel_key = f"level_{level}_relationship"
+                                relationship = chain_data.get(rel_key)
+
+                                entity_type = entity.get("entity_type", "ORGANIZATION").upper()
+                                role_map = {
+                                    "SHIPPER": "exporter",
+                                    "MANUFACTURER": "actual_manufacturer",
+                                    "HOLDING_COMPANY": "parent_company",
+                                    "CONSIGNEE": "importer",
+                                }
+                                entity_chain.append({
+                                    "entity_id": str(entity.get("entity_id", f"level-{level}")),
+                                    "name": entity.get("name", "Unknown"),
+                                    "country": entity.get("country", ""),
+                                    "entity_type": entity_type,
+                                    "role": role_map.get(entity_type, "related"),
+                                    "confidence": float(entity.get("confidence", 0.85)),
+                                    "data_source": entity.get("data_source", "CORD"),
+                                    "relationships": [
+                                        {
+                                            "type": relationship.get("relationship_type", "RELATED_TO"),
+                                            "target": entity.get("name", ""),
+                                            "confidence": relationship.get("confidence", 0.8)
+                                        }
+                                    ] if relationship else []
+                                })
+
+                        if entity_chain:
+                            logger.info(f"[{shipment_id}] Resolved {len(entity_chain)} entities from CORD")
+                    else:
+                        logger.warning(f"[{shipment_id}] CORD resolution failed: {cord_result.get('status')}")
+                        senzing_failure_reason = "CORD resolution unavailable"
+                else:
+                    logger.warning(f"[{shipment_id}] CORD service returned {response.status_code}")
+                    senzing_failure_reason = f"CORD service error: {response.status_code}"
+
         except Exception as e:
-            logger.error(f"[{shipment_id}] Senzing resolution error: {e}")
+            logger.error(f"[{shipment_id}] CORD entity resolution error: {e}")
             senzing_failure_reason = str(e)
 
         # If entity resolution failed or returned no results, generate synthetic 3-level entity chain for all cases
