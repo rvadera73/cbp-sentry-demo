@@ -245,7 +245,7 @@ jobs:
   deploy-api:
     name: Deploy sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, build-api, deploy-data, deploy-cord, changes]
+    needs: [setup, build-api, deploy-data, deploy-cord, sync-data-to-gcs, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.api == 'true'
@@ -318,7 +318,7 @@ jobs:
   deploy-data:
     name: Deploy sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, build-data, bootstrap-bucket, changes]
+    needs: [setup, build-data, bootstrap-bucket, sync-data-to-gcs, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.data == 'true'
@@ -359,7 +359,7 @@ jobs:
   deploy-cord:
     name: Deploy sentry-cord-integration
     runs-on: ubuntu-latest
-    needs: [setup, build-cord, bootstrap-bucket, changes]
+    needs: [setup, build-cord, bootstrap-bucket, sync-data-to-gcs, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.cord == 'true'
