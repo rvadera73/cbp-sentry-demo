@@ -1095,7 +1095,7 @@ function EntitiesTab({ selectedCase, selectedCaseShipments, selectedReferral }: 
         />
       )}
 
-      {/* Entity Ownership Chain Details from referral */}
+      {/* Entity Ownership Chain from API (via CORD) */}
       {selectedReferral?.sections?.section_3_5_entity_ownership_chain && (
         <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">
           <h3 className="text-sm font-bold text-[#0B1F33] mb-3">ENTITY OWNERSHIP CHAIN (TABLE 3-5)</h3>
@@ -1104,15 +1104,16 @@ function EntitiesTab({ selectedCase, selectedCaseShipments, selectedReferral }: 
               <div key={idx} className="bg-slate-50 border-l-4 border-blue-500 p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="font-bold text-[#0B1F33]">{entity.name}</p>
-                    <p className="text-[9px] text-slate-600">{entity.entity_type}</p>
+                    <p className="font-bold text-[#0B1F33]">{entity.name || entity.entity || entity.entity_name || 'Unknown'}</p>
+                    <p className="text-[9px] text-slate-600">{entity.type || entity.entity_type || 'ORGANIZATION'}</p>
                   </div>
                   <span className="text-[9px] font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded">
-                    {Math.round(entity.confidence * 100)}% conf
+                    {entity.confidence ? `${Math.round(entity.confidence * 100)}% conf` : 'N/A'}
                   </span>
                 </div>
-                <p className="text-[8px] text-slate-600"><strong>Country:</strong> {entity.country}</p>
-                <p className="text-[8px] text-slate-600"><strong>Source:</strong> {entity.data_source}</p>
+                <p className="text-[8px] text-slate-600"><strong>Country:</strong> {entity.country || 'N/A'}</p>
+                <p className="text-[8px] text-slate-600"><strong>Role:</strong> {entity.role || 'N/A'}</p>
+                <p className="text-[8px] text-slate-600"><strong>Source:</strong> {entity.data_source || 'Manifest'}</p>
                 {entity.relationships && entity.relationships.length > 0 && (
                   <div className="mt-2 text-[8px]">
                     <p className="font-bold text-slate-700">Relationships:</p>
