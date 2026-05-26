@@ -61,10 +61,10 @@ export function useV2Cases(): UseV2CasesReturn {
 
       console.log('[useV2Cases] Starting fetch...');
 
-      // Fetch elevated+critical risk shipments (risk >= 50)
+      // Fetch all elevated+critical risk shipments (risk >= 50)
       const params = new URLSearchParams({
         risk_min: '50',
-        limit: '100',
+        limit: '10000',
         offset: '0'
       });
 
