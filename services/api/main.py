@@ -1167,9 +1167,9 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
         element9_actual = shipment.get("element9_actual_country")
         dwell_days = shipment.get("dwell_days", 0)
         ais_stuffing_country = shipment.get("ais_stuffing_country", origin)
-        shipper_age_months = shipment.get("shipper_age_months")
+        shipper_age_months = shipment.get("shipper_age_months") or 0
         ad_cvd_applicable = shipment.get("ad_cvd_applicable", 0) == 1
-        ad_cvd_rate = shipment.get("ad_cvd_rate", 0)
+        ad_cvd_rate = shipment.get("ad_cvd_rate") or 0
         port_calls = shipment.get("port_calls")
         try:
             if isinstance(port_calls, str):
@@ -1543,7 +1543,7 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                     "summary": (
                         vertex_ai_evidence.get("section_3_7_trade_flow", "")
                         if vertex_ai_evidence
-                        else f"HTS {hs_code} ({commodity_name}) from {origin}: {'Active AD/CVD orders' if ad_cvd_applicable else 'No AD/CVD'} at {ad_cvd_rate*100:.2f}% duty. {12 if origin == 'CN' else 3} prior filings detected."
+                        else f"HTS {hs_code} ({commodity_name}) from {origin}: {'Active AD/CVD orders' if ad_cvd_applicable else 'No AD/CVD'} at {(ad_cvd_rate or 0)*100:.2f}% duty. {12 if origin == 'CN' else 3} prior filings detected."
                     ),
                     "llm_generated": bool(vertex_ai_evidence),
                     "llm_model": vertex_ai_evidence.get("model") if vertex_ai_evidence else None,

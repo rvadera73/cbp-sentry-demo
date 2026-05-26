@@ -129,23 +129,22 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
   // Auto-fetch referral package when case is selected
   React.useEffect(() => {
+    if (!selectedCase) return;
+
     const fetchReferralData = async () => {
       if (!selectedCaseShipments || selectedCaseShipments.length === 0) {
-        console.log('[Evidence & Referral] No shipments selected yet');
         return;
       }
       try {
         const shipment = selectedCaseShipments[0];
-        console.log('[Evidence & Referral] Fetching referral for:', shipment.shipment_id);
         const referralResp = await api.getReferralPackage(shipment.shipment_id);
-        console.log('[Evidence & Referral] Referral data received:', referralResp);
         setSelectedReferral(referralResp as unknown as ReferralPackage);
       } catch (err) {
         console.error('[Evidence & Referral] Fetch error:', err);
       }
     };
     fetchReferralData();
-  }, [selectedCaseShipments]);
+  }, [selectedCase?.case_id, selectedCaseShipments?.length]);
 
   // Generate narrative from referral data
   const generateNarrative = (referral: ReferralPackage | null, selectedCase: Case, selectedSections: Record<string, boolean>) => {
