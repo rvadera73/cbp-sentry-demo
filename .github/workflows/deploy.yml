@@ -133,15 +133,15 @@ jobs:
           echo "📤 Syncing databases to GCS bucket..."
           echo ""
           echo "Uploading cbp_sentry.db..."
-          gcloud storage cp data/cbp_sentry.db gs://cbp-sentry-appdata/cbp_sentry.db
+          gsutil cp data/cbp_sentry.db gs://cbp-sentry-appdata/cbp_sentry.db
           echo "✅ cbp_sentry.db uploaded"
           echo ""
           echo "Uploading cord_rag.db..."
-          gcloud storage cp data/cord_rag.db gs://cbp-sentry-appdata/cord_rag.db
+          gsutil cp data/cord_rag.db gs://cbp-sentry-appdata/cord_rag.db
           echo "✅ cord_rag.db uploaded"
           echo ""
           echo "📊 Verifying uploads..."
-          gcloud storage ls --long --readable-sizes gs://cbp-sentry-appdata/
+          gsutil ls -lh gs://cbp-sentry-appdata/
 
   build-api:
     name: Build sentry-api
