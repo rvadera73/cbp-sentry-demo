@@ -382,7 +382,12 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
                   </td>
                   <td className="p-3 text-right">
                     <button
-                      onClick={(e) => { e.stopPropagation(); setSelectedCaseId(c.case_id); }}
+                      onClick={(e) => {
+                        console.log('[Button Click] Case ID:', c.case_id);
+                        e.stopPropagation();
+                        setSelectedCaseId(c.case_id);
+                        console.log('[Button Click] Selected case set to:', c.case_id);
+                      }}
                       className="px-3 py-1 bg-[#112E51] hover:bg-[#0076D6] text-white text-[10px] font-bold rounded-sm flex items-center space-x-1 ml-auto"
                     >
                       <span>Access Workspace</span>
