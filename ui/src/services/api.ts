@@ -481,6 +481,34 @@ class SentryAPI {
       return { status: 'error', explanation: null }
     }
   }
+
+  /**
+   * Get entity ownership chain from CORD
+   * GET /api/cord/entity/{entity_id}/chain
+   */
+  async cordGetEntityChain(entity_id: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/cord/entity/${entity_id}/chain`)
+      return response.data
+    } catch (error) {
+      console.error('CORD get entity chain error:', error)
+      return { status: 'error', chain: [] }
+    }
+  }
+
+  /**
+   * Get related parties for an entity from CORD
+   * GET /api/cord/entity/{entity_id}/parties
+   */
+  async cordGetEntityParties(entity_id: string): Promise<any> {
+    try {
+      const response = await this.client.get(`/cord/entity/${entity_id}/parties`)
+      return response.data
+    } catch (error) {
+      console.error('CORD get entity parties error:', error)
+      return { status: 'error', parties: [] }
+    }
+  }
 }
 
 export const api = new SentryAPI()

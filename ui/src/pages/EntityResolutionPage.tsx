@@ -73,25 +73,13 @@ const EntityResolutionPage: React.FC = () => {
       const entityResp = await api.cordGetEntity(entityId)
       setSelectedEntityDetails(entityResp?.entity)
 
-      // Load entity chain
-      try {
-        // Using graph endpoint as placeholder - update when CORD chain endpoint available
-        const chainResp = await api.getShipmentGraph(entityId)
-        setEntityChain(chainResp?.nodes || [])
-      } catch (err) {
-        console.warn('Could not load entity chain:', err)
-        setEntityChain([])
-      }
+      // Load entity chain from CORD
+      const chainResp = await api.cordGetEntityChain(entityId)
+      setEntityChain(chainResp?.chain || [])
 
-      // Load related parties
-      try {
-        // Using why endpoint as placeholder - update when CORD parties endpoint available
-        const partiesResp = await api.cordWhyLinked(entityId, entityId)
-        setEntityParties(partiesResp?.explanation ? [partiesResp] : [])
-      } catch (err) {
-        console.warn('Could not load entity parties:', err)
-        setEntityParties([])
-      }
+      // Load related parties from CORD
+      const partiesResp = await api.cordGetEntityParties(entityId)
+      setEntityParties(partiesResp?.parties || [])
     } catch (err) {
       console.error('Error loading entity details:', err)
       setError('Failed to load entity details')
@@ -191,7 +179,6 @@ const EntityResolutionPage: React.FC = () => {
             <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-[#F0F4F8] border-b border-[#D0D7DE] font-mono text-[#112E51] font-bold">
                 <tr>
-                  <th className="p-3 w-20">STATUS</th>
                   <th className="p-3">ENTITY NAME</th>
                   <th className="p-3">TYPE</th>
                   <th className="p-3">JURISDICTION</th>
@@ -202,13 +189,6 @@ const EntityResolutionPage: React.FC = () => {
               <tbody className="divide-y divide-slate-100">
                 {filteredEntities.map((entity: any) => (
                   <tr key={entity.entity_id} className="hover:bg-slate-50 transition-all cursor-pointer">
-                    <td className="p-3">
-                      <span className={`inline-block px-2.5 py-1 rounded text-center font-extrabold text-xs text-white ${
-                        entity.risk_level === 'CRITICAL' ? 'bg-[#D83933]' : entity.risk_level === 'HIGH' ? 'bg-orange-600' : 'bg-amber-600'
-                      }`}>
-                        {entity.risk_level}
-                      </span>
-                    </td>
                     <td className="p-3">
                       <div className="flex flex-col">
                         <span className="font-extrabold text-[#0B1F33]">{entity.entity_name}</span>
@@ -253,76 +233,76 @@ const EntityResolutionPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Entity Details - First Two Rows */}
+      {/* Entity Details - Compact Format */}
       <div className="p-6 space-y-4 overflow-y-auto flex-1">
-        {/* Row 1: Entity Identity */}
-        <div className="bg-white border border-[#D0D7DE] rounded-sm p-5 grid grid-cols-4 gap-4">
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Entity Name</p>
-            <p className="text-sm font-bold text-[#0B1F33]">{entity?.entity_name}</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Entity Type</p>
-            <p className="text-sm font-bold text-[#0B1F33]">{entity?.entity_type}</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Jurisdiction</p>
-            <p className="text-sm font-bold text-[#0B1F33]">{entity?.jurisdiction}</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Entity ID</p>
-            <p className="text-xs font-mono text-slate-600">{entity?.entity_id}</p>
-          </div>
-        </div>
-
-        {/* Row 2: Risk & Confidence */}
-        <div className="bg-white border border-[#D0D7DE] rounded-sm p-5 grid grid-cols-4 gap-4">
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Risk Status</p>
-            <span className={`inline-block px-2.5 py-1 rounded text-center font-extrabold text-xs text-white ${
+        {/* Entity Header - Compact */}
+        <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">
+          <div className="flex justify-between items-start mb-3">
+            <div className="flex-1">
+              <p className="text-xs font-bold text-[#0B1F33] uppercase">{entity?.entity_name}</p>
+              <p className="text-[9px] text-slate-600 mt-1">ID: {entity?.entity_id}</p>
+            </div>
+            <span className={`px-2.5 py-1 rounded font-extrabold text-xs text-white ${
               entity?.risk_level === 'CRITICAL' ? 'bg-[#D83933]' : entity?.risk_level === 'HIGH' ? 'bg-orange-600' : 'bg-amber-600'
             }`}>
               {entity?.risk_level}
             </span>
           </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Confidence</p>
-            <p className="text-sm font-bold text-[#0076D6]">{((entity?.senzing_confidence || 0) * 100).toFixed(0)}%</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Source</p>
-            <p className="text-sm font-bold text-[#0B1F33]">CORD/Senzing</p>
-          </div>
-          <div>
-            <p className="text-[9px] text-slate-600 font-bold uppercase mb-1">Status</p>
-            <p className="text-sm font-bold text-green-700">Resolved</p>
+          <div className="grid grid-cols-4 gap-3 text-[9px]">
+            <div>
+              <p className="text-slate-600 font-bold uppercase">Type</p>
+              <p className="text-[#0B1F33] font-medium mt-0.5">{entity?.entity_type}</p>
+            </div>
+            <div>
+              <p className="text-slate-600 font-bold uppercase">Country</p>
+              <p className="text-[#0B1F33] font-medium mt-0.5">{entity?.jurisdiction}</p>
+            </div>
+            <div>
+              <p className="text-slate-600 font-bold uppercase">Confidence</p>
+              <p className="text-[#0076D6] font-bold mt-0.5">{((entity?.senzing_confidence || 0) * 100).toFixed(0)}%</p>
+            </div>
+            <div>
+              <p className="text-slate-600 font-bold uppercase">Source</p>
+              <p className="text-[#0B1F33] font-medium mt-0.5">CORD</p>
+            </div>
           </div>
         </div>
 
-        {/* Entity Graph */}
-        {entityChain.length > 0 && (
-          <div className="bg-white border border-[#D0D7DE] rounded-sm p-5">
-            <h3 className="text-sm font-bold text-[#0B1F33] mb-3">ENTITY RELATIONSHIP GRAPH</h3>
-            <div className="bg-slate-50 p-4 rounded border border-slate-200 text-center text-slate-600 text-xs">
-              Entity graph visualization ({entityChain.length} related entities)
-            </div>
-          </div>
-        )}
-
-        {/* Party Associations */}
-        {entityParties.length > 0 && (
-          <div className="bg-white border border-[#D0D7DE] rounded-sm p-5">
-            <h3 className="text-sm font-bold text-[#0B1F33] mb-3">PARTY ASSOCIATIONS</h3>
+        {/* Entity Relationship Graph */}
+        <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">
+          <h3 className="text-xs font-bold text-[#0B1F33] uppercase mb-3">ENTITY RELATIONSHIP GRAPH</h3>
+          {detailsLoading ? (
+            <div className="text-center py-6 text-slate-500 text-xs">Loading entity relationships...</div>
+          ) : entityChain && entityChain.length > 0 ? (
             <div className="space-y-2">
-              {entityParties.map((party: any, idx: number) => (
-                <div key={idx} className="p-3 bg-slate-50 border border-slate-200 rounded text-xs">
-                  <p className="font-bold text-[#0B1F33]">{party.target || 'Associated Entity'}</p>
-                  <p className="text-slate-600 text-[9px] mt-1">{party.explanation || 'Related in supply chain'}</p>
+              {entityChain.map((related: any, idx: number) => (
+                <div key={idx} className="p-2 bg-slate-50 border border-slate-200 rounded text-[9px]">
+                  <p className="font-bold text-[#0B1F33]">{related.name || related.entity_name || 'Unknown Entity'}</p>
+                  <p className="text-slate-600 mt-0.5">{related.role || related.relationship_type || 'Related entity'}</p>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          ) : (
+            <div className="text-center py-4 text-slate-500 text-xs">No entity chain data available from CORD</div>
+          )}
+        </div>
+
+        {/* Party Associations */}
+        <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">
+          <h3 className="text-xs font-bold text-[#0B1F33] uppercase mb-3">PARTY ASSOCIATIONS</h3>
+          {entityParties && entityParties.length > 0 ? (
+            <div className="space-y-2">
+              {entityParties.map((party: any, idx: number) => (
+                <div key={idx} className="p-2 bg-slate-50 border border-slate-200 rounded text-[9px]">
+                  <p className="font-bold text-[#0B1F33]">{party.name || party.entity_name || 'Party'}</p>
+                  <p className="text-slate-600 mt-0.5">{party.role || party.relationship || 'Associated party'} • {party.country || 'Unknown'}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-slate-500 text-xs">No party associations found</div>
+          )}
+        </div>
 
         {/* Why Connected Panel */}
         <div className="bg-white border border-[#D0D7DE] rounded-sm p-5">

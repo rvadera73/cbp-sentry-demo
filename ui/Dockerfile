@@ -12,7 +12,7 @@ COPY ui/src ./src
 COPY ui/tsconfig.json ui/tsconfig.node.json ui/vite.config.ts ui/tailwind.config.ts ui/postcss.config.js ui/index.html ./
 
 # Force rebuild on TypeScript fixes (cache invalidation)
-RUN echo "Build invalidation: 2026-05-25-ts-fixes"
+RUN echo "Build invalidation: 2026-05-26-entity-resolution"
 
 # Step 3: Build with optional API_URL for different environments
 # Local Docker:  docker build --build-arg API_URL=http://sentry-api:8000 ./ui
