@@ -2,9 +2,9 @@ name: Deploy — Sentry (Cloud Run)
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, stage]
   pull_request:
-    branches: [dev]
+    branches: [dev, stage]
   workflow_dispatch:
     inputs:
       environment:
@@ -31,12 +31,20 @@ jobs:
       - name: Determine branch and environment
         id: branch
         run: |
-          echo "name=dev" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == "refs/heads/stage" ]]; then
+            echo "name=stage" >> $GITHUB_OUTPUT
+          else
+            echo "name=dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set environment
         id: env
         run: |
-          echo "name=staging" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == "refs/heads/stage" ]]; then
+            echo "name=staging" >> $GITHUB_OUTPUT
+          else
+            echo "name=staging" >> $GITHUB_OUTPUT
+          fi
 
   changes:
     name: Detect changed services
@@ -108,6 +116,32 @@ jobs:
           echo "Granting $SA access to bucket..."
           gcloud storage buckets add-iam-policy-binding gs://cbp-sentry-appdata \
             --member=serviceAccount:$SA --role=roles/storage.objectAdmin 2>/dev/null || true
+
+  sync-data-to-gcs:
+    name: Sync databases to GCS
+    runs-on: ubuntu-latest
+    needs: [setup, bootstrap-bucket]
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Upload databases to GCS bucket
+        run: |
+          echo "📤 Syncing databases to GCS bucket..."
+          echo ""
+          echo "Uploading cbp_sentry.db..."
+          gsutil cp data/cbp_sentry.db gs://cbp-sentry-appdata/cbp_sentry.db
+          echo "✅ cbp_sentry.db uploaded"
+          echo ""
+          echo "Uploading cord_rag.db..."
+          gsutil cp data/cord_rag.db gs://cbp-sentry-appdata/cord_rag.db
+          echo "✅ cord_rag.db uploaded"
+          echo ""
+          echo "📊 Verifying uploads..."
+          gsutil ls -lh gs://cbp-sentry-appdata/
 
   build-api:
     name: Build sentry-api
@@ -278,7 +312,7 @@ jobs:
   deploy-data:
     name: Deploy sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, build-data, bootstrap-bucket, changes]
+    needs: [setup, build-data, bootstrap-bucket, sync-data-to-gcs, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.data == 'true'
@@ -319,7 +353,7 @@ jobs:
   deploy-cord:
     name: Deploy sentry-cord-integration
     runs-on: ubuntu-latest
-    needs: [setup, build-cord, bootstrap-bucket, changes]
+    needs: [setup, build-cord, bootstrap-bucket, sync-data-to-gcs, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.cord == 'true'

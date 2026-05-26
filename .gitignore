@@ -43,7 +43,6 @@ logs/
 *.log
 
 # Local database
-*.db
 *.sqlite
 *.sqlite3
 
