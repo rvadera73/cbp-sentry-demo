@@ -4,12 +4,12 @@ FROM node:20-alpine AS builder
 WORKDIR /build
 
 # Step 1: Install dependencies (cached independently)
-COPY package.json package-lock.json ./
+COPY ui/package.json ui/package-lock.json ./
 RUN npm ci --prefer-offline --no-audit
 
 # Step 2: Copy source and build (only invalidates on source change)
-COPY src ./src
-COPY tsconfig.json tsconfig.node.json vite.config.ts tailwind.config.ts postcss.config.js index.html ./
+COPY ui/src ./src
+COPY ui/tsconfig.json ui/tsconfig.node.json ui/vite.config.ts ui/tailwind.config.ts ui/postcss.config.js ui/index.html ./
 
 # Force rebuild on TypeScript fixes (cache invalidation)
 RUN echo "Build invalidation: 2026-05-25-ts-fixes"
@@ -30,7 +30,7 @@ FROM nginx:1.26-alpine
 COPY --from=builder /build/dist /usr/share/nginx/html
 
 # Copy optimized nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY ui/nginx.conf /etc/nginx/nginx.conf
 
 # Install curl for healthcheck
 RUN apk add --no-cache curl

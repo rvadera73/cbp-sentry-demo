@@ -131,22 +131,22 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
       <div className="flex-1 flex gap-4 overflow-hidden">
         {/* Cases Table */}
         <div className="flex-1 flex flex-col bg-white border border-[#D0D7DE] rounded-sm overflow-hidden shadow-sm">
-          <div className="bg-[#F7F9FC] p-3 border-b border-[#D0D7DE] font-mono text-xs font-bold text-[#112E51] uppercase">
+          <div className="bg-[#F0F4F8] p-3 border-b border-[#D0D7DE] font-mono text-xs font-bold text-[#112E51] uppercase">
             Active Investigation Queue ({filteredCases.length})
           </div>
           <div className="flex-1 overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse font-sans">
-              <thead className="bg-slate-50 sticky top-0 z-10">
+              <thead className="bg-[#F0F4F8] sticky top-0 z-10">
                 <tr className="border-b border-[#D0D7DE]">
-                  <th className="p-2.5 font-bold text-[#112E51]">Risk Score</th>
-                  <th className="p-2.5 font-bold text-[#112E51]">Investigation Entity</th>
-                  <th className="p-2.5 font-bold text-[#112E51]">Category</th>
-                  <th className="p-2.5 font-bold text-[#112E51]">Opened</th>
-                  <th className="p-2.5 font-bold text-[#112E51]">SLA</th>
-                  <th className="p-2.5 font-bold text-[#112E51]">Action</th>
+                  <th className="p-3 font-bold text-[#112E51] w-20">SCORE</th>
+                  <th className="p-3 font-bold text-[#112E51]">ID / NAME</th>
+                  <th className="p-3 font-bold text-[#112E51]">ENTITY / CATEGORY</th>
+                  <th className="p-3 font-bold text-[#112E51]">OPENED</th>
+                  <th className="p-3 font-bold text-[#112E51]">SLA</th>
+                  <th className="p-3 font-bold text-[#112E51] text-right">ACTIONS</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-[#E0E3E8]">
                 {casesLoading ? (
                   <tr><td colSpan={6} className="p-4 text-center text-gray-500">Loading cases...</td></tr>
                 ) : filteredCases.length === 0 ? (
@@ -156,33 +156,34 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
                     <tr
                       key={c.case_id}
                       onClick={() => selectCaseForDetail?.(c)}
-                      className="hover:bg-slate-50 transition-all cursor-pointer"
+                      className="hover:bg-[#F7F9FC] transition-all cursor-pointer"
                     >
-                      <td className="p-2.5">
-                        <div className="flex items-center space-x-1">
-                          <div className={`w-1.5 h-1.5 rounded-full ${c.risk_score >= 80 ? 'bg-[#D83933]' : 'bg-amber-500'}`}></div>
-                          <span className={`font-bold font-mono ${c.risk_score >= 80 ? 'text-[#D83933]' : 'text-amber-600'}`}>
-                            {c.risk_score}%
-                          </span>
-                        </div>
+                      <td className="p-3">
+                        <span
+                          className={`inline-block px-2.5 py-1 rounded text-center font-bold text-xs text-white ${
+                            c.risk_score >= 80 ? 'bg-[#D83933]' : 'bg-amber-600'
+                          }`}
+                        >
+                          {c.risk_score}%
+                        </span>
                       </td>
-                      <td className="p-2.5">
+                      <td className="p-3">
                         <div className="flex flex-col">
-                          <span className="font-bold text-[#005EA2]">{c.target_entity.split('/')[0]}</span>
-                          <span className="text-[10px] text-[#5C5C5C]">{c.case_id}</span>
+                          <span className="font-bold text-[#0B1F33]">{c.target_entity.split('/')[0]}</span>
+                          <span className="text-[10px] text-[#5C5C5C] font-mono block mt-0.5">{c.case_id}</span>
                         </div>
                       </td>
-                      <td className="p-2.5 text-[#5C5C5C]">{c.product_category}</td>
-                      <td className="p-2.5 text-[#5C5C5C] font-mono">{c.opened_date}</td>
-                      <td className={`p-2.5 font-bold font-mono ${c.sla_timer.includes('Overdue') ? 'text-[#D83933]' : 'text-gray-600'}`}>
+                      <td className="p-3">{c.product_category}</td>
+                      <td className="p-3 font-mono text-[#5C5C5C]">{c.opened_date}</td>
+                      <td className={`p-3 font-bold font-mono ${c.sla_timer.includes('Overdue') ? 'text-[#D83933]' : 'text-[#5C5C5C]'}`}>
                         {c.sla_timer}
                       </td>
-                      <td className="p-2.5">
+                      <td className="p-3 text-right">
                         <button
                           onClick={() => selectCaseForDetail?.(c)}
-                          className="px-2 py-1 bg-[#112E51] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded cursor-pointer transition-all whitespace-nowrap"
+                          className="px-3 py-1.5 bg-[#112E51] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded-sm transition-colors whitespace-nowrap"
                         >
-                          DRILL
+                          WORKSPACE
                         </button>
                       </td>
                     </tr>

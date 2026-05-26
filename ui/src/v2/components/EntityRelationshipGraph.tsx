@@ -25,7 +25,7 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
   const nodes = useMemo(() => {
     if (!chain || !Array.isArray(chain) || chain.length === 0) return [];
 
-    // Filter out entities without required fields
+    // Filter out entities without required fields (handle both API response formats)
     const validChain = chain.filter(e => e && (e.name || e.entity_type));
     if (validChain.length === 0) return [];
 
@@ -230,9 +230,9 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
                   fill="#1F2937"
                   className="pointer-events-none"
                 >
-                  {(node.name?.length || 0) > 18
-                    ? (node.name || '').substring(0, 15) + '...'
-                    : (node.name || 'N/A')}
+                  {((node.name || node.entity)?.length || 0) > 18
+                    ? (node.name || node.entity || '').substring(0, 15) + '...'
+                    : (node.name || node.entity || 'N/A')}
                 </text>
 
                 {/* Entity type & country */}
@@ -259,17 +259,19 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
                 </text>
 
                 {/* Confidence */}
-                <text
-                  x={node.x + node.width / 2}
-                  y={node.y + node.height - 5}
-                  fontSize="8"
-                  textAnchor="middle"
-                  fill="#059669"
-                  fontWeight="bold"
-                  className="pointer-events-none"
-                >
-                  {Math.round(node.confidence * 100)}% conf
-                </text>
+                {node.confidence !== undefined && node.confidence !== null && (
+                  <text
+                    x={node.x + node.width / 2}
+                    y={node.y + node.height - 5}
+                    fontSize="8"
+                    textAnchor="middle"
+                    fill="#059669"
+                    fontWeight="bold"
+                    className="pointer-events-none"
+                  >
+                    {Math.round(node.confidence * 100)}% conf
+                  </text>
+                )}
               </g>
             );
           })}

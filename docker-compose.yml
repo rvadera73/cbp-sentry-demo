@@ -13,8 +13,8 @@ services:
   # === DATA LAYER ===
   sentry-data:
     build:
-      context: ./services/data
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/data/Dockerfile
       cache_from:
         - sentry-data:latest
     image: sentry-data:latest
@@ -26,9 +26,6 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${DATA_PORT:-8005}:8005"
-    volumes:
-      # ONLY persist database, NOT source code
-      - sentry_data_volume:/app/data
     healthcheck:
       test: ["CMD", "/healthcheck.sh"]
       interval: 10s
@@ -47,8 +44,8 @@ services:
   # === API LAYER ===
   sentry-api:
     build:
-      context: ./services/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/api/Dockerfile
       cache_from:
         - sentry-api:latest
     image: sentry-api:latest
@@ -71,7 +68,6 @@ services:
       - "${API_PORT:-8000}:8000"
     volumes:
       - ./cord-data:/app/cord-data:ro
-      - sentry_data_volume:/app/data
     depends_on:
       sentry-data:
         condition: service_healthy
@@ -95,8 +91,8 @@ services:
   # === UI LAYER ===
   sentry-ui:
     build:
-      context: ./ui
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ui/Dockerfile
       cache_from:
         - sentry-ui:latest
       args:
@@ -132,8 +128,8 @@ services:
   # === CORD Integration Service ===
   sentry-cord-integration:
     build:
-      context: ./services/cord-integration
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/cord-integration/Dockerfile
       cache_from:
         - sentry-cord-integration:latest
     image: sentry-cord-integration:latest
@@ -147,7 +143,6 @@ services:
       - "${CORD_PORT:-8004}:8004"
     volumes:
       - ./cord-data:/app/cord-data:ro
-      - sentry_data_volume:/app/data
     depends_on:
       sentry-data:
         condition: service_healthy

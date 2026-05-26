@@ -136,28 +136,6 @@ export default function V2ShippingIntelligencePage() {
           </div>
         </div>
 
-        {/* Corridor Dropdown */}
-        <div className="flex items-center space-x-3">
-          <label className={`text-sm font-bold ${DESIGN.textDark}`}>Select Corridor:</label>
-          <select
-            value={selectedCorridorId || ''}
-            onChange={(e) => {
-              setSelectedCorridorId(e.target.value);
-              setActiveTab('pre-manifest');
-            }}
-            className={`px-4 py-2 border ${DESIGN.borderColor} rounded-sm ${DESIGN.bgWhite} text-sm font-bold ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2]`}
-          >
-            {corridorsLoading ? (
-              <option>Loading corridors...</option>
-            ) : (
-              corridors.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.id} ({c.display_name}) — Risk: {c.risk_level}
-                </option>
-              ))
-            )}
-          </select>
-        </div>
       </div>
 
       {/* MAIN CONTENT AREA - TAB NAVIGATION */}
@@ -166,23 +144,26 @@ export default function V2ShippingIntelligencePage() {
         {selectedCorridorId && selectedCorridor && (
           <div className="flex-1 flex flex-col bg-[#F7F9FC] overflow-hidden">
             {/* Corridor Summary Card */}
-            <div className={PATTERNS.summaryCard}>
-              <CorridorSummaryCard
-                id={selectedCorridor.id}
-                displayName={selectedCorridor.display_name}
-                riskLevel={selectedCorridor.risk_level}
-                shipmentCount={corridorShipments.length}
-                avgRiskScore={corridorShipments.length > 0
-                  ? corridorShipments.reduce((sum: number, s: any) => sum + (s.risk_score || 0), 0) / corridorShipments.length
-                  : 0}
-                element9MismatchPct={corridorShipments.length > 0
-                  ? (corridorShipments.filter((s: any) => s.element9_is_mismatch).length / corridorShipments.length) * 100
-                  : 0}
-                uniqueShippers={new Set(corridorShipments.map((s: any) => s.shipper_name)).size}
-                primaryHsChapters={selectedCorridor.primary_hs_chapters}
-                riskProfile={selectedCorridor.risk_profile}
-              />
-            </div>
+            <CorridorSummaryCard
+              id={selectedCorridor.id}
+              displayName={selectedCorridor.display_name}
+              riskLevel={selectedCorridor.risk_level}
+              shipmentCount={corridorShipments.length}
+              avgRiskScore={corridorShipments.length > 0
+                ? corridorShipments.reduce((sum: number, s: any) => sum + (s.risk_score || 0), 0) / corridorShipments.length
+                : 0}
+              element9MismatchPct={corridorShipments.length > 0
+                ? (corridorShipments.filter((s: any) => s.element9_is_mismatch).length / corridorShipments.length) * 100
+                : 0}
+              uniqueShippers={new Set(corridorShipments.map((s: any) => s.shipper_name)).size}
+              primaryHsChapters={selectedCorridor.primary_hs_chapters}
+              riskProfile={selectedCorridor.risk_profile}
+              corridors={corridors}
+              onCorridorChange={(corridorId: string) => {
+                setSelectedCorridorId(corridorId);
+                setActiveTab('pre-manifest');
+              }}
+            />
 
             {/* Tab Navigation */}
             <TabNavigation

@@ -161,7 +161,7 @@ jobs:
       - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-api:${{ github.sha }}"
-          docker build -t "$IMG" services/api/
+          docker build -t "$IMG" -f services/api/Dockerfile .
           docker push "$IMG"
 
   build-data:
@@ -182,7 +182,7 @@ jobs:
       - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-data:${{ github.sha }}"
-          docker build -t "$IMG" services/data/
+          docker build -t "$IMG" -f services/data/Dockerfile .
           docker push "$IMG"
 
   build-cord:
@@ -203,7 +203,7 @@ jobs:
       - run: |
           set -ex
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-cord:${{ github.sha }}"
-          docker build -t "$IMG" services/cord-integration/
+          docker build -t "$IMG" -f services/cord-integration/Dockerfile .
           docker push "$IMG"
 
   build-ui:
@@ -233,7 +233,7 @@ jobs:
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-ui:${{ github.sha }}"
           docker build \
             --build-arg API_URL="${{ steps.api-url.outputs.url }}" \
-            -t "$IMG" ui/
+            -t "$IMG" -f ui/Dockerfile .
           docker push "$IMG"
 
   deploy-api:

@@ -132,8 +132,10 @@ export function useV2Entities(): UseV2EntitiesReturn {
             const detailResp = await fetch(`/api/cord/entity/${m.entity_id}`);
             if (detailResp.ok) {
               const detailData = await detailResp.json();
+              // Extract entity from nested response structure
+              const entity = detailData.entity?.entity || detailData.entity || detailData;
               // Merge basic match with full details
-              return { ...m, ...detailData.entity };
+              return { ...m, ...entity };
             }
             // Fallback to basic match if detail fetch fails
             return m;
@@ -149,6 +151,7 @@ export function useV2Entities(): UseV2EntitiesReturn {
         .map((m: any) => mapCordToTradeEntity(m))
         .filter((entity: TradeEntity | null): entity is TradeEntity => entity !== null); // Remove null entities
 
+      console.log(`Successfully mapped ${mappedEntities.length} entities from ${matches.length} matches`);
       setEntities(mappedEntities);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to fetch entities';
@@ -166,7 +169,28 @@ export function useV2Entities(): UseV2EntitiesReturn {
   const selectEntity = async (entityId: string) => {
     const entity = entities.find(e => e.entity_id === entityId);
     if (entity) {
-      setSelectedEntity(entity);
+      try {
+        // Fetch entity chain/relationship graph
+        const chainResponse = await fetch(`/api/cord/entity/${entityId}/chain`);
+        const chainData = chainResponse.ok ? await chainResponse.json() : null;
+
+        // Fetch entity parties/related entities
+        const partiesResponse = await fetch(`/api/cord/entity/${entityId}/parties`);
+        const partiesData = partiesResponse.ok ? await partiesResponse.json() : null;
+
+        // Merge entity with chain and parties data
+        const enrichedEntity: TradeEntity = {
+          ...entity,
+          entity_chain: chainData?.chain || chainData?.entity_chain || undefined,
+          parties: partiesData?.parties || partiesData?.data || undefined,
+        };
+
+        setSelectedEntity(enrichedEntity);
+      } catch (err) {
+        console.error('Error fetching entity chain:', err);
+        // Fallback to just the entity without chain data
+        setSelectedEntity(entity);
+      }
     }
   };
 
