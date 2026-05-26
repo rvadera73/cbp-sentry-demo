@@ -36,6 +36,11 @@ export function useV2Referrals(cases: Case[]): UseV2ReferralsReturn {
 
         const newReferral: ReferralPackage = {
           referral_id: `REF-${Math.random().toString().slice(2, 6)}`,
+          shipment_id: `SHP-${Math.random().toString().slice(2, 8)}`,
+          created_at: new Date().toISOString(),
+          risk_score: caseObj.risk_score || 0,
+          risk_level: caseObj.risk_score >= 85 ? 'CRITICAL' : caseObj.risk_score >= 70 ? 'HIGH' : caseObj.risk_score >= 50 ? 'MEDIUM' : 'LOW',
+          sections: {},
           case_id: caseId,
           package_status: 'Draft',
           generated_date: new Date().toISOString().split('T')[0],

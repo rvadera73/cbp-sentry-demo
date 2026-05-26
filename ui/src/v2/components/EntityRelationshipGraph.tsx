@@ -26,41 +26,25 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
     if (!chain || !Array.isArray(chain) || chain.length === 0) return [];
 
     // Filter out entities without required fields
-    const validChain = chain.filter(e => e && e.name && e.entity_type);
+    const validChain = chain.filter(e => e && (e.name || e.entity_type));
     if (validChain.length === 0) return [];
 
-    // Calculate positions in a hierarchical layout (top-down, centered)
-    const nodeWidth = 140;
-    const nodeHeight = 75;
-    const xGap = 200;
-    const yGap = 140;
+    // Calculate positions in a LEFT-TO-RIGHT horizontal layout
+    const nodeWidth = 160;
+    const nodeHeight = 90;
+    const horizontalGap = 220;
+    const startX = 30;
+    const startY = 40;
 
-    // Group by entity type for better visualization
-    const manufacturers = validChain.filter(e => e.entity_type?.toUpperCase().includes('MANUFACTURER'));
-    const holdings = validChain.filter(e => e.entity_type?.toUpperCase().includes('HOLDING'));
-    const shippers = validChain.filter(e => e.entity_type?.toUpperCase().includes('SHIPPER') && !e.role?.toUpperCase().includes('CONSIGNEE'));
-    const consignees = validChain.filter(e => e.role?.toUpperCase().includes('CONSIGNEE') || e.entity_type?.toUpperCase().includes('IMPORTER'));
-
-    const rows = [manufacturers, holdings, shippers, consignees];
-    const nodes: any[] = [];
-    const centerX = 400;
-
-    rows.forEach((row, rowIdx) => {
-      if (row.length === 0) return;
-
-      row.forEach((entity, colIdx) => {
-        const totalInRow = row.length;
-        const startX = centerX - (totalInRow * xGap) / 2 + colIdx * xGap;
-
-        nodes.push({
-          id: String(entity.entity_id),
-          ...entity,
-          x: startX,
-          y: rowIdx * yGap + 30,
-          width: nodeWidth,
-          height: nodeHeight,
-        });
-      });
+    const nodes: any[] = validChain.map((entity, idx) => {
+      return {
+        id: String(entity.entity_id || idx),
+        ...entity,
+        x: startX + idx * horizontalGap,
+        y: startY,
+        width: nodeWidth,
+        height: nodeHeight,
+      };
     });
 
     return nodes;
@@ -103,11 +87,11 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
     );
   }
 
-  // Calculate SVG dimensions based on content
+  // Calculate SVG dimensions based on content (wide for left-to-right layout)
   const maxX = Math.max(...nodes.map(n => n.x + n.width), 800);
-  const maxY = Math.max(...nodes.map(n => n.y + n.height), 400);
-  const svgWidth = Math.min(1200, maxX + 40);
-  const svgHeight = Math.min(600, maxY + 40);
+  const maxY = Math.max(...nodes.map(n => n.y + n.height), 150);
+  const svgWidth = Math.max(maxX + 50, 1000);
+  const svgHeight = maxY + 50;
 
   return (
     <div className="w-full bg-white border border-[#D0D7DE] rounded-sm p-4">
@@ -163,7 +147,7 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
             </marker>
           </defs>
 
-          {/* Relationship arrows */}
+          {/* Relationship arrows - LEFT TO RIGHT */}
           {nodes.map((node, idx) => {
             if (idx >= nodes.length - 1) return null;
             const nextNode = nodes[idx + 1];
@@ -178,7 +162,7 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
                   x1={node.x + node.width}
                   y1={node.y + node.height / 2}
                   x2={nextNode.x}
-                  y2={nextNode.y + nextNode.height / 2}
+                  y2={nextNode.y + node.height / 2}
                   stroke={isRiskRelationship ? '#DC2626' : '#6B7280'}
                   strokeWidth="2"
                   markerEnd={isRiskRelationship ? 'url(#arrowhead-risk)' : 'url(#arrowhead)'}
@@ -187,8 +171,8 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
                 {relationships.length > 0 && (
                   <text
                     x={(node.x + node.width + nextNode.x) / 2}
-                    y={(node.y + node.height / 2 + nextNode.y + nextNode.height / 2) / 2 - 5}
-                    fontSize="10"
+                    y={node.y + node.height / 2 - 8}
+                    fontSize="9"
                     fill="#666"
                     textAnchor="middle"
                     className="pointer-events-none"
