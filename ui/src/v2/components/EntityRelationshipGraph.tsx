@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { AlertCircle } from 'lucide-react';
 
 interface Entity {
-  entity_id: number;
+  entity_id: string | number;
   name: string;
   country: string;
   entity_type: string;
@@ -13,6 +13,7 @@ interface Entity {
     target: string;
     confidence: number;
   }>;
+  data_source?: string;
 }
 
 interface EntityGraphProps {
@@ -52,7 +53,7 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
         const startX = centerX - (totalInRow * xGap) / 2 + colIdx * xGap;
 
         nodes.push({
-          id: entity.entity_id,
+          id: String(entity.entity_id),
           ...entity,
           x: startX,
           y: rowIdx * yGap + 30,
