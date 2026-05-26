@@ -93,38 +93,6 @@ jobs:
           cd ui
           npx tsc --noEmit || true
 
-  sync-data-to-gcs:
-    name: Sync Data to GCS (Stage)
-    runs-on: ubuntu-latest
-    needs: [setup]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/stage'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-      - uses: google-github-actions/setup-gcloud@v2
-      - name: Upload databases to GCS
-        run: |
-          echo "📤 Syncing dev data to GCS bucket..."
-          echo ""
-          echo "Uploading cbp_sentry.db..."
-          gsutil -m cp data/cbp_sentry.db gs://cbp-sentry-appdata/cbp_sentry.db
-          echo "✅ cbp_sentry.db synced"
-          echo ""
-          echo "Uploading cord_rag.db..."
-          gsutil -m cp data/cord_rag.db gs://cbp-sentry-appdata/cord_rag.db
-          echo "✅ cord_rag.db synced"
-          echo ""
-          echo "Uploading senzing.license..."
-          gsutil cp senzing/senzing.license gs://cbp-sentry-appdata/senzing.license || true
-          echo "✅ senzing.license synced (or skipped if not present)"
-          echo ""
-          echo "📊 Verifying uploads..."
-          gsutil ls -lh gs://cbp-sentry-appdata/
-          echo ""
-          echo "✅ Data sync complete - staging will have same data as dev"
-
   bootstrap-bucket:
     name: Bootstrap GCS data bucket
     runs-on: ubuntu-latest
@@ -245,7 +213,7 @@ jobs:
   deploy-api:
     name: Deploy sentry-api
     runs-on: ubuntu-latest
-    needs: [setup, build-api, deploy-data, deploy-cord, sync-data-to-gcs, changes]
+    needs: [setup, build-api, deploy-data, deploy-cord, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.api == 'true'
@@ -318,7 +286,7 @@ jobs:
   deploy-data:
     name: Deploy sentry-data
     runs-on: ubuntu-latest
-    needs: [setup, build-data, bootstrap-bucket, sync-data-to-gcs, changes]
+    needs: [setup, build-data, bootstrap-bucket, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.data == 'true'
@@ -359,7 +327,7 @@ jobs:
   deploy-cord:
     name: Deploy sentry-cord-integration
     runs-on: ubuntu-latest
-    needs: [setup, build-cord, bootstrap-bucket, sync-data-to-gcs, changes]
+    needs: [setup, build-cord, bootstrap-bucket, changes]
     if: |
       github.event_name == 'push' && (
         needs.changes.outputs.cord == 'true'
