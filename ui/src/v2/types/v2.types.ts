@@ -71,6 +71,25 @@ export interface TradeEntity {
   tax_id: string;
   phone: string;
   shared_identifiers: string[];
+  entity_chain?: Array<{
+    entity_id: string | number;
+    name: string;
+    country: string;
+    entity_type: string;
+    role: string;
+    confidence: number;
+    relationships?: Array<{
+      type: string;
+      target: string;
+      confidence: number;
+    }>;
+    data_source?: string;
+  }>;
+  parties?: Array<{
+    entity: string;
+    role: string;
+    country: string;
+  }>;
 }
 
 export interface Shipment {

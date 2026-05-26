@@ -8,11 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Step 1: Install Python dependencies (cached independently)
-COPY requirements.txt .
+COPY services/data/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Step 2: Copy application code
-COPY . .
+COPY services/data/ .
+
+# Step 3: Copy database files
+COPY data/ /app/data/
 
 # Create required directories
 RUN mkdir -p /app/data

@@ -3517,6 +3517,50 @@ async def cord_get_entity(entity_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"CORD fetch failed: {str(e)}")
 
 
+@app.get("/api/cord/entity/{entity_id}/chain")
+async def cord_get_entity_chain(entity_id: str) -> Dict[str, Any]:
+    """Get entity chain/ownership hierarchy from CORD.
+
+    Returns the supply chain topology for the given entity.
+    """
+    try:
+        async with await get_cord_service_client() as client:
+            resp = await client.get(f"/entity/{entity_id}/chain")
+            if resp.status_code == 200:
+                return {"status": "success", "chain": resp.json()}
+            elif resp.status_code == 404:
+                # Return empty chain if not found
+                return {"status": "success", "chain": []}
+            else:
+                logger.warning(f"CORD chain endpoint returned {resp.status_code}")
+                return {"status": "success", "chain": []}
+    except Exception as e:
+        logger.warning(f"CORD get entity chain error: {e}")
+        return {"status": "success", "chain": []}
+
+
+@app.get("/api/cord/entity/{entity_id}/parties")
+async def cord_get_entity_parties(entity_id: str) -> Dict[str, Any]:
+    """Get related parties for an entity from CORD.
+
+    Returns supply chain parties (shipper, manufacturer, consignee, etc.).
+    """
+    try:
+        async with await get_cord_service_client() as client:
+            resp = await client.get(f"/entity/{entity_id}/parties")
+            if resp.status_code == 200:
+                return {"status": "success", "parties": resp.json()}
+            elif resp.status_code == 404:
+                # Return empty parties if not found
+                return {"status": "success", "parties": []}
+            else:
+                logger.warning(f"CORD parties endpoint returned {resp.status_code}")
+                return {"status": "success", "parties": []}
+    except Exception as e:
+        logger.warning(f"CORD get entity parties error: {e}")
+        return {"status": "success", "parties": []}
+
+
 @app.post("/api/cord/why/{entity_id_a}/{entity_id_b}")
 async def cord_why_connected(entity_id_a: str, entity_id_b: str) -> Dict[str, Any]:
     """Explain relationship between two entities.

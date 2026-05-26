@@ -163,10 +163,9 @@ export default function InvestigationListTable({
                         e.stopPropagation();
                         onAccessWorkspace(item.id);
                       }}
-                      className="px-3 py-1.5 bg-[#0076D6] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded-sm flex items-center space-x-1 ml-auto transition-colors whitespace-nowrap"
+                      className="px-3 py-1.5 bg-[#112E51] hover:bg-[#005EA2] text-white text-[10px] font-bold rounded-sm transition-colors whitespace-nowrap"
                     >
-                      <ArrowRight className="h-3 w-3" />
-                      <span>Workspace</span>
+                      WORKSPACE
                     </button>
                   </td>
                 </tr>

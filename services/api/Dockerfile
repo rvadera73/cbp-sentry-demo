@@ -9,11 +9,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Step 1: Install Python dependencies (cached independently)
-COPY requirements.txt .
+COPY services/api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Step 2: Copy application code (only invalidates on code change)
-COPY . .
+COPY services/api/ .
+
+# Step 3: Copy database files
+COPY data/ /app/data/
 
 # Create health check script
 RUN printf '#!/bin/sh\ncurl -f http://localhost:8000/health || exit 1\n' > /healthcheck.sh && chmod +x /healthcheck.sh

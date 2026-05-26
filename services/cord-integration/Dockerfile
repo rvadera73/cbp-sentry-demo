@@ -9,18 +9,21 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
-COPY requirements.txt .
+COPY services/cord-integration/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application
-COPY main.py .
-COPY cord_loader.py .
-COPY cbp_augmentor.py .
-COPY resolver.py .
-COPY demo_entities.py .
-COPY seed_cbp_entities.py .
+COPY services/cord-integration/main.py .
+COPY services/cord-integration/cord_loader.py .
+COPY services/cord-integration/cbp_augmentor.py .
+COPY services/cord-integration/resolver.py .
+COPY services/cord-integration/demo_entities.py .
+COPY services/cord-integration/seed_cbp_entities.py .
+
+# Copy database files
+COPY data/ /app/data/
 
 # Health check script
 RUN echo '#!/bin/bash\ncurl -f http://localhost:8004/health || exit 1' > /healthcheck.sh && \

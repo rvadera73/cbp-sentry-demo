@@ -54,6 +54,15 @@ interface Props {
 }
 
 export function ComprehensiveReferralViewer({ referral, onAnnotationSave }: Props) {
+  // Guard against undefined referral or sections
+  if (!referral || !referral.sections) {
+    return (
+      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+        <p>No referral data available. Please select a case to view details.</p>
+      </div>
+    );
+  }
+
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['section_3_1_shipment_identification']));
   const [activeAnnotationSection, setActiveAnnotationSection] = useState<string | null>(null);
