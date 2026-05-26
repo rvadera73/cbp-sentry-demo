@@ -2,9 +2,9 @@ name: Deploy — Sentry (Cloud Run)
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, stage]
   pull_request:
-    branches: [dev]
+    branches: [dev, stage]
   workflow_dispatch:
     inputs:
       environment:
@@ -31,12 +31,20 @@ jobs:
       - name: Determine branch and environment
         id: branch
         run: |
-          echo "name=dev" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == "refs/heads/stage" ]]; then
+            echo "name=stage" >> $GITHUB_OUTPUT
+          else
+            echo "name=dev" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set environment
         id: env
         run: |
-          echo "name=staging" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" == "refs/heads/stage" ]]; then
+            echo "name=staging" >> $GITHUB_OUTPUT
+          else
+            echo "name=staging" >> $GITHUB_OUTPUT
+          fi
 
   changes:
     name: Detect changed services

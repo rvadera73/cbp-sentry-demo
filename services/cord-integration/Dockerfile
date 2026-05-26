@@ -20,6 +20,7 @@ COPY cord_loader.py .
 COPY cbp_augmentor.py .
 COPY resolver.py .
 COPY demo_entities.py .
+COPY seed_cbp_entities.py .
 
 # Health check script
 RUN echo '#!/bin/bash\ncurl -f http://localhost:8004/health || exit 1' > /healthcheck.sh && \

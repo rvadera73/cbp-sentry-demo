@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from cord_loader import load_cord_data_async
 from cbp_augmentor import augment_cbp_shipments_async
 from resolver import EntityResolver
+from seed_cbp_entities import seed_cbp_shipment_entities
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -355,6 +356,15 @@ async def initialize_senzing():
         logger.info("Augmenting with CBP shipment data...")
         augment_result = await augment_cbp_shipments_async(DATA_SERVICE_URL, "/app/data/senzing.db")
         logger.info(f"CBP augmentation result: {json.dumps(augment_result, indent=2)}")
+
+        # Seed CBP entities for entity resolution (Phase 3.5)
+        logger.info("Seeding CBP shipment entities into Senzing for resolution...")
+        seed_result = await asyncio.to_thread(
+            seed_cbp_shipment_entities,
+            "/app/data/cbp_sentry.db",
+            "/app/data/senzing.db"
+        )
+        logger.info(f"CBP entity seed result: {json.dumps(seed_result, indent=2)}")
 
         # Log final entity count
         final_count = _senzing_engine.get_entity_count()
