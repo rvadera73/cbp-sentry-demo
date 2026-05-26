@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/{manifest_id}", response_model=ReferralPackageResponse)
-async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
+@router.get("/{shipment_id}", response_model=ReferralPackageResponse)
+async def get_referral_package(shipment_id: str) -> ReferralPackageResponse:
     """
     ⚠️ DEPRECATED: Get referral package for a shipment.
 
@@ -55,20 +55,20 @@ async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
     Will be removed in v2.0 (target: Q3 2026).
 
     Args:
-        manifest_id: Manifest identifier
+        shipment_id: Shipment identifier
 
     Returns:
         Complete referral package with all 14 sections (FIXTURE DATA)
     """
     logger.warning(
-        f"⚠️ DEPRECATED: get_referral_package({manifest_id}) called with FIXTURE DATA. "
+        f"⚠️ DEPRECATED: get_referral_package({shipment_id}) called with FIXTURE DATA. "
         f"Use GET /api/referral/{{shipment_id}}/entity-graph for real data."
     )
 
     try:
-        # TODO: Load referral package from database using manifest_id
+        # TODO: Load referral package from database using shipment_id
         # For now, return fixture for all cases (until real DB integration)
-        if manifest_id and len(manifest_id) > 0:
+        if shipment_id and len(shipment_id) > 0:
             sections_data = {
                 "shipment_id": {
                         "bill_id": "BL123456789",
@@ -340,16 +340,16 @@ async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
             }
 
             return {
-                "package_id": f"ref_{manifest_id}",
-                "shipment_id": manifest_id,
+                "package_id": f"ref_{shipment_id}",
+                "shipment_id": shipment_id,
                 "confidence_level": "HIGH",
                 "score": 91,
                 "recommended_action": "EXAMINE",
                 "sections": transformed_sections
             }
 
-        # Default for unknown manifest
-        raise HTTPException(status_code=404, detail=f"Referral package not found for {manifest_id}")
+        # Default for unknown shipment
+        raise HTTPException(status_code=404, detail=f"Referral package not found for {shipment_id}")
 
     except HTTPException:
         raise
@@ -358,21 +358,21 @@ async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/{manifest_id}/summary")
-async def get_referral_summary(manifest_id: str) -> Dict[str, Any]:
+@router.get("/{shipment_id}/summary")
+async def get_referral_summary(shipment_id: str) -> Dict[str, Any]:
     """
     Get summary of referral package.
 
     Args:
-        manifest_id: Manifest identifier
+        shipment_id: Shipment identifier
 
     Returns:
         Summary with key metrics
     """
     try:
-        if manifest_id and len(manifest_id) > 0:
+        if shipment_id and len(shipment_id) > 0:
             return {
-                "manifest_id": manifest_id,
+                "shipment_id": shipment_id,
                 "score": 91,
                 "confidence_tier": "HIGH",
                 "recommended_action": "EXAMINE",
@@ -384,7 +384,7 @@ async def get_referral_summary(manifest_id: str) -> Dict[str, Any]:
                 "referral_justification": "High-confidence transshipment indicators warrant port examination and manufacturer verification."
             }
 
-        raise HTTPException(status_code=404, detail=f"Referral summary not found for {manifest_id}")
+        raise HTTPException(status_code=404, detail=f"Referral summary not found for {shipment_id}")
 
     except HTTPException:
         raise
