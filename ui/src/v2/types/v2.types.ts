@@ -252,12 +252,35 @@ export interface AIFinding {
 
 export interface ReferralPackage {
   referral_id: string;
-  case_id: string;
-  package_status: 'Draft' | 'Supervisor Review' | 'DHS Approved' | 'Submitted';
-  generated_date: string;
-  approval_state: string;
-  evidence_inventory_ids: string[];
-  narrative: {
+  shipment_id: string;
+  manifest_id?: string;
+  created_at: string;
+  risk_score: number;
+  risk_level: string;
+
+  // CSOP sections
+  sections: Record<string, any>;
+
+  // Risk breakdown
+  risk_breakdown?: {
+    final_score: number;
+    components: Array<{
+      component: string;
+      score: number;
+      weight: number;
+      weighted_result: number;
+      rationale?: string;
+      evidence?: string;
+    }>;
+  };
+
+  // Legacy fields for backward compatibility
+  case_id?: string;
+  package_status?: 'Draft' | 'Supervisor Review' | 'DHS Approved' | 'Submitted';
+  generated_date?: string;
+  approval_state?: string;
+  evidence_inventory_ids?: string[];
+  narrative?: {
     executive_summary?: string;
     subject_overview?: string;
     investigation_findings?: string;
@@ -266,8 +289,6 @@ export interface ReferralPackage {
     applicable_violations?: string;
     recommended_enforcement?: string;
   };
-
-  // API Response Fields
   corridor_context?: {
     origin: string;
     destination: string;
@@ -275,22 +296,18 @@ export interface ReferralPackage {
     commodity_name: string;
     h1_risk_level: string;
   };
-
   scenarios?: Array<{
     scenario: string;
     impact: string;
     revised_score: number;
     confidence: string;
   }>;
-
   risk_indicators?: Array<{
     indicator: string;
     present: boolean;
     evidence: string;
     authority: string;
   }>;
-
-  sections?: Record<string, any>;
 }
 
 export interface ThreatFeedEvent {

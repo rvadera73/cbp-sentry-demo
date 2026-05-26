@@ -8,7 +8,7 @@ import { Case, Shipment, AIFinding, ReferralPackage } from '../types/v2.types';
 import { api } from '../../services/api';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { EntityRelationshipGraph } from '../components/EntityRelationshipGraph';
-import { ReferralPackageViewer } from '../components/ReferralPackageViewer';
+import ComprehensiveReferralViewer from '../components/ComprehensiveReferralViewer';
 import { TabNavigation, TabConfig } from '../components/TabNavigation';
 
 interface V2InvestigationsPageProps {
@@ -458,24 +458,6 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold">SLA Clock</span>
           <span className="text-xs font-mono font-bold text-red-600 mt-1">{selectedCase.sla_timer}</span>
         </div>
-
-        {/* Actions */}
-        <div className="flex space-x-2 ml-auto">
-          <button
-            onClick={() => setActiveSubTab('Evidence & Referral')}
-            className="px-3 py-2 bg-[#005EA2] hover:bg-[#0076D6] text-white text-xs font-bold rounded-sm"
-          >
-            REFERRAL PACKET
-          </button>
-          <button
-            onClick={() => {
-              setRiskAdjustment(prev => Math.min(20, prev + 5));
-            }}
-            className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-sm"
-          >
-            ESCALATE
-          </button>
-        </div>
       </div>
 
       {/* Tab Navigation - Horizontal tabs at top */}
@@ -511,18 +493,12 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           {activeSubTab === 'Risk Score' && (
             <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />
           )}
-          {activeSubTab === 'Evidence & Referral' && (
-            <ReferralPackageViewer
-              selectedReferral={selectedReferral}
-              selectedCase={selectedCase}
-              findings={findings}
-              referralNarrative={referralNarrative}
-              setReferralNarrative={setReferralNarrative}
-              onCompile={handleCompileReferral}
-              compileLoading={compileLoading}
-              selectedCaseShipments={selectedCaseShipments}
-              onSubmit={handleSubmitReferral}
-            />
+          {activeSubTab === 'Evidence & Referral' && selectedReferral && (
+            <div className="flex-1 overflow-hidden">
+              <ComprehensiveReferralViewer
+                referral={selectedReferral}
+              />
+            </div>
           )}
       </div>
     </div>
