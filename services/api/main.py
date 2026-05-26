@@ -2592,7 +2592,7 @@ async def list_shipments(
     try:
         async with await get_data_service_client() as client:
             # Build params for data service
-            fetch_limit = min(limit, 100)
+            fetch_limit = min(limit, 5000)
             params = {"limit": fetch_limit, "offset": offset}
 
             if corridor_id:

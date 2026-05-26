@@ -355,7 +355,7 @@ async def get_shipment_endpoint(shipment_id: str) -> dict:
 
 @app.get("/shipments", response_model=dict)
 async def list_shipments(
-    limit: int = Query(100, ge=1, le=100),
+    limit: int = Query(100, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     corridor_id: Optional[str] = None,
     risk_min: Optional[float] = None,
@@ -365,7 +365,7 @@ async def list_shipments(
     """List shipments with server-side filtering by corridor and risk level.
 
     Query params:
-    - limit: Results per page (default 100, max 100)
+    - limit: Results per page (default 100, max 5000)
     - offset: Pagination offset
     - corridor_id: Filter by corridor (e.g. "VN→US")
     - risk_min: Minimum risk score (e.g. 50 for elevated+critical)
