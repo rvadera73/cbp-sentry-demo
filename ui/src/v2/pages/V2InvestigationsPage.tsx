@@ -286,6 +286,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
   // LIST VIEW
   if (!selectedCase) {
+    console.log('[V2InvestigationsPage] Showing LIST view, selectedCaseId:', selectedCaseId);
     return (
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -414,7 +415,9 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
       {/* Back to Queue Button - Top Left Corner */}
       <div className="bg-[#F7F9FC] border-b border-[#D0D7DE] px-6 py-2 shrink-0">
         <button
-          onClick={() => setSelectedCaseId(null)}
+          onClick={() => {
+            setLocalSelectedCaseId(null);
+          }}
           className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[#005EA2] hover:text-[#0076D6] text-xs font-bold rounded-sm flex items-center space-x-1 transition-colors"
         >
           <span>←</span>
