@@ -141,7 +141,7 @@ jobs:
           echo "✅ cord_rag.db uploaded"
           echo ""
           echo "📊 Verifying uploads..."
-          gcloud storage ls --long --human-readable gs://cbp-sentry-appdata/
+          gcloud storage ls --long --readable-sizes gs://cbp-sentry-appdata/
 
   build-api:
     name: Build sentry-api
