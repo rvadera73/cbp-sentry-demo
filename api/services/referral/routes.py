@@ -67,16 +67,10 @@ async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
 
     try:
         # TODO: Load referral package from database using manifest_id
-        # For now, return fixture for Greenfield case
-        if manifest_id == "greenfield" or manifest_id.startswith("mani_"):
-            return {
-                "package_id": f"ref_{manifest_id}",
-                "shipment_id": manifest_id,
-                "confidence_level": "HIGH",
-                "score": 91,
-                "recommended_action": "EXAMINE",
-                "sections": {
-                    "shipment_id": {
+        # For now, return fixture for all cases (until real DB integration)
+        if manifest_id and len(manifest_id) > 0:
+            sections_data = {
+                "shipment_id": {
                         "bill_id": "BL123456789",
                         "manifest_id": manifest_id,
                         "shipper": "Greenfield Industrial Trading Co., Ltd.",
@@ -326,6 +320,32 @@ async def get_referral_package(manifest_id: str) -> ReferralPackageResponse:
                         }
                     ]
                 }
+
+            # Transform sections to UI-expected structure (section_3_X keys)
+            transformed_sections = {
+                "section_3_1_shipment_identification": sections_data["shipment_id"],
+                "section_3_2_line_items": sections_data["line_items"],
+                "section_3_3_routing_history": sections_data["routing_history"],
+                "section_3_4_parties_and_roles": {"parties": sections_data["parties"]},
+                "section_3_5_entity_ownership_chain": {"chain": sections_data["ownership_chain"]},
+                "section_3_6_import_pattern": sections_data["import_pattern"],
+                "section_3_7_trade_flow": sections_data["trade_flow"],
+                "section_3_8_document_review": {"documents": sections_data["document_review"]},
+                "section_3_9_document_consistency": sections_data["document_consistency"],
+                "section_3_10_supplier_verification": sections_data["manufacturing_verification"],
+                "section_3_11_risk_indicators": sections_data["risk_indicators"],
+                "section_3_12_score_breakdown": sections_data["score_breakdown"],
+                "section_3_13_what_if_scenarios": sections_data["what_if_scenarios"],
+                "section_3_14_data_sources": sections_data["data_sources"],
+            }
+
+            return {
+                "package_id": f"ref_{manifest_id}",
+                "shipment_id": manifest_id,
+                "confidence_level": "HIGH",
+                "score": 91,
+                "recommended_action": "EXAMINE",
+                "sections": transformed_sections
             }
 
         # Default for unknown manifest
@@ -350,7 +370,7 @@ async def get_referral_summary(manifest_id: str) -> Dict[str, Any]:
         Summary with key metrics
     """
     try:
-        if manifest_id == "greenfield" or manifest_id.startswith("mani_"):
+        if manifest_id and len(manifest_id) > 0:
             return {
                 "manifest_id": manifest_id,
                 "score": 91,
