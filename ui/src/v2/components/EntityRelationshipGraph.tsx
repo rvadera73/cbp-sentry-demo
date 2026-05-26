@@ -26,7 +26,7 @@ export function EntityRelationshipGraph({ chain, parties }: EntityGraphProps) {
     if (!chain || !Array.isArray(chain) || chain.length === 0) return [];
 
     // Filter out entities without required fields (handle both API response formats)
-    const validChain = chain.filter(e => e && (e.name || e.entity || e.entity_type));
+    const validChain = chain.filter(e => e && (e.name || e.entity_type));
     if (validChain.length === 0) return [];
 
     // Calculate positions in a LEFT-TO-RIGHT horizontal layout
