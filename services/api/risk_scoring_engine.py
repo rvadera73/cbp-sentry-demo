@@ -77,10 +77,10 @@ class RiskScoringEngine:
             return False, 0.0
 
         try:
-            dwell_days = float(shipment.get("dwell_days", 0))
+            dwell_days = float(shipment.get("dwell_days") or 0)
             transit_days = 20  # Typical transit time in days
             cost_delta = 0  # Would need historical price data
-            rerouting_count = len(shipment.get("port_calls", []) or []) - 2  # ports - origin - dest
+            rerouting_count = len(shipment.get("port_calls") or []) - 2  # ports - origin - dest
 
             # Create feature vector
             features = np.array([[dwell_days, transit_days, cost_delta, rerouting_count]])
@@ -111,12 +111,12 @@ class RiskScoringEngine:
 
         try:
             # Extract features
-            hs_code = int(str(shipment.get("hs_code", "0")).replace(".", "")[:6])
-            country_origin = self._encode_country(shipment.get("origin_country", "US"))
-            shipper_age = float(shipment.get("shipper_age_months", 12))
-            ad_duty_rate = float(shipment.get("ad_cvd_rate", 0)) * 100
+            hs_code = int(str(shipment.get("hs_code") or "0").replace(".", "")[:6])
+            country_origin = self._encode_country(shipment.get("origin_country") or "US")
+            shipper_age = float(shipment.get("shipper_age_months") or 12)
+            ad_duty_rate = float(shipment.get("ad_cvd_rate") or 0) * 100
             er_confidence = 0.85  # Would need actual ER data
-            ais_anomaly = -1.0 if shipment.get("dwell_days", 0) > 8 else 0.3  # From Isolation Forest
+            ais_anomaly = -1.0 if (shipment.get("dwell_days") or 0) > 8 else 0.3  # From Isolation Forest
             isf_stuffing = 1 if shipment.get("element9_is_mismatch") else 0
             price_market_ratio = 0.95  # Would need actual pricing data
 
@@ -509,7 +509,7 @@ class RiskScoringEngine:
         factor_weight = self.factor_weights["party"]
 
         # Shipper Age (35% of party risk)
-        shipper_age_months = shipment.get("shipper_age_months", 0)
+        shipper_age_months = shipment.get("shipper_age_months") or 0
         if shipper_age_months < 12:
             age_score = 9.0
             age_category = "NEW"
@@ -638,7 +638,7 @@ class RiskScoringEngine:
         factor_weight = self.factor_weights["pattern"]
 
         # Pricing Anomaly (50% of pattern risk)
-        price_variance = shipment.get("price_variance_percent", 0)
+        price_variance = shipment.get("price_variance_percent") or 0
         if price_variance < -50:
             pricing_score = 9.0
             pricing_cat = "SEVERE"
