@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { MapPin, Ship, FileText, DollarSign, AlertTriangle, TrendingDown, Calendar, CheckCircle, RefreshCw, ExternalLink } from 'lucide-react';
 import { useCorridorShipments } from '../hooks/useCorridorShipments';
 import { useCorridorIntelligence, useCorridorDetail } from '../hooks/useCorridorIntelligence';
@@ -12,11 +11,25 @@ import DataTable, { DataTableColumn } from '../components/DataTable';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { COLORS, PATTERNS } from '../styles/designSystem';
 import { API_BASE_URL } from '../../services/apiUrl';
+import { Case, Shipment } from '../types/v2.types';
 
 type TabType = 'pre-manifest' | 'active-shipments' | 'compliance';
 
-export default function V2ShippingIntelligencePage() {
-  const navigate = useNavigate();
+interface V2ShippingIntelligencePageProps {
+  selectedCaseId?: string | null;
+  setSelectedCaseId?: (id: string | null) => void;
+  setActiveTab?: (tab: string) => void;
+  shipments?: Shipment[];
+  cases?: Case[];
+}
+
+export default function V2ShippingIntelligencePage({
+  selectedCaseId: propSelectedCaseId,
+  setSelectedCaseId: propSetSelectedCaseId,
+  setActiveTab: propSetActiveTab,
+  shipments: propShipments = [],
+  cases: propCases = [],
+}: V2ShippingIntelligencePageProps = {}) {
   const { corridors, isLoading: corridorsLoading, error: corridorsError, count: corridorsCount } = useCorridorIntelligence();
 
   // Auto-select first corridor on load
@@ -108,9 +121,23 @@ export default function V2ShippingIntelligencePage() {
   }, [shipmentListItems, shipmentSearchQuery, shipmentRiskFilter]);
 
   // Navigate to Investigation Workspace with shipment ID
-  const handleAccessWorkspace = (shipmentId: string) => {
-    navigate(`/investigations?shipmentId=${encodeURIComponent(shipmentId)}`);
-  };
+  const handleAccessWorkspace = useCallback((shipmentId: string) => {
+    if (propSetSelectedCaseId && propSetActiveTab && propCases.length > 0) {
+      // Find case that matches this shipment
+      const shipment = corridorShipments.find(s => s.shipment_id === shipmentId);
+      if (shipment) {
+        const matchingCase = propCases.find(c =>
+          c.origin_country === shipment.origin_country &&
+          c.destination_country === shipment.destination_country &&
+          c.target_entity.includes(shipment.shipper_name || '')
+        );
+        if (matchingCase) {
+          propSetSelectedCaseId(matchingCase.case_id);
+          propSetActiveTab('investigations');
+        }
+      }
+    }
+  }, [propSetSelectedCaseId, propSetActiveTab, propCases, corridorShipments]);
 
   return (
     <div className="flex-1 flex flex-col h-full bg-[#F7F9FC] overflow-hidden">

@@ -1,0 +1,660 @@
+/* Officer Analysis Form Styling */
+
+.officer-analysis-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding: var(--space-lg);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Progress Bar */
+.form-progress {
+  margin-bottom: var(--space-lg);
+}
+
+.progress-bar {
+  height: 4px;
+  background: var(--neutral-border-light);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--federal-focus), var(--uswds-primary-blue));
+  transition: width 0.3s ease;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--neutral-text-secondary);
+  margin-top: 8px;
+}
+
+.progress-text {
+  font-weight: 600;
+  color: var(--federal-navy);
+}
+
+/* Step Container */
+.step-container {
+  background: var(--neutral-white);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.step-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.step-header {
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-lg);
+  border-bottom: 2px solid var(--neutral-border);
+}
+
+.step-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--federal-navy);
+}
+
+.step-description {
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  color: var(--neutral-text-secondary);
+}
+
+/* Form Elements */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.form-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--federal-navy);
+}
+
+.form-label.required::after {
+  content: ' *';
+  color: var(--risk-l3-border);
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  padding: var(--space-sm);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-family);
+  font-size: 14px;
+  color: var(--neutral-text-primary);
+  transition: all 0.2s ease;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--federal-focus);
+  box-shadow: 0 0 0 3px rgba(0, 80, 216, 0.1);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+}
+
+/* Radio/Checkbox Groups */
+.radio-group,
+.checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.radio-option,
+.checkbox-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
+.radio-option input[type="radio"],
+.checkbox-option input[type="checkbox"] {
+  margin-top: 4px;
+  cursor: pointer;
+  accent-color: var(--federal-focus);
+}
+
+.option-text {
+  font-size: 14px;
+  color: var(--neutral-text-primary);
+}
+
+/* Risk Score Input */
+.score-input-group {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.score-input-group .form-input {
+  max-width: 150px;
+}
+
+.score-feedback {
+  display: flex;
+  align-items: center;
+}
+
+.score-indicator {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.score-indicator.high {
+  background: var(--risk-l3-bg);
+  color: var(--risk-l3-text);
+}
+
+.score-indicator.medium {
+  background: var(--risk-l2-bg);
+  color: var(--risk-l2-text);
+}
+
+.score-indicator.low {
+  background: var(--risk-l1-bg);
+  color: var(--risk-l1-text);
+}
+
+/* Risk Score Display */
+.risk-score-display {
+  padding: var(--space-md);
+  background: var(--neutral-light-bg);
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.score-label {
+  font-weight: 600;
+  color: var(--federal-navy);
+}
+
+.score-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--federal-focus);
+  font-family: var(--font-family-mono);
+}
+
+/* Textarea Info */
+.textarea-info {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12px;
+  color: var(--neutral-text-secondary);
+  margin-top: 4px;
+}
+
+.char-count.valid {
+  color: var(--status-success);
+}
+
+.char-count.invalid {
+  color: var(--risk-l3-border);
+}
+
+/* Evidence Section */
+.evidence-section {
+  margin-bottom: var(--space-lg);
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 var(--space-md) 0;
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--neutral-border);
+  color: var(--federal-navy);
+}
+
+.section-title.critical::after {
+  content: ' (Required)';
+  color: var(--risk-l3-border);
+  font-weight: 600;
+}
+
+.section-title.supporting {
+  color: var(--neutral-text-primary);
+}
+
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.evidence-item {
+  padding: var(--space-md);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--radius-sm);
+  background: var(--neutral-white);
+}
+
+.evidence-item.critical {
+  border-color: var(--risk-l3-border);
+  background: var(--risk-l3-bg);
+}
+
+.item-checkbox {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.item-checkbox input[type="checkbox"] {
+  margin-top: 2px;
+  cursor: pointer;
+  accent-color: var(--federal-focus);
+}
+
+.item-checkbox label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.item-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--federal-navy);
+}
+
+.item-description {
+  font-size: 13px;
+  color: var(--neutral-text-secondary);
+}
+
+.item-notes {
+  margin-top: var(--space-md);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--neutral-border);
+}
+
+.notes-textarea {
+  width: 100%;
+  padding: var(--space-sm);
+  border: 1px solid var(--neutral-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-family);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.notes-textarea:focus {
+  outline: none;
+  border-color: var(--federal-focus);
+  box-shadow: 0 0 0 2px rgba(0, 80, 216, 0.1);
+}
+
+.evidence-progress {
+  padding: var(--space-md);
+  background: var(--neutral-light-bg);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-lg);
+}
+
+.progress-complete {
+  color: var(--status-success);
+}
+
+.evidence-summary {
+  padding: var(--space-md);
+  background: var(--neutral-light-bg);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Action Grid */
+.action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+}
+
+.action-option {
+  padding: var(--space-md);
+  border: 2px solid var(--neutral-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  gap: var(--space-md);
+}
+
+.action-option input[type="radio"] {
+  margin-top: 4px;
+  cursor: pointer;
+  accent-color: var(--federal-focus);
+}
+
+.action-option:has(input:checked) {
+  border-color: var(--federal-focus);
+  background: rgba(0, 80, 216, 0.04);
+}
+
+.action-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.action-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--federal-navy);
+}
+
+.action-description {
+  font-size: 13px;
+  color: var(--neutral-text-secondary);
+}
+
+/* Officer Info Section */
+.officer-info-section {
+  padding: var(--space-lg);
+  background: var(--neutral-light-bg);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--federal-focus);
+}
+
+.officer-info-section .section-title {
+  border: none;
+  margin-bottom: var(--space-lg);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+}
+
+.info-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--neutral-text-secondary);
+  text-transform: uppercase;
+}
+
+.info-value {
+  font-size: 14px;
+  color: var(--federal-navy);
+  font-weight: 500;
+  font-family: var(--font-family-mono);
+}
+
+/* Certification Section */
+.certification-section {
+  padding: var(--space-lg);
+  background: var(--neutral-white);
+  border: 2px solid var(--federal-focus);
+  border-radius: var(--radius-md);
+}
+
+.certification-box {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.checkbox-large input[type="checkbox"] {
+  margin-top: 4px;
+  min-width: 20px;
+  cursor: pointer;
+  accent-color: var(--federal-focus);
+}
+
+.checkbox-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--neutral-text-primary);
+}
+
+/* Security Notice */
+.security-notice {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--risk-l1-bg);
+  border: 1px solid var(--risk-l1-border);
+  border-radius: var(--radius-md);
+}
+
+.security-notice svg {
+  color: var(--status-success);
+  flex-shrink: 0;
+}
+
+.notice-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--risk-l1-text);
+}
+
+.notice-text {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: var(--risk-l1-text);
+}
+
+/* Submission Info */
+.submission-info {
+  padding: var(--space-lg);
+  background: var(--neutral-light-bg);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 3px solid var(--neutral-border-light);
+  border-top: 3px solid var(--federal-focus);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.submission-info p {
+  margin: 0;
+  color: var(--federal-navy);
+  font-weight: 600;
+}
+
+/* Summary Box */
+.summary-box {
+  padding: var(--space-lg);
+  background: var(--risk-l1-bg);
+  border: 1px solid var(--risk-l1-border);
+  border-radius: var(--radius-md);
+}
+
+.summary-box h4 {
+  margin: 0 0 var(--space-sm) 0;
+  color: var(--risk-l1-text);
+  font-size: 14px;
+}
+
+.summary-box ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+  list-style: none;
+}
+
+.summary-box li {
+  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--risk-l1-text);
+}
+
+/* Validation Errors */
+.validation-errors {
+  padding: var(--space-md);
+  background: var(--risk-l3-bg);
+  border: 1px solid var(--risk-l3-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.validation-errors h4 {
+  margin: 0 0 var(--space-sm) 0;
+  color: var(--risk-l3-text);
+  font-size: 14px;
+}
+
+.validation-errors ul {
+  margin: 0;
+  padding-left: var(--space-lg);
+  color: var(--risk-l3-text);
+}
+
+.validation-errors li {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+/* Form Footer */
+.form-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--neutral-border);
+}
+
+.button-group-left,
+.button-group-right {
+  display: flex;
+  gap: var(--space-md);
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--federal-focus);
+  color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--uswds-blue-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 80, 216, 0.3);
+}
+
+.btn-secondary {
+  background: var(--neutral-light-bg);
+  color: var(--federal-navy);
+  border: 1px solid var(--neutral-border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--neutral-border-light);
+  transform: translateY(-2px);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .officer-analysis-form {
+    padding: var(--space-md);
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-footer {
+    flex-direction: column-reverse;
+  }
+
+  .button-group-left,
+  .button-group-right {
+    width: 100%;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .action-grid {
+    grid-template-columns: 1fr;
+  }
+}

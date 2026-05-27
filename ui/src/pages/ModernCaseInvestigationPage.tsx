@@ -6,6 +6,7 @@ import FeedbackInterface from '../components/scoring/FeedbackInterface';
 import AltanaVerificationPanel from '../components/scoring/AltanaVerificationPanel';
 import CollapsibleSection from '../components/common/CollapsibleSection';
 import RiskScoreBreakdown from '../components/risk-scoring/RiskScoreBreakdown';
+import ReferralPackageGenerationTab from '../components/referral-generation/ReferralPackageGenerationTab';
 import { ChevronDown, ChevronUp, AlertTriangle, TrendingUp, Users, Activity } from 'lucide-react';
 import { API_BASE_URL } from '../services/apiUrl';
 import { RiskScoreBreakdown as RiskScoreBreakdownType } from '../components/risk-scoring/types';
@@ -57,6 +58,7 @@ export default function ModernCaseInvestigationPage() {
   const [loading, setLoading] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showAltanaPanel, setShowAltanaPanel] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'scoring' | 'referral'>('overview');
 
   // Collapsible sections state
   const [expandedSections, setExpandedSections] = useState({
@@ -221,120 +223,182 @@ export default function ModernCaseInvestigationPage() {
           </div>
         </div>
 
-        {/* OVERVIEW SECTION */}
-        <CollapsibleSection
-          title="📋 Shipment Overview"
-          expanded={expandedSections.overview}
-          onToggle={() => toggleSection('overview')}
-        >
-          <div className="section-table">
-            <table>
-              <tbody>
-                <tr>
-                  <td className="label">Shipper:</td>
-                  <td>{caseData.shipper_name}</td>
-                  <td className="label">Consignee:</td>
-                  <td>{caseData.consignee_name}</td>
-                </tr>
-                <tr>
-                  <td className="label">Origin:</td>
-                  <td>{caseData.origin_country}</td>
-                  <td className="label">Destination:</td>
-                  <td>{caseData.destination_country}</td>
-                </tr>
-                <tr>
-                  <td className="label">HTS Code:</td>
-                  <td className="code">{caseData.hs_code}</td>
-                  <td className="label">Value:</td>
-                  <td>${caseData.declared_value_usd?.toLocaleString()}</td>
-                </tr>
-                <tr>
-                  <td className="label">Vessel:</td>
-                  <td>{caseData.vessel_name || '—'}</td>
-                  <td className="label">Status:</td>
-                  <td>
-                    <span className="status-badge">{caseData.status}</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </CollapsibleSection>
+        {/* TAB NAVIGATION */}
+        <div className="tab-navigation" style={{ display: 'flex', borderBottom: '1px solid #ddd', marginBottom: '20px' }}>
+          <button
+            onClick={() => setActiveTab('overview')}
+            style={{
+              padding: '12px 20px',
+              border: 'none',
+              background: 'none',
+              fontSize: '14px',
+              fontWeight: activeTab === 'overview' ? '600' : '400',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'overview' ? '3px solid #0050d8' : 'none',
+              color: activeTab === 'overview' ? '#0050d8' : '#666',
+            }}
+          >
+            Overview
+          </button>
+          <button
+            onClick={() => setActiveTab('scoring')}
+            style={{
+              padding: '12px 20px',
+              border: 'none',
+              background: 'none',
+              fontSize: '14px',
+              fontWeight: activeTab === 'scoring' ? '600' : '400',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'scoring' ? '3px solid #0050d8' : 'none',
+              color: activeTab === 'scoring' ? '#0050d8' : '#666',
+            }}
+          >
+            Risk Scoring
+          </button>
+          <button
+            onClick={() => setActiveTab('referral')}
+            style={{
+              padding: '12px 20px',
+              border: 'none',
+              background: 'none',
+              fontSize: '14px',
+              fontWeight: activeTab === 'referral' ? '600' : '400',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'referral' ? '3px solid #0050d8' : 'none',
+              color: activeTab === 'referral' ? '#0050d8' : '#666',
+            }}
+          >
+            Referral Package
+          </button>
+        </div>
 
-        {/* 7-FACTOR RISK SCORING SECTION */}
-        <CollapsibleSection
-          title="📊 7-Factor Risk Breakdown"
-          expanded={expandedSections.scoring}
-          onToggle={() => toggleSection('scoring')}
-        >
-          {riskBreakdown ? (
-            <RiskScoreBreakdown
-              data={riskBreakdown}
-              loading={riskLoading}
-              error={riskError || undefined}
-              onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
-            />
-          ) : (
-            <RiskScoreBreakdown
-              data={riskBreakdown || { shipment_id: caseData.id, components: [], subtotal: 0, final_score: 0, confidence_interval: '—' }}
-              loading={riskLoading}
-              error={riskError || undefined}
-              onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
-            />
-          )}
-        </CollapsibleSection>
+        {/* TAB CONTENT */}
+        {activeTab === 'overview' && (
+          <>
+            {/* OVERVIEW SECTION */}
+            <CollapsibleSection
+              title="📋 Shipment Overview"
+              expanded={expandedSections.overview}
+              onToggle={() => toggleSection('overview')}
+            >
+              <div className="section-table">
+                <table>
+                  <tbody>
+                    <tr>
+                      <td className="label">Shipper:</td>
+                      <td>{caseData.shipper_name}</td>
+                      <td className="label">Consignee:</td>
+                      <td>{caseData.consignee_name}</td>
+                    </tr>
+                    <tr>
+                      <td className="label">Origin:</td>
+                      <td>{caseData.origin_country}</td>
+                      <td className="label">Destination:</td>
+                      <td>{caseData.destination_country}</td>
+                    </tr>
+                    <tr>
+                      <td className="label">HTS Code:</td>
+                      <td className="code">{caseData.hs_code}</td>
+                      <td className="label">Value:</td>
+                      <td>${caseData.declared_value_usd?.toLocaleString()}</td>
+                    </tr>
+                    <tr>
+                      <td className="label">Vessel:</td>
+                      <td>{caseData.vessel_name || '—'}</td>
+                      <td className="label">Status:</td>
+                      <td>
+                        <span className="status-badge">{caseData.status}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CollapsibleSection>
 
-        {/* ACTIONS SECTION */}
-        <CollapsibleSection
-          title="🎯 Recommended Actions"
-          expanded={expandedSections.actions}
-          onToggle={() => toggleSection('actions')}
-        >
-          <div className="actions-grid">
-            <button className="action-btn action-clear">Clear Shipment</button>
-            <button className="action-btn action-examine">Examine on Arrival</button>
-            <button className="action-btn action-trled">TRLED Referral</button>
-            {(role === 'analyst' || role === 'admin') && (
-              <button
-                className="action-btn action-feedback"
-                onClick={() => setShowFeedback(!showFeedback)}
-              >
-                Provide Feedback
-              </button>
-            )}
-          </div>
+            {/* ACTIONS SECTION */}
+            <CollapsibleSection
+              title="🎯 Recommended Actions"
+              expanded={expandedSections.actions}
+              onToggle={() => toggleSection('actions')}
+            >
+              <div className="actions-grid">
+                <button className="action-btn action-clear">Clear Shipment</button>
+                <button className="action-btn action-examine">Examine on Arrival</button>
+                <button className="action-btn action-trled">TRLED Referral</button>
+                {(role === 'analyst' || role === 'admin') && (
+                  <button
+                    className="action-btn action-feedback"
+                    onClick={() => setShowFeedback(!showFeedback)}
+                  >
+                    Provide Feedback
+                  </button>
+                )}
+              </div>
 
-          {showFeedback && (
-            <div className="feedback-wrapper">
-              <FeedbackInterface
-                shipmentId={caseData.id}
-                originalScore={riskBreakdown?.final_score || caseData.risk_score}
-                onSubmit={() => {
-                  setShowFeedback(false);
-                  fetchCase();
-                }}
-                onCancel={() => setShowFeedback(false)}
+              {showFeedback && (
+                <div className="feedback-wrapper">
+                  <FeedbackInterface
+                    shipmentId={caseData.id}
+                    originalScore={riskBreakdown?.final_score || caseData.risk_score}
+                    onSubmit={() => {
+                      setShowFeedback(false);
+                      fetchCase();
+                    }}
+                    onCancel={() => setShowFeedback(false)}
+                  />
+                </div>
+              )}
+            </CollapsibleSection>
+
+            {/* NOTES SECTION */}
+            <CollapsibleSection
+              title="📝 Investigation Notes"
+              expanded={false}
+              onToggle={() => {}}
+            >
+              <textarea
+                className="notes-textarea"
+                placeholder="Add investigation findings, evidence, and next steps..."
+                rows={3}
               />
-            </div>
-          )}
-        </CollapsibleSection>
+              <div className="notes-actions">
+                <button className="btn-primary">Save Notes</button>
+                <button className="btn-secondary">Export Referral</button>
+              </div>
+            </CollapsibleSection>
+          </>
+        )}
 
-        {/* NOTES SECTION */}
-        <CollapsibleSection
-          title="📝 Investigation Notes"
-          expanded={false}
-          onToggle={() => {}}
-        >
-          <textarea
-            className="notes-textarea"
-            placeholder="Add investigation findings, evidence, and next steps..."
-            rows={3}
-          />
-          <div className="notes-actions">
-            <button className="btn-primary">Save Notes</button>
-            <button className="btn-secondary">Export Referral</button>
-          </div>
-        </CollapsibleSection>
+        {activeTab === 'scoring' && (
+          <>
+            {/* 7-FACTOR RISK SCORING SECTION */}
+            <CollapsibleSection
+              title="📊 7-Factor Risk Breakdown"
+              expanded={expandedSections.scoring}
+              onToggle={() => toggleSection('scoring')}
+            >
+              {riskBreakdown ? (
+                <RiskScoreBreakdown
+                  data={riskBreakdown}
+                  loading={riskLoading}
+                  error={riskError || undefined}
+                  onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
+                />
+              ) : (
+                <RiskScoreBreakdown
+                  data={riskBreakdown || { shipment_id: caseData.id, components: [], subtotal: 0, final_score: 0, confidence_interval: '—' }}
+                  loading={riskLoading}
+                  error={riskError || undefined}
+                  onRefresh={() => caseData && fetchRiskBreakdown(caseData.id, caseData)}
+                />
+              )}
+            </CollapsibleSection>
+          </>
+        )}
+
+        {activeTab === 'referral' && (
+          <ReferralPackageGenerationTab shipmentId={caseData.id} />
+        )}
       </div>
     </USWDSLayout>
   );

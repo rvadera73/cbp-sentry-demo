@@ -261,7 +261,13 @@ function V2AppWrapper() {
       findings={findings}
       referrals={referrals}
     />,
-    shipments: <V2ShippingIntelligencePage />,
+    shipments: <V2ShippingIntelligencePage
+      selectedCaseId={selectedCaseId}
+      setSelectedCaseId={setSelectedCaseId}
+      setActiveTab={setActiveTab}
+      shipments={shipments}
+      cases={cases}
+    />,
     entities: <V2EntitiesPage />,
     watchlists: <V2WatchlistsPage />,
     'ai-tuning': <V2AITuningPage />,

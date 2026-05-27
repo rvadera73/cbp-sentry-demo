@@ -72,7 +72,6 @@ export default function V2EntitiesPage() {
                 <table className="w-full text-left border-collapse">
                   <thead className={`sticky top-0 bg-[#F0F4F8] border-b ${DESIGN.borderColor}`}>
                     <tr>
-                      <th className={`${TYPOGRAPHY.tableHeader} p-3 w-20`}>RISK</th>
                       <th className={`${TYPOGRAPHY.tableHeader} p-3`}>ENTITY NAME / ID</th>
                       <th className={`${TYPOGRAPHY.tableHeader} p-3 w-20`}>TYPE</th>
                       <th className={`${TYPOGRAPHY.tableHeader} p-3 w-20`}>COUNTRY</th>
@@ -86,17 +85,10 @@ export default function V2EntitiesPage() {
                       <tr
                         key={e.entity_id}
                         className="hover:bg-[#F7F9FC] transition-colors cursor-pointer"
-                        onClick={() => selectEntity(e.entity_id)}
+                        onClick={() => {
+                          selectEntity(e.entity_id).catch(err => console.error('Error selecting entity:', err));
+                        }}
                       >
-                        <td className={`${TYPOGRAPHY.tableCell} p-3`}>
-                          <span className={`inline-block px-2.5 py-1 rounded text-center font-bold text-xs text-white ${
-                            e.risk_level === 'Critical' ? 'bg-[#D83933]' :
-                            e.risk_level === 'High' ? 'bg-orange-600' :
-                            'bg-green-600'
-                          }`}>
-                            {e.risk_level}
-                          </span>
-                        </td>
                         <td className={`${TYPOGRAPHY.tableCell} p-3`}>
                           <div className="flex flex-col">
                             <span className="font-bold">{e.entity_name}</span>
@@ -140,148 +132,86 @@ export default function V2EntitiesPage() {
 
         {/* Detail Panel */}
         {selectedEntity && (
-          <div className={`${viewingGraph ? 'flex-1' : 'w-96'} border-l ${DESIGN.borderColor} ${DESIGN.bgWhite} overflow-y-auto flex flex-col ${viewingGraph ? '' : 'shrink-0'}`}>
-          {/* Header */}
-          <div className={`bg-[#F0F4F8] border-b ${DESIGN.borderColor} p-4 shrink-0 flex items-center justify-between`}>
-            <div>
-              <h2 className={`text-sm font-bold text-[#0B1F33] mb-1 uppercase`}>{selectedEntity.entity_name}</h2>
-              <p className={`text-[9px] text-[#5C5C5C] font-mono mb-2`}>{selectedEntity.entity_id}</p>
-              <p className={`text-xs text-[#5C5C5C]`}>
-                <span className="font-bold">Tax ID:</span> {selectedEntity.tax_id || 'Unverified'}
-              </p>
-            </div>
-            {viewingGraph && (
-              <button
-                onClick={() => setViewingGraph(false)}
-                className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-[#0B1F33] text-[10px] font-bold rounded-sm transition-colors whitespace-nowrap shrink-0 ml-4"
-              >
-                BACK
-              </button>
-            )}
+          <div className={`flex-1 border-l ${DESIGN.borderColor} ${DESIGN.bgWhite} overflow-y-auto flex flex-col`}>
+          {/* Back Button */}
+          <div className="bg-[#F7F9FC] border-b border-[#D0D7DE] px-6 py-2 shrink-0">
+            <button
+              onClick={() => selectEntity('')}
+              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[#005EA2] hover:text-[#0076D6] text-xs font-bold rounded-sm flex items-center space-x-1 transition-colors"
+            >
+              <span>←</span>
+              <span>BACK TO QUEUE</span>
+            </button>
           </div>
 
-          {/* Content */}
-          {viewingGraph ? (
-            <div className="flex-1 overflow-y-auto p-4">
+          {/* Entity Details - Compact Format */}
+          <div className="p-6 space-y-4 overflow-y-auto flex-1">
+            {/* Row 1: Entity Identity */}
+            <div className={`${DESIGN.bgWhite} border ${DESIGN.borderColor} rounded-sm p-4`}>
+              <div className="flex justify-between items-start">
+                <div className="flex-1">
+                  <p className="text-xs font-bold text-[#0B1F33] uppercase">{selectedEntity.entity_name}</p>
+                  <p className="text-[9px] text-slate-600 mt-1">ID: {selectedEntity.entity_id}</p>
+                </div>
+                <span className={`px-2.5 py-1 rounded font-extrabold text-xs text-white ${
+                  selectedEntity.watchlist_status === 'Flagged' ? 'bg-[#D83933]' : 'bg-green-600'
+                }`}>
+                  {selectedEntity.watchlist_status}
+                </span>
+              </div>
+            </div>
+
+            {/* Row 2: Entity Details Grid */}
+            <div className={`${DESIGN.bgWhite} border ${DESIGN.borderColor} rounded-sm p-4`}>
+              <div className="grid grid-cols-4 gap-3 text-[9px]">
+                <div>
+                  <p className="text-slate-600 font-bold uppercase">Type</p>
+                  <p className="text-[#0B1F33] font-medium mt-0.5">{selectedEntity.entity_type}</p>
+                </div>
+                <div>
+                  <p className="text-slate-600 font-bold uppercase">Country</p>
+                  <p className="text-[#0B1F33] font-medium mt-0.5">{selectedEntity.country}</p>
+                </div>
+                <div>
+                  <p className="text-slate-600 font-bold uppercase">Tax ID</p>
+                  <p className="text-[#0B1F33] font-medium mt-0.5">{selectedEntity.tax_id || 'N/A'}</p>
+                </div>
+                <div>
+                  <p className="text-slate-600 font-bold uppercase">Source</p>
+                  <p className="text-[#0B1F33] font-medium mt-0.5">CORD</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Entity Relationship Network Graph */}
+            <div className={`${DESIGN.bgWhite} border ${DESIGN.borderColor} rounded-sm p-4`}>
               <EntityRelationshipGraph
-                chain={selectedEntity.entity_chain || []}
-                parties={selectedEntity.parties || []}
+                chain={selectedEntity.entity_chain}
+                parties={selectedEntity.parties}
               />
             </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Sanctions Banner */}
-            {selectedEntity.sanctions_status !== 'None' && (
-              <div className={`p-3 rounded border-l-4 flex items-start space-x-2 ${
-                selectedEntity.sanctions_status === 'Blocked list'
-                  ? 'bg-red-50 border-l-[#D83933]'
-                  : 'bg-amber-50 border-l-amber-500'
-              }`}>
-                <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
-                  selectedEntity.sanctions_status === 'Blocked list'
-                    ? 'text-[#D83933]'
-                    : 'text-amber-600'
-                }`} />
-                <div>
-                  <p className={`text-xs font-bold ${
-                    selectedEntity.sanctions_status === 'Blocked list'
-                      ? 'text-[#D83933]'
-                      : 'text-amber-900'
-                  }`}>
-                    {selectedEntity.sanctions_status === 'Blocked list' ? 'BLOCKED ENTITY' : 'SANCTIONS ALERT'}
-                  </p>
-                  <p className={`${TYPOGRAPHY.smallText}`}>
-                    {selectedEntity.sanctions_status === 'Blocked list'
-                      ? 'This entity is on the OFAC SDN list. No trade permitted.'
-                      : 'This entity is under investigation for sanctions violations.'}
-                  </p>
+
+            {/* OFAC & Enforcement History */}
+            {(selectedEntity.risk_level === 'Critical' || selectedEntity.watchlist_status === 'Flagged') && (
+              <div className={`${DESIGN.bgWhite} border border-[#D83933] rounded-sm p-4`}>
+                <h3 className="text-xs font-bold text-[#D83933] uppercase mb-3">⚠️ RISK ASSESSMENT</h3>
+                <div className="space-y-2 text-[9px]">
+                  {selectedEntity.risk_level === 'Critical' && (
+                    <div className="p-2 bg-red-50 border border-red-200 rounded">
+                      <p className="font-bold text-red-700">🚩 OFAC SDN MATCH - CRITICAL</p>
+                      <p className="text-red-600 mt-0.5">Entity is on OFAC Specially Designated Nationals List</p>
+                    </div>
+                  )}
+                  {selectedEntity.risk_level === 'High' && (
+                    <div className="p-2 bg-orange-50 border border-orange-200 rounded">
+                      <p className="font-bold text-orange-700">⚠️ SANCTIONS WATCH LIST - HIGH RISK</p>
+                      <p className="text-orange-600 mt-0.5">Entity is under sanctions monitoring</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
-
-            {/* Corporate Registration */}
-            <section>
-              <h3 className={`text-xs font-bold text-[#5C5C5C] uppercase mb-3 tracking-wider`}>Corporate Registration</h3>
-              <div className={`space-y-2 bg-[#F7F9FC] p-3 rounded border ${DESIGN.borderColor}`}>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Entity Type</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>{selectedEntity.entity_type}</p>
-                </div>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Status</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>{selectedEntity.registration_status}</p>
-                </div>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Country</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>{selectedEntity.country}</p>
-                </div>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Address</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>{selectedEntity.address}</p>
-                </div>
-              </div>
-            </section>
-
-            {/* Network Indicators */}
-            <section>
-              <h3 className={`text-xs font-bold text-[#5C5C5C] uppercase mb-3 tracking-wider`}>Network Indicators</h3>
-
-              {/* Affiliations */}
-              <div className="mb-3">
-                <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase block mb-2`}>Known Affiliations</label>
-                {selectedEntity.known_affiliations && selectedEntity.known_affiliations.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {selectedEntity.known_affiliations.slice(0, 5).map((aff, idx) => (
-                      <span key={idx} className="text-[8px] bg-blue-100 text-blue-900 px-2 py-1 rounded">
-                        {aff}
-                      </span>
-                    ))}
-                    {selectedEntity.known_affiliations.length > 5 && (
-                      <span className="text-[8px] bg-slate-100 text-slate-700 px-2 py-1 rounded">
-                        +{selectedEntity.known_affiliations.length - 5} more
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <p className={`text-xs text-[#5C5C5C]`}>No known affiliations</p>
-                )}
-              </div>
-
-              {/* Ownership Indicators */}
-              <div>
-                <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase block mb-2`}>Ownership Indicators</label>
-                <p className={`text-xs text-[#5C5C5C] leading-snug`}>
-                  {selectedEntity.ownership_indicators || 'Data pending from beneficial ownership registry'}
-                </p>
-              </div>
-            </section>
-
-            {/* Enforcement History */}
-            <section>
-              <h3 className={`text-xs font-bold text-[#5C5C5C] uppercase mb-3 tracking-wider`}>Enforcement History</h3>
-              <p className={`text-xs text-[#5C5C5C] leading-snug bg-[#F7F9FC] p-3 rounded border ${DESIGN.borderColor}`}>
-                {selectedEntity.enforcement_history || 'No enforcement actions recorded'}
-              </p>
-            </section>
-
-            {/* CORD-Sentry Integration */}
-            <section>
-              <h3 className={`text-xs font-bold text-[#5C5C5C] uppercase mb-3 tracking-wider`}>CORD-Sentry Integration</h3>
-              <div className={`space-y-2 bg-[#F7F9FC] p-3 rounded border ${DESIGN.borderColor}`}>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Data Source</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>CORD Resolution Service</p>
-                </div>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Confidence</label>
-                  <p className={`text-xs text-[#0B1F33] mt-1`}>95%</p>
-                </div>
-                <div>
-                  <label className={`text-[9px] font-bold text-[#5C5C5C] uppercase`}>Integration Status</label>
-                  <p className={`text-xs text-green-700 font-bold mt-1`}>VERIFIED</p>
-                </div>
-              </div>
-            </section>
+            {/* Party Associations */}
 
             {/* Party Table */}
             {selectedEntity.parties && selectedEntity.parties.length > 0 && (
@@ -309,31 +239,7 @@ export default function V2EntitiesPage() {
                 </div>
               </section>
             )}
-
-            {/* Watchlist Status */}
-            <div className={`p-3 rounded text-xs font-bold text-center ${
-              selectedEntity.watchlist_status === 'Flagged'
-                ? 'bg-red-100 text-[#D83933]'
-                : 'bg-green-100 text-green-700'
-            }`}>
-              {selectedEntity.watchlist_status}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              <button
-                onClick={() => setViewingGraph(true)}
-                className={`w-full px-4 py-2 bg-[#005EA2] hover:bg-[#0076D6] text-white text-xs font-bold rounded-sm transition-colors flex items-center justify-center space-x-2`}
-              >
-                <Network className="w-3 h-3" />
-                <span>VIEW ENTITY GRAPH</span>
-              </button>
-              <button className={`w-full px-4 py-2 bg-[#112E51] hover:bg-[#005EA2] text-white text-xs font-bold rounded-sm transition-colors`}>
-                ADD TO WATCHLIST
-              </button>
-            </div>
-            </div>
-          )}
+          </div>
           </div>
         )}
       </div>

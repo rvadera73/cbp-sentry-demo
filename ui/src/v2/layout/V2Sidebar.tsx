@@ -25,7 +25,6 @@ const navItems: NavItem[] = [
   { id: 'investigations', label: 'Active Investigations', icon: <FolderLock className="w-5 h-5" />, section: 'primary' },
   { id: 'shipments', label: 'Shipment Intelligence', icon: <Anchor className="w-5 h-5" />, section: 'primary' },
   { id: 'entities', label: 'Entity Resolution', icon: <Network className="w-5 h-5" />, section: 'primary' },
-  { id: 'watchlists', label: 'AI Watchlists', icon: <BookOpen className="w-5 h-5" />, section: 'admin' },
   { id: 'ai-tuning', label: 'AI Tuning & Rules', icon: <Sliders className="w-5 h-5" />, section: 'admin' },
 ];
 

@@ -154,6 +154,13 @@ _current_config = {
 async def lifespan(app: FastAPI):
     logger.info(f"Sentry API started in {API_MODE} mode")
 
+    # Initialize officer analysis service
+    try:
+        init_officer_analysis_service()
+        logger.info("✓ Officer analysis service initialized")
+    except Exception as e:
+        logger.warning(f"Officer analysis service initialization failed (continuing anyway): {e}")
+
     # Initialize CORD FTS index on startup (non-fatal if unavailable)
     import os
 
@@ -227,12 +234,14 @@ referral_gen = ComprehensiveReferralGenerator(
 
 # Include routers (refactored endpoints)
 from routers.manifest import router as manifest_router
+from routers.officer_analysis_router import router as analysis_router, init_officer_analysis_service
 from referral_pdf_api import router as referral_pdf_router
 from risk_scoring.routes import router as risk_scoring_router
 
 app.include_router(manifest_router)
 app.include_router(referral_pdf_router)
 app.include_router(risk_scoring_router, prefix="/api/score", tags=["risk-scoring"])
+app.include_router(analysis_router, tags=["officer-analysis"])
 
 
 @app.get("/health")
