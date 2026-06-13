@@ -67,6 +67,8 @@ services:
       OFAC_API_KEY: ${OFAC_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GCP_PROJECT_ID: ${GCP_PROJECT_ID:-cbp-sentry}
+      ASK_AI_SERVICE_URL: ${ASK_AI_SERVICE_URL:-}
+      CBP_SERVICE_KEY: ${CBP_SERVICE_KEY:-}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:

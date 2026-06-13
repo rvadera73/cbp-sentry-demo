@@ -1,10 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
 
+interface Source {
+  type?: string;
+  label?: string;
+  excerpt?: string;
+}
+
+interface SuggestedAction {
+  type?: string;
+  label?: string;
+  text?: string;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  sources?: string[];
+  sources?: Source[];
+  suggestedActions?: SuggestedAction[];
 }
 
 interface V2ChatPanelProps {
@@ -45,12 +58,15 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
     setLoading(true);
 
     try {
-      const response = await fetch('/api/gemini/assistant', {
+      const response = await fetch('/api/agent/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: userText,
-          history: messages.map(m => ({ role: m.role, content: m.text })),
+          text: userText,
+          conversationHistory: messages.map(m => ({ role: m.role, content: m.text })),
+          userRole: 'cbp_officer',
+          contextType: caseContext ? 'shipment' : undefined,
+          contextId: caseContext?.id,
           context: caseContext,
         }),
       });
@@ -58,8 +74,9 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
       const data = await response.json();
       setMessages(prev => [...prev, {
         role: 'assistant',
-        text: data.text || 'No response received.',
-        sources: data.sources || []
+        text: data.answer || data.text || 'No response received.',
+        sources: data.sources || [],
+        suggestedActions: data.suggestedActions || data.suggested_actions || [],
       }]);
     } catch (error) {
       setMessages(prev => [...prev, {
@@ -131,8 +148,21 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
             {msg.sources && msg.sources.length > 0 && (
               <div className="flex justify-start mt-1 px-1">
                 <div className="text-[9px] text-slate-500 font-mono">
-                  Sources: {msg.sources.join(', ')}
+                  Sources: {msg.sources.map(s => s.label || s.type || String(s)).join(', ')}
                 </div>
+              </div>
+            )}
+            {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+              <div className="flex justify-start mt-1 px-1 flex-wrap gap-1">
+                {msg.suggestedActions.slice(0, 3).map((action, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setCurrentMessage(action.text || action.label || '')}
+                    className="text-[9px] bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-600 rounded px-1.5 py-0.5 font-mono cursor-pointer transition-colors"
+                  >
+                    {action.label || action.text}
+                  </button>
+                ))}
               </div>
             )}
           </div>

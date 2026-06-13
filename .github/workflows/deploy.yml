@@ -307,7 +307,9 @@ jobs:
             --set-env-vars DATA_SERVICE_URL=${{ steps.urls.outputs.data_url }} \
             --set-env-vars CORD_SERVICE_URL=${{ steps.urls.outputs.cord_url }} \
             --set-env-vars VESSELAPI_KEY="${{ secrets.VESSELAPI_KEY }}" \
-            --set-env-vars OFAC_API_KEY="${{ secrets.OFAC_API_KEY }}"
+            --set-env-vars OFAC_API_KEY="${{ secrets.OFAC_API_KEY }}" \
+            --set-env-vars ASK_AI_SERVICE_URL="${{ secrets.ASK_AI_SERVICE_URL }}" \
+            --set-env-vars CBP_SERVICE_KEY="${{ secrets.CBP_SERVICE_KEY }}"
 
   deploy-data:
     name: Deploy sentry-data

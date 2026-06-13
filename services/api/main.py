@@ -7,7 +7,7 @@ import json
 import asyncio
 import sys
 from datetime import datetime
-from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Body
+from fastapi import FastAPI, Query, UploadFile, File, HTTPException, Body, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
@@ -47,6 +47,10 @@ logger = logging.getLogger(__name__)
 DATA_SERVICE_URL = os.getenv("DATA_SERVICE_URL", "http://localhost:8005")
 API_MODE = os.getenv("API_MODE", "fixture")
 DEPLOYMENT_ENV = os.getenv("DEPLOYMENT_ENV", "local")
+
+# Ask-AI service integration
+ASK_AI_SERVICE_URL = os.getenv("ASK_AI_SERVICE_URL", "")
+CBP_SERVICE_KEY = os.getenv("CBP_SERVICE_KEY", "")
 
 # OIDC token cache for Cloud Run inter-service auth
 _oidc_token_cache = {}
@@ -4365,3 +4369,217 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
     except Exception as e:
         logger.error(f"Error in PDF v2 export: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+# ============================================================================
+# Ask-AI Service Bridge APIs
+# These endpoints provide the data shapes expected by the ask-ai CBP adapter.
+# ============================================================================
+
+
+class ShipmentSearchRequest(BaseModel):
+    query: Optional[str] = None
+    filters: Optional[Dict[str, Any]] = None
+    limit: int = 20
+
+
+@app.post("/api/shipments/search")
+async def search_shipments_post(body: ShipmentSearchRequest) -> Dict[str, Any]:
+    """POST wrapper around GET /api/shipments for ask-ai adapter tool calls.
+
+    Accepts {query, filters, limit} and returns {results: [...shipments]}.
+    Text query is matched case-insensitively against shipper_name, consignee_name, and manifest_id.
+    """
+    try:
+        filters = body.filters or {}
+        async with await get_data_service_client() as client:
+            params: Dict[str, Any] = {"limit": min(body.limit, 100)}
+            if filters.get("corridor_id"):
+                params["corridor_id"] = filters["corridor_id"]
+            if filters.get("risk_min") is not None:
+                params["risk_min"] = filters["risk_min"]
+            if filters.get("risk_max") is not None:
+                params["risk_max"] = filters["risk_max"]
+            if filters.get("status"):
+                params["status"] = filters["status"]
+            resp = await client.get("/shipments", params=params)
+            if resp.status_code != 200:
+                return {"results": [], "count": 0}
+
+        data = resp.json()
+        shipments = data.get("data", [])
+
+        # Text filter applied in memory after fetch
+        if body.query:
+            q = body.query.lower()
+            shipments = [
+                s for s in shipments
+                if q in (s.get("shipper_name") or "").lower()
+                or q in (s.get("consignee_name") or "").lower()
+                or q in (s.get("manifest_id") or "").lower()
+                or q in (s.get("commodity_name") or "").lower()
+            ]
+
+        return {"results": shipments[: body.limit], "count": len(shipments)}
+    except Exception as e:
+        logger.error(f"shipments/search error: {e}")
+        return {"results": [], "count": 0, "error": str(e)}
+
+
+class EntitySearchRequest(BaseModel):
+    query: str
+    country: Optional[str] = None
+    limit: int = 10
+
+
+@app.post("/api/entities/search")
+async def search_entities_post(body: EntitySearchRequest) -> Dict[str, Any]:
+    """POST wrapper around GET /api/cord/search for ask-ai adapter tool calls.
+
+    Accepts {query, country, limit} and returns {results: [...entities]}.
+    """
+    try:
+        async with await get_cord_service_client() as client:
+            params: Dict[str, Any] = {"name": body.query, "limit": min(body.limit, 100)}
+            if body.country:
+                params["country"] = body.country
+            resp = await client.get("/search", params=params)
+            if resp.status_code == 200:
+                matches = resp.json()
+                if isinstance(matches, list):
+                    return {"results": matches, "count": len(matches)}
+                # cord service may return {"matches": [...]}
+                items = matches.get("matches", matches.get("results", []))
+                return {"results": items, "count": len(items)}
+            return {"results": [], "count": 0}
+    except Exception as e:
+        logger.error(f"entities/search error: {e}")
+        return {"results": [], "count": 0, "error": str(e)}
+
+
+@app.get("/api/risk/{shipment_id}")
+async def get_risk_breakdown(shipment_id: str) -> Dict[str, Any]:
+    """7-factor risk breakdown for a shipment.
+
+    Aggregates risk-components and risk-scoring data into the shape expected
+    by the ask-ai CBP adapter's get_risk_score tool.
+    """
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"/shipments/{shipment_id}")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail=f"Shipment {shipment_id} not found")
+            shipment = resp.json()
+
+        risk_score = shipment.get("risk_score") or 0
+        h1 = shipment.get("h1_score") or 0
+        h2 = shipment.get("h2_score") or 0
+        h3 = shipment.get("h3_score") or 0
+
+        return {
+            "shipment_id": shipment_id,
+            "final_score": risk_score,
+            "documentation_risk": round(h1 * 0.35, 1),
+            "commodity_sensitivity": round(h1 * 0.25, 1),
+            "routing_risk": round(h2 * 0.4, 1),
+            "party_profile_risk": round(h3 * 0.4, 1),
+            "corridor_risk": round(h1 * 0.4, 1),
+            "pattern_anomaly": round(h2 * 0.6, 1),
+            "time_sensitivity": round(h2 * 0.2, 1),
+            "h1_score": h1,
+            "h2_score": h2,
+            "h3_score": h3,
+            "confidence_interval": [max(0, risk_score - 8), min(100, risk_score + 8)],
+            "calculated_at": shipment.get("updated_at") or shipment.get("created_at"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"risk/{shipment_id} error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/referrals/generate")
+async def generate_referral_plural(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Alias for POST /api/referral/generate (plural form expected by ask-ai adapter)."""
+    return await generate_referral_package(payload)
+
+
+class AnalyticsQueryRawRequest(BaseModel):
+    sql: str
+    params: Optional[List[Any]] = None
+
+
+@app.post("/api/analytics/query-raw")
+async def analytics_query_raw(body: AnalyticsQueryRawRequest) -> Dict[str, Any]:
+    """Execute a SELECT-only SQL query against the CBP Sentry data service.
+
+    Proxies to DATA_SERVICE_URL/query-raw.  Only SELECT statements are accepted.
+    """
+    sql_upper = body.sql.strip().upper()
+    if not sql_upper.startswith("SELECT"):
+        raise HTTPException(status_code=400, detail="Only SELECT queries are permitted")
+    # Reject any mutation keywords as an extra safety check
+    for forbidden in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE"):
+        if forbidden in sql_upper:
+            raise HTTPException(status_code=400, detail=f"Forbidden keyword in SQL: {forbidden}")
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.post("/query-raw", json={"sql": body.sql, "params": body.params or []})
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"analytics/query-raw error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Ask-AI Service Proxy
+# Forward /api/agent/* to the shared ask-ai-service with CBP identity headers.
+# ============================================================================
+
+
+@app.api_route("/api/agent/{path:path}", methods=["GET", "POST", "DELETE"])
+async def ask_ai_proxy(path: str, request: Request) -> Response:
+    """Transparent proxy to the shared ask-ai service.
+
+    Injects X-App-Id: cbp and X-Service-Key so the ask-ai service routes the
+    request to the CBP adapter.  User role is relayed from the request header
+    or defaults to 'cbp_officer'.
+    """
+    if not ASK_AI_SERVICE_URL:
+        raise HTTPException(status_code=503, detail="ASK_AI_SERVICE_URL not configured")
+
+    body = await request.body()
+    forward_headers = {
+        "Content-Type": "application/json",
+        "X-App-Id": "cbp",
+        "X-User-Role": request.headers.get("X-User-Role", "cbp_officer"),
+        "X-User-Id": request.headers.get("X-User-Id", "anonymous"),
+    }
+    if CBP_SERVICE_KEY:
+        forward_headers["X-Service-Key"] = CBP_SERVICE_KEY
+
+    target_url = f"{ASK_AI_SERVICE_URL.rstrip('/')}/api/agent/{path}"
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target_url,
+                content=body,
+                headers=forward_headers,
+                params=dict(request.query_params),
+            )
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers={"Content-Type": resp.headers.get("content-type", "application/json")},
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="Ask-AI service timed out")
+    except Exception as e:
+        logger.error(f"ask-ai proxy error: {e}")
+        raise HTTPException(status_code=502, detail=f"Ask-AI service unavailable: {str(e)}")

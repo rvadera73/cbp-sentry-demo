@@ -985,6 +985,40 @@ async def release_model_version_endpoint(model_id: str) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/query-raw")
+async def query_raw(payload: dict = Body(...)) -> dict:
+    """Execute a SELECT-only SQL query against the local SQLite database.
+
+    Only called internally by the API service for analytics.
+    Rejects any non-SELECT statement for safety.
+    """
+    sql = str(payload.get("sql", "")).strip()
+    params = payload.get("params") or []
+
+    sql_upper = sql.upper()
+    if not sql_upper.startswith("SELECT"):
+        raise HTTPException(status_code=400, detail="Only SELECT queries are permitted")
+    for forbidden in ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE"):
+        if forbidden in sql_upper:
+            raise HTTPException(status_code=400, detail=f"Forbidden keyword in SQL: {forbidden}")
+
+    try:
+        conn = sqlite3.connect("/app/data/cbp_sentry.db")
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        rows = [dict(row) for row in cursor.fetchall()]
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        conn.close()
+        return {"rows": rows, "columns": columns, "count": len(rows)}
+    except sqlite3.Error as e:
+        logger.error(f"query-raw SQL error: {e}")
+        raise HTTPException(status_code=400, detail=f"SQL error: {str(e)}")
+    except Exception as e:
+        logger.error(f"query-raw error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8005)
