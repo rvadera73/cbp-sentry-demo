@@ -24,7 +24,7 @@
     "react-leaflet": "^5.0.0",
     "react-router-dom": "^6.28.0",
     "reactflow": "^11.11.4",
-    "recharts": "^2.15.4",
+    "recharts": "^3.8.1",
     "uswds": "^2.14.0"
   },
   "devDependencies": {
