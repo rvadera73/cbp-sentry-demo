@@ -1,0 +1,253 @@
+# CBP Sentry Performance Metrics Configuration
+# Multi-gate evaluation framework for risk model performance
+# Source of truth for domain structure and metric specifications
+
+domain: "cbp"
+model: "risk-scoring"
+award_date: "2026-01-01"  # Contract award date
+
+gates:
+  # Gate 1: Days 0-60 (Initial Deployment Phase)
+  - gate_id: "1"
+    timeline_days: [0, 60]
+    gate_name: "Initial Deployment"
+    description: "Foundational performance baseline during first 60 days"
+    metrics:
+      - name: "scalability"
+        type: "count_per_period"
+        source: "shipments"
+        filter: "status='scored' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 500
+        unit: "shipments"
+        description: "Minimum shipments scored per week"
+
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.85
+        unit: "percentage"
+        description: "Model accuracy on test dataset"
+
+      - name: "latency_p95"
+        type: "threshold"
+        source: "prediction_logs"
+        measure: "latency_p95"
+        threshold: 500.0
+        unit: "milliseconds"
+        description: "95th percentile prediction latency"
+
+      - name: "auc"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "auc"
+        threshold: 0.90
+        unit: "score"
+        description: "Area Under Curve from ROC analysis"
+
+  # Gate 2: Days 61-120 (Stability Phase)
+  - gate_id: "2"
+    timeline_days: [61, 120]
+    gate_name: "Stability & Consistency"
+    description: "Performance stability with increased processing volume"
+    metrics:
+      - name: "scalability"
+        type: "count_per_period"
+        source: "shipments"
+        filter: "status='scored' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 1000
+        unit: "shipments"
+        description: "Increased throughput: 1000+ shipments per week"
+
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.87
+        unit: "percentage"
+        description: "Maintained accuracy with increased volume"
+
+      - name: "consistency"
+        type: "ratio"
+        source: "shipments"
+        numerator:
+          source: "shipments"
+          filter: "status='scored' AND score_variance < 0.1"
+        denominator:
+          source: "shipments"
+          filter: "status='scored'"
+        threshold: 95.0
+        unit: "percentage"
+        description: "Percentage of consistent predictions (low variance)"
+
+      - name: "auc"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "auc"
+        threshold: 0.92
+        unit: "score"
+        description: "Improved AUC with stable processing"
+
+  # Gate 3: Days 121-180 (Optimization Phase)
+  - gate_id: "3"
+    timeline_days: [121, 180]
+    gate_name: "Optimization & Refinement"
+    description: "Performance optimization and model refinement phase"
+    metrics:
+      - name: "scalability"
+        type: "count_per_period"
+        source: "shipments"
+        filter: "status='scored' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 2000
+        unit: "shipments"
+        description: "High throughput: 2000+ shipments per week"
+
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.90
+        unit: "percentage"
+        description: "Optimized accuracy target"
+
+      - name: "fairness"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "fairness_disparity"
+        threshold: 0.05
+        unit: "score"
+        description: "Fairness disparity (lower is better) < 5%"
+
+      - name: "auc"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "auc"
+        threshold: 0.94
+        unit: "score"
+        description: "Optimized AUC performance"
+
+  # Option 1: Early Performance Unlock (Alternative to Gate 3)
+  - gate_id: "option_1"
+    timeline_days: [90, 150]
+    gate_name: "Early Performance Unlock"
+    description: "Accelerated path: achieve Gate 2 metrics before day 120"
+    metrics:
+      - name: "scalability"
+        type: "count_per_period"
+        source: "shipments"
+        filter: "status='scored' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 1500
+        unit: "shipments"
+        description: "Accelerated scalability: 1500+ shipments/week"
+
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.89
+        unit: "percentage"
+        description: "Strong accuracy on diverse data"
+
+      - name: "error_rate"
+        type: "ratio"
+        numerator:
+          source: "prediction_logs"
+          filter: "status='failed'"
+        denominator:
+          source: "prediction_logs"
+          filter: "status IN ('success', 'failed')"
+        threshold: 1.0
+        unit: "percentage"
+        description: "Error rate less than 1%"
+
+      - name: "auc"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "auc"
+        threshold: 0.93
+        unit: "score"
+        description: "Strong AUC on diverse cases"
+
+  # Option 2: Extended Evaluation (Contingency Path)
+  - gate_id: "option_2"
+    timeline_days: [181, 270]
+    gate_name: "Extended Evaluation"
+    description: "Extended evaluation with relaxed thresholds for special cases"
+    metrics:
+      - name: "scalability"
+        type: "count_per_period"
+        source: "shipments"
+        filter: "status='scored' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 1200
+        unit: "shipments"
+        description: "Sustainable scalability: 1200+ shipments/week"
+
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.82
+        unit: "percentage"
+        description: "Acceptable accuracy for extended evaluation"
+
+      - name: "compliance"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "compliance_score"
+        threshold: 0.95
+        unit: "percentage"
+        description: "High compliance with data handling requirements"
+
+      - name: "auc"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "auc"
+        threshold: 0.88
+        unit: "score"
+        description: "Maintained AUC in extended period"
+
+metric_definitions:
+  scalability:
+    description: "System's ability to handle increased transaction volume"
+    calculation: "Count of successfully scored shipments in recent period"
+    importance: "Critical - demonstrates operational readiness"
+
+  accuracy:
+    description: "Percentage of correct risk classifications"
+    calculation: "TP + TN / (TP + TN + FP + FN) from test dataset"
+    importance: "Critical - core model quality metric"
+
+  consistency:
+    description: "Stability of predictions across similar cases"
+    calculation: "Ratio of predictions with low variance to total predictions"
+    importance: "High - ensures reliable decision support"
+
+  error_rate:
+    description: "Frequency of system errors in predictions"
+    calculation: "Failed predictions / total prediction attempts"
+    importance: "Critical - operational reliability"
+
+  fairness:
+    description: "Absence of bias across demographic groups"
+    calculation: "Maximum disparity between group performance metrics"
+    importance: "High - ensures equitable treatment"
+
+  latency_p95:
+    description: "95th percentile prediction response time"
+    calculation: "P95 value from latency distribution"
+    importance: "Medium - user experience and operational efficiency"
+
+  auc:
+    description: "Area Under Receiver Operating Characteristic Curve"
+    calculation: "Standard ROC-AUC from sklearn.metrics"
+    importance: "Critical - classification performance across thresholds"
+
+  compliance:
+    description: "Adherence to data handling and operational requirements"
+    calculation: "Manual checklist verification against requirements"
+    importance: "High - regulatory and contractual compliance"

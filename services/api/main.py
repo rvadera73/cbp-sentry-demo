@@ -34,6 +34,9 @@ from business_logic.corridor_factory import RiskCorridorFactory
 from risk_models import RiskModelConfig
 from risk_scoring_engine import RiskScoringEngine
 from referral_comprehensive_v2 import ComprehensiveReferralGenerator
+from ask_ai_agent import AskAIAgent
+from referral_analysis_service import ReferralAnalysisService
+from services.performance_api import PerformanceMetricsAPI
 
 try:
     import google.generativeai as genai
@@ -61,6 +64,15 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 if GEMINI_AVAILABLE and GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     GEMINI_MODEL = genai.GenerativeModel("gemini-pro")
+
+# Ask-AI Agent (streaming RAG assistant)
+ask_ai_agent = None
+if GEMINI_AVAILABLE and GOOGLE_API_KEY:
+    try:
+        ask_ai_agent = AskAIAgent(api_key=GOOGLE_API_KEY)
+        logger.info("Ask-AI Agent initialized successfully")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Ask-AI Agent: {e}")
 
 
 async def get_oidc_token(target_service_url: str) -> Optional[str]:
@@ -132,6 +144,11 @@ port_adapter = PortAuthorityAdapter()
 
 # Initialize comprehensive risk scoring engine
 risk_scoring_engine = RiskScoringEngine()
+
+# Initialize performance metrics API
+performance_metrics_api = PerformanceMetricsAPI(
+    mlflow_tracking_uri=os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+)
 
 # AI Tuning: In-memory weight store (initialized from RiskModelConfig defaults)
 _current_weights = {
@@ -218,6 +235,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Sentry CBP API", lifespan=lifespan)
 
+# Register Risk Model Management routes
+from routes.risk_model_management import router as risk_model_router
+app.include_router(risk_model_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -231,6 +252,9 @@ referral_gen = ComprehensiveReferralGenerator(
     db_path="/app/data/cbp_sentry.db",
     cord_url=os.getenv("CORD_SERVICE_URL", "http://localhost:8004")
 )
+
+# Initialize referral analysis service (Gemini-powered analysis)
+referral_analysis_service = ReferralAnalysisService()
 
 # Include routers (refactored endpoints)
 from routers.manifest import router as manifest_router
@@ -1432,6 +1456,12 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
             "created_at": datetime.utcnow().isoformat(),
             "manifest_id": shipment.get("manifest_id"),
             "risk_tier": risk_tier,
+            "risk_score": risk_score,
+            "origin_country": origin,
+            "hs_code": hs_code,
+            "commodity_name": commodity_name,
+            "shipper_name": shipper,
+            "consignee_name": consignee,
             "enrichment": {
                 "ofac_checks": ofac_findings if risk_score >= 70 else None,
                 "altana_findings": altana_findings if altana_findings else None,
@@ -1752,6 +1782,53 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
         logger.error(f"Error generating referral package: {e}")
         logger.error(traceback.format_exc())
         return {"error": str(e), "status": "failed"}
+
+
+@app.get("/api/referral/{shipment_id}/analyze")
+async def analyze_referral_package(shipment_id: str) -> Dict[str, Any]:
+    """
+    Analyze a referral package with Gemini LLM for professional narratives and risk assessment.
+
+    Calls the comprehensive referral endpoint, then enriches each section with:
+    - Professional narratives (AI-generated analysis)
+    - Risk factor assessment
+    - Confidence scores
+    - Evidence-based reasoning
+
+    Returns enriched referral package ready for professional display.
+    """
+    try:
+        # First, get the base referral package
+        logger.info(f"[analyze_referral/{shipment_id}] Fetching base referral package...")
+        async with await get_data_service_client() as client:
+            resp = await client.get(f"/shipments/{shipment_id}")
+            if resp.status_code != 200:
+                raise HTTPException(status_code=404, detail="Shipment not found")
+            shipment = resp.json()
+
+        # Get the comprehensive referral package
+        referral_data = await get_referral_package(shipment_id)
+
+        if not isinstance(referral_data, dict) or "error" in referral_data:
+            logger.error(f"[analyze_referral/{shipment_id}] Failed to generate base referral: {referral_data}")
+            raise HTTPException(status_code=500, detail="Failed to generate referral package")
+
+        logger.info(f"[analyze_referral/{shipment_id}] Analyzing {len(referral_data.get('sections', {}))} sections with Gemini...")
+
+        # Analyze all sections with Gemini
+        analyzed_referral = await referral_analysis_service.analyze_full_referral(referral_data)
+
+        logger.info(f"[analyze_referral/{shipment_id}] Analysis complete. Overall confidence: {analyzed_referral.get('overall_confidence', 0):.2f}")
+
+        return analyzed_referral
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        logger.error(f"[analyze_referral/{shipment_id}] Analysis failed: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 # ============= COMMAND CENTER ENDPOINTS =============
@@ -3829,12 +3906,79 @@ Focus on anomalies, risk factors, and enforcement recommendation."""
         return {"synopsis": f"Unable to generate synopsis: {str(e)}"}
 
 
+@app.get("/api/gemini/assistant/stream")
+async def gemini_assistant_stream(
+    message: str,
+    session_id: str = None,
+    page: str = None,
+    shipment_id: str = None,
+    entity: str = None
+) -> StreamingResponse:
+    """Stream a response from the Ask-AI agent with function calling and source cards.
+
+    Query params:
+    - message: User question
+    - session_id: Chat session ID (generated if not provided)
+    - page: Current page (dashboard, investigations, etc.)
+    - shipment_id: Selected shipment ID
+    - entity: Selected entity name
+
+    Yields SSE events:
+    - {"type": "text", "content": "..."}
+    - {"type": "source", "tool": "...", "summary": "...", "hit": true/false}
+    - {"type": "done"}
+    """
+    async def generate():
+        if not ask_ai_agent:
+            error_msg = "Agent not initialized. "
+            if not GOOGLE_API_KEY:
+                error_msg += "GOOGLE_API_KEY environment variable not set."
+            elif not GEMINI_AVAILABLE:
+                error_msg += "google.generativeai module not available."
+            else:
+                error_msg += "Unknown initialization error. Check logs."
+
+            logger.error(f"Ask-AI Agent error: {error_msg}")
+            yield f'data: {json.dumps({"type": "error", "content": error_msg})}\n\n'
+            return
+
+        # Use the session_id from outer scope, or create one if not provided
+        current_session_id = session_id or ask_ai_agent.create_session()
+
+        context = {}
+        if page:
+            context["page"] = page
+        if shipment_id:
+            context["shipment_id"] = shipment_id
+        if entity:
+            context["entity"] = entity
+
+        try:
+            async for event in ask_ai_agent.stream_response(current_session_id, message, context):
+                yield event
+        except Exception as e:
+            logger.error(f"Stream generation error: {e}", exc_info=True)
+            yield f'data: {json.dumps({"type": "error", "content": f"Stream error: {str(e)}"})}\n\n'
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@app.delete("/api/gemini/assistant/session/{session_id}")
+async def clear_session(session_id: str) -> Dict[str, Any]:
+    """Clear chat session history."""
+    if ask_ai_agent:
+        ask_ai_agent.clear_session(session_id)
+    return {"status": "cleared", "session_id": session_id}
+
+
 @app.post("/api/gemini/assistant")
 async def gemini_chat_assistant(request: Dict[str, Any]) -> Dict[str, Any]:
-    """CBP Sentry chat assistant with real shipment data + Gemini synthesis.
+    """CBP Sentry chat assistant — backward compat blocking endpoint.
 
     Input: {message, history[], context?{id, name, target, riskScore, stage, officer}}
     Returns: {text: string, isDemoMode: boolean, sources: string[]}
+
+    Note: For new implementations, use GET /api/gemini/assistant/stream (streaming SSE).
     """
     try:
         message = request.get("message", "").lower()
@@ -4472,3 +4616,71 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
     except Exception as e:
         logger.error(f"Error in PDF v2 export: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
+# ============================================================================
+# Performance Metrics Endpoints
+# ============================================================================
+
+@app.get("/api/risk-models/performance/current-gate")
+async def get_current_performance_gate(model_id: str = Query("v3.0", description="Model version ID")):
+    """
+    Get the current applicable performance gate for a risk model.
+
+    Returns gate timeline, days remaining, and metrics count.
+    """
+    return performance_metrics_api.get_current_gate(model_id=model_id)
+
+
+@app.get("/api/risk-models/performance/metrics")
+async def get_performance_metrics(
+    model_id: str = Query("v3.0", description="Model version ID"),
+    period_days: int = Query(30, description="Evaluation period in days")
+):
+    """
+    Calculate current performance metrics for a risk model.
+
+    Returns measured vs. threshold values for all applicable metrics.
+    """
+    from datetime import timedelta
+    period_end = datetime.now().date()
+    period_start = period_end - timedelta(days=period_days)
+
+    return performance_metrics_api.get_performance_metrics(
+        model_id=model_id,
+        period_start=period_start,
+        period_end=period_end
+    )
+
+
+@app.get("/api/risk-models/performance/gate/{gate_id}")
+async def get_gate_detailed_status(
+    gate_id: str,
+    model_id: str = Query("v3.0", description="Model version ID"),
+    period_days: int = Query(30, description="Evaluation period in days")
+):
+    """
+    Get detailed status of a specific performance gate.
+
+    Shows pass/fail status for each metric with measured vs. threshold values.
+    """
+    from datetime import timedelta
+    period_end = datetime.now().date()
+    period_start = period_end - timedelta(days=period_days)
+
+    return performance_metrics_api.get_gate_status(
+        model_id=model_id,
+        gate_id=gate_id,
+        period_start=period_start,
+        period_end=period_end
+    )
+
+
+@app.get("/api/risk-models/performance/mlflow-config")
+async def get_mlflow_performance_config(model_id: str = Query("v3.0", description="Model version ID")):
+    """
+    Retrieve performance configuration from MLflow for a model.
+
+    Shows which gate the model was trained for and associated requirements.
+    """
+    return performance_metrics_api.get_mlflow_performance_config(model_id=model_id)

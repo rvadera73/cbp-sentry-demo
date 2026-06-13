@@ -1,0 +1,169 @@
+# Commerce Trade Intelligence Model Performance Metrics Configuration
+# Template for domain-specific multi-gate evaluation
+#
+# This is an EXAMPLE showing how to create metrics for Commerce domain.
+# Copy and modify this file for your domain.
+
+domain: "commerce"
+model: "trade-risk-assessment"
+award_date: "2026-03-01"  # Contract award date
+
+gates:
+  # Gate 1: Days 0-60 (Onboarding Phase)
+  - gate_id: "1"
+    timeline_days: [0, 60]
+    gate_name: "Phase 1: Onboarding"
+    description: "Initial deployment and system validation"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.88
+        unit: "percentage"
+        description: "Trade risk classification accuracy"
+
+      - name: "data_completeness"
+        type: "ratio"
+        numerator:
+          source: "trade_records"
+          filter: "status='complete' AND created_at >= date('now', '-7 days')"
+        denominator:
+          source: "trade_records"
+          filter: "created_at >= date('now', '-7 days')"
+        threshold: 95.0
+        unit: "percentage"
+        description: "Percentage of records with complete required fields"
+
+      - name: "processing_volume"
+        type: "count_per_period"
+        source: "trade_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 5000
+        unit: "records"
+        description: "Trade records processed per week"
+
+      - name: "system_availability"
+        type: "threshold"
+        source: "system_monitoring"
+        measure: "uptime_percentage"
+        threshold: 0.99
+        unit: "percentage"
+
+  # Gate 2: Days 61-120 (Stabilization Phase)
+  - gate_id: "2"
+    timeline_days: [61, 120]
+    gate_name: "Phase 2: Stabilization"
+    description: "Performance stability with increased volume"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.90
+        unit: "percentage"
+
+      - name: "data_quality"
+        type: "threshold"
+        source: "data_quality_metrics"
+        measure: "data_quality_score"
+        threshold: 0.92
+        unit: "score"
+
+      - name: "processing_volume"
+        type: "count_per_period"
+        source: "trade_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 10000
+        unit: "records"
+
+      - name: "mean_latency"
+        type: "threshold"
+        source: "prediction_logs"
+        measure: "mean_latency_ms"
+        threshold: 1000.0
+        unit: "milliseconds"
+
+  # Gate 3: Days 121-180 (Excellence Phase)
+  - gate_id: "3"
+    timeline_days: [121, 180]
+    gate_name: "Phase 3: Excellence"
+    description: "Optimized performance and advanced capabilities"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.92
+        unit: "percentage"
+
+      - name: "processing_volume"
+        type: "count_per_period"
+        source: "trade_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 20000
+        unit: "records"
+
+      - name: "error_rate"
+        type: "ratio"
+        numerator:
+          source: "prediction_logs"
+          filter: "status='error'"
+        denominator:
+          source: "prediction_logs"
+          filter: "status IN ('success', 'error')"
+        threshold: 0.5
+        unit: "percentage"
+        description: "System error rate must be < 0.5%"
+
+      - name: "risk_detection_sensitivity"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "recall_at_false_positive_5pct"
+        threshold: 0.85
+        unit: "score"
+        description: "Sensitivity in detecting high-risk trades"
+
+metric_definitions:
+  accuracy:
+    description: "Correct identification of trade risk categories"
+    calculation: "(TP + TN) / (TP + TN + FP + FN)"
+    importance: "Critical"
+
+  processing_volume:
+    description: "Number of trade records analyzed per week"
+    calculation: "COUNT of trade_records with status='analyzed'"
+    importance: "Critical"
+
+  data_completeness:
+    description: "Percentage of records with all required trade attributes"
+    calculation: "Complete records / Total records × 100"
+    importance: "High"
+
+  data_quality:
+    description: "Overall quality score of incoming trade data"
+    calculation: "Aggregate of data validation checks"
+    importance: "High"
+
+  system_availability:
+    description: "Uptime of the trade risk assessment system"
+    calculation: "Uptime / Total time × 100"
+    importance: "High"
+
+  mean_latency:
+    description: "Average time to analyze a trade record"
+    calculation: "Mean of prediction_logs.latency_ms"
+    importance: "Medium"
+
+  error_rate:
+    description: "System-level error rate during processing"
+    calculation: "Error predictions / Total predictions × 100"
+    importance: "High"
+
+  risk_detection_sensitivity:
+    description: "Ability to detect actual high-risk trades"
+    calculation: "Recall at 5% false positive rate"
+    importance: "Critical"

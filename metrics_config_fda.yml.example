@@ -1,0 +1,184 @@
+# FDA Drug Inspection Model Performance Metrics Configuration
+# Template for domain-specific multi-gate evaluation
+#
+# This is an EXAMPLE showing how to create metrics for FDA domain.
+# Copy and modify this file for your domain.
+
+domain: "fda"
+model: "drug-inspection-risk"
+award_date: "2026-02-01"  # Contract award date
+
+gates:
+  # Gate 1: Days 0-90 (Validation Phase)
+  - gate_id: "1"
+    timeline_days: [0, 90]
+    gate_name: "Phase 1: Validation"
+    description: "Model validation and regulatory compliance baseline"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.92
+        unit: "percentage"
+        description: "Drug classification accuracy on test dataset"
+
+      - name: "regulatory_compliance"
+        type: "threshold"
+        source: "compliance_checks"
+        measure: "fda_compliance_score"
+        threshold: 0.98
+        unit: "percentage"
+        description: "Adherence to FDA data handling requirements"
+
+      - name: "throughput"
+        type: "count_per_period"
+        source: "inspection_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 500
+        unit: "inspections"
+        description: "Drug inspections analyzed per week"
+
+      - name: "false_positive_rate"
+        type: "ratio"
+        numerator:
+          source: "predictions"
+          filter: "prediction='flag_risk' AND actual='no_risk'"
+        denominator:
+          source: "predictions"
+          filter: "actual='no_risk'"
+        threshold: 5.0
+        unit: "percentage"
+        description: "False positive rate must stay below 5%"
+
+  # Gate 2: Days 91-180 (Deployment Phase)
+  - gate_id: "2"
+    timeline_days: [91, 180]
+    gate_name: "Phase 2: Deployment"
+    description: "Sustained performance under production load"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.94
+        unit: "percentage"
+
+      - name: "regulatory_compliance"
+        type: "threshold"
+        source: "compliance_checks"
+        measure: "fda_compliance_score"
+        threshold: 0.99
+        unit: "percentage"
+
+      - name: "throughput"
+        type: "count_per_period"
+        source: "inspection_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 1000
+        unit: "inspections"
+
+      - name: "latency_p95"
+        type: "threshold"
+        source: "prediction_logs"
+        measure: "latency_p95"
+        threshold: 2000.0
+        unit: "milliseconds"
+        description: "95th percentile analysis latency"
+
+  # Gate 3: Days 181-365 (Optimization Phase)
+  - gate_id: "3"
+    timeline_days: [181, 365]
+    gate_name: "Phase 3: Optimization"
+    description: "Continuous improvement and operational excellence"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.95
+        unit: "percentage"
+
+      - name: "regulatory_compliance"
+        type: "threshold"
+        source: "compliance_checks"
+        measure: "fda_compliance_score"
+        threshold: 0.99
+        unit: "percentage"
+
+      - name: "throughput"
+        type: "count_per_period"
+        source: "inspection_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 2000
+        unit: "inspections"
+
+      - name: "fairness"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "demographic_parity"
+        threshold: 0.02
+        unit: "disparity_score"
+        description: "Fairness across drug categories"
+
+  # Accelerated Path: Days 60-140
+  - gate_id: "accel"
+    timeline_days: [60, 140]
+    gate_name: "Accelerated Path"
+    description: "Fast-track approval for high performers"
+    metrics:
+      - name: "accuracy"
+        type: "threshold"
+        source: "model_evaluation"
+        measure: "accuracy"
+        threshold: 0.93
+        unit: "percentage"
+
+      - name: "regulatory_compliance"
+        type: "threshold"
+        source: "compliance_checks"
+        measure: "fda_compliance_score"
+        threshold: 0.99
+        unit: "percentage"
+
+      - name: "throughput"
+        type: "count_per_period"
+        source: "inspection_records"
+        filter: "status='analyzed' AND created_at >= date('now', '-7 days')"
+        period: "week"
+        threshold: 1500
+        unit: "inspections"
+
+metric_definitions:
+  accuracy:
+    description: "Correctly classified drug risk categories"
+    calculation: "TP + TN / (TP + TN + FP + FN)"
+    importance: "Critical"
+
+  regulatory_compliance:
+    description: "Adherence to FDA 21 CFR Part 11 and data handling requirements"
+    calculation: "Audit score from compliance_checks table"
+    importance: "Critical"
+
+  throughput:
+    description: "Number of drug inspections analyzed per week"
+    calculation: "COUNT of inspection_records with status='analyzed'"
+    importance: "High"
+
+  latency_p95:
+    description: "95th percentile analysis response time"
+    calculation: "P95 value from prediction_logs.latency_ms"
+    importance: "Medium"
+
+  false_positive_rate:
+    description: "Percentage of safe drugs incorrectly flagged as risky"
+    calculation: "False positives / Total safe drugs × 100"
+    importance: "High"
+
+  fairness:
+    description: "Absence of bias across drug categories"
+    calculation: "Maximum performance disparity between categories"
+    importance: "High"
