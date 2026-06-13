@@ -4376,6 +4376,37 @@ async def export_referral_pdf_v2(request: PDFExportRequest) -> StreamingResponse
 # These endpoints provide the data shapes expected by the ask-ai CBP adapter.
 # ============================================================================
 
+# ISO-3166-1 alpha-2 → country name mapping for query normalisation.
+_COUNTRY_NAMES: Dict[str, str] = {
+    "china": "CN", "chinese": "CN", "prc": "CN",
+    "vietnam": "VN", "viet nam": "VN", "vietnamese": "VN",
+    "malaysia": "MY", "malaysian": "MY",
+    "thailand": "TH", "thai": "TH",
+    "cambodia": "KH", "cambodian": "KH",
+    "indonesia": "ID", "indonesian": "ID",
+    "india": "IN", "indian": "IN",
+    "singapore": "SG",
+    "myanmar": "MM", "burma": "MM",
+    "philippines": "PH", "filipino": "PH",
+    "mexico": "MX", "mexican": "MX",
+    "canada": "CA", "canadian": "CA",
+    "taiwan": "TW", "taiwanese": "TW",
+    "south korea": "KR", "korea": "KR", "korean": "KR",
+    "japan": "JP", "japanese": "JP",
+    "hong kong": "HK",
+    "bangladesh": "BD",
+    "pakistan": "PK",
+}
+
+
+def _extract_country_code(query: str) -> Optional[str]:
+    """Return an ISO-2 country code if the free-text query mentions a country name."""
+    q_lower = query.lower()
+    for name, code in _COUNTRY_NAMES.items():
+        if name in q_lower:
+            return code
+    return None
+
 
 class ShipmentSearchRequest(BaseModel):
     query: Optional[str] = None
@@ -4388,12 +4419,21 @@ async def search_shipments_post(body: ShipmentSearchRequest) -> Dict[str, Any]:
     """POST wrapper around GET /api/shipments for ask-ai adapter tool calls.
 
     Accepts {query, filters, limit} and returns {results: [...shipments]}.
-    Text query is matched case-insensitively against shipper_name, consignee_name, and manifest_id.
+    Text query is matched case-insensitively against key shipment fields.
+    Structured filters (origin_country, risk_min, risk_max, status) are passed
+    directly to the data service for server-side filtering.
     """
     try:
         filters = body.filters or {}
+        # If query mentions a country name, extract its ISO code for in-memory filtering.
+        country_code = _extract_country_code(body.query or "")
+
+        # Fetch a larger batch when doing in-memory text search so we don't
+        # miss matches that fall outside a small first page.
+        fetch_limit = max(body.limit * 10, 100) if body.query else min(body.limit, 100)
         async with await get_data_service_client() as client:
-            params: Dict[str, Any] = {"limit": min(body.limit, 100)}
+            params: Dict[str, Any] = {"limit": fetch_limit}
+            # Pass structured filters to the data service (server-side)
             if filters.get("corridor_id"):
                 params["corridor_id"] = filters["corridor_id"]
             if filters.get("risk_min") is not None:
@@ -4409,16 +4449,30 @@ async def search_shipments_post(body: ShipmentSearchRequest) -> Dict[str, Any]:
         data = resp.json()
         shipments = data.get("data", [])
 
-        # Text filter applied in memory after fetch
-        if body.query:
-            q = body.query.lower()
-            shipments = [
-                s for s in shipments
-                if q in (s.get("shipper_name") or "").lower()
-                or q in (s.get("consignee_name") or "").lower()
-                or q in (s.get("manifest_id") or "").lower()
-                or q in (s.get("commodity_name") or "").lower()
-            ]
+        # In-memory text + country filter
+        if body.query or country_code:
+            if country_code:
+                # When a country name was detected, match on origin/shipper country code.
+                code = country_code.lower()
+                shipments = [
+                    s for s in shipments
+                    if code == (s.get("origin_country") or "").lower()
+                    or code == (s.get("shipper_country") or "").lower()
+                    or code == (s.get("element9_actual_country") or "").lower()
+                ]
+            else:
+                q = (body.query or "").lower()
+                shipments = [
+                    s for s in shipments
+                    if q in (s.get("shipper_name") or "").lower()
+                    or q in (s.get("consignee_name") or "").lower()
+                    or q in (s.get("manifest_id") or "").lower()
+                    or q in (s.get("commodity_name") or "").lower()
+                    or q in (s.get("origin_country") or "").lower()
+                    or q in (s.get("shipper_country") or "").lower()
+                    or q in (s.get("hs_code") or "").lower()
+                    or q in (s.get("description") or "").lower()
+                ]
 
         return {"results": shipments[: body.limit], "count": len(shipments)}
     except Exception as e:
