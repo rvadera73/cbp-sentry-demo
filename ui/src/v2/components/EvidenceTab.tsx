@@ -144,13 +144,15 @@ export default function EvidenceTab({ selectedCase, selectedCaseShipments, onGen
   const criticalIndicators: string[] = scoreData?.critical_indicators || [];
   const docList = getDocList(hsCode);
 
-  // Readiness scoring
+  // Readiness scoring — document gaps are informational, not a hard blocker at 15% maturity
   const receivedDocs = docList.filter(d => docStatus(d, e9Mismatch) === 'received').length;
   const missingCritical = docList.filter(d => d.critical && docStatus(d, e9Mismatch) === 'missing').length;
   const hasRiskScore = !!(selectedCase?.risk_score && selectedCase.risk_score > 0);
   const hasIndicators = criticalIndicators.length > 0 || !scoreLoading;
-  const docReadiness = missingCritical === 0 ? 'complete' : missingCritical <= 2 ? 'partial' : 'incomplete';
-  const overallReady = hasRiskScore && docReadiness !== 'incomplete';
+  const docReadiness = missingCritical === 0 ? 'complete' : missingCritical <= 3 ? 'partial' : 'needs-review';
+  // At 15% model maturity: require only a risk score + shipment identified.
+  // Missing docs are tracked and noted in the referral package (collected during investigation).
+  const overallReady = hasRiskScore && !!shipment.shipment_id;
 
   return (
     <div className="flex flex-col flex-1 overflow-y-auto bg-[#F7F9FC]">
@@ -478,9 +480,9 @@ export default function EvidenceTab({ selectedCase, selectedCaseShipments, onGen
           <div className="grid grid-cols-2 gap-2 mb-4">
             {[
               { label: 'Risk Score computed', done: hasRiskScore, detail: hasRiskScore ? `Score: ${selectedCase?.risk_score?.toFixed(1)}` : 'Run scoring first' },
-              { label: 'Critical indicators documented', done: hasIndicators, detail: `${criticalIndicators.length} indicator(s)` },
-              { label: 'Document checklist reviewed', done: docReadiness !== 'incomplete', detail: docReadiness === 'complete' ? 'All docs accounted for' : `${missingCritical} critical doc(s) missing` },
-              { label: 'Party registry complete', done: !!(shipment.shipper_name && shipment.consignee_name), detail: 'Shipper + consignee identified' },
+              { label: 'Critical indicators documented', done: hasIndicators, detail: `${criticalIndicators.length} indicator(s) from rule engine` },
+              { label: 'Document checklist', done: docReadiness !== 'needs-review', detail: docReadiness === 'complete' ? 'All docs accounted for' : `${missingCritical} doc(s) pending collection (noted in package)` },
+              { label: 'Party registry complete', done: !!(shipment.shipper_name && (shipment.consignee_name || shipment.manifest_data?.consignee)), detail: 'Shipper + consignee identified' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-2 text-[11px]">
                 {item.done
@@ -505,7 +507,8 @@ export default function EvidenceTab({ selectedCase, selectedCaseShipments, onGen
           >
             <FileText size={14} />
             Generate CSOP Referral Package (14 Sections)
-            {!overallReady && <span className="text-[10px] font-normal">(complete checklist first)</span>}
+            {!overallReady && <span className="text-[10px] font-normal">(risk score required)</span>}
+            {overallReady && missingCritical > 0 && <span className="text-[10px] font-normal opacity-80">— {missingCritical} doc(s) pending</span>}
           </button>
         </div>
 

@@ -25,18 +25,20 @@ export function useReferralDisplay(shipmentId: string): UseReferralDisplayReturn
     try {
       setLoading(true);
       setError(null);
-      // Call the analyze endpoint to get Gemini-enriched analysis
-      const response = await fetch(`${API_BASE_URL}/referral/${shipmentId}/analyze`);
+      // Use the standard referral endpoint which returns the full 14-section structure.
+      // The /analyze endpoint returns only analyzed_sections (no sections key), causing a render crash.
+      const response = await fetch(`${API_BASE_URL}/referral/${shipmentId}?format=json`);
 
       if (!response.ok) {
         throw new Error(`Failed to generate referral: ${response.statusText}`);
       }
 
       const data = await response.json();
-      // Map API response to expected type (API uses risk_tier, code expects risk_level)
+      // Ensure sections always exists (fallback to empty object prevents Object.entries crash)
       const mappedData: ReferralDisplayData = {
         ...data,
-        risk_level: (data.risk_tier || 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        sections: data.sections || {},
+        risk_level: (data.risk_tier || data.risk_level || 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         edited_sections: {}
       };
       setReferral(mappedData);
