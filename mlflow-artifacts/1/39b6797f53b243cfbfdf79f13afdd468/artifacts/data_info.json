@@ -1,0 +1,10 @@
+{
+  "training_data": "/home/rahulvadera/cbp-sentry/data/training_data.csv",
+  "feature_matrix": "/home/rahulvadera/cbp-sentry/data/feature_matrix_72.csv",
+  "features_count": 72,
+  "samples_count": 10287,
+  "training_samples": 7200,
+  "test_samples": 3087,
+  "positive_samples": 287,
+  "negative_samples": 10000
+}

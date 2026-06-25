@@ -1,0 +1,20 @@
+{
+  "v2.1": {
+    "description": "Legacy risk model baseline (before v3.0)",
+    "database_file": "/home/rahulvadera/cbp-sentry/backups/cbp_sentry_v2.1_baseline_20260613_143059.db",
+    "created_at": "2026-06-13T14:30:59.124668",
+    "status": "frozen",
+    "model_active": "v2.1",
+    "tables_count": 27,
+    "purpose": "Rollback point if v3.0 fails"
+  },
+  "v3.0": {
+    "description": "Precise Risk Model (XGBoost) - in development",
+    "database_file": "/home/rahulvadera/cbp-sentry/data/cbp_sentry.db",
+    "created_at": "2026-06-13T14:30:59.124684",
+    "status": "preparing",
+    "model_active": "v3.0",
+    "tables_count": 34,
+    "purpose": "New ML-based model with 7-factor architecture"
+  }
+}

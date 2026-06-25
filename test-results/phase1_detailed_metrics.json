@@ -1,0 +1,35 @@
+{
+  "xgboost": {
+    "auc": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "sensitivity": 1.0,
+    "specificity": 1.0,
+    "confusion_matrix": {
+      "tn": 3001,
+      "fp": 0,
+      "fn": 0,
+      "tp": 86
+    }
+  },
+  "isolation_forest": {
+    "anomalies_detected": 216,
+    "contamination": 0.03
+  },
+  "dataset": {
+    "training_samples": 7200,
+    "test_samples": 3087,
+    "total_features": 72,
+    "positive_cases_train": 201,
+    "negative_cases_train": 6999,
+    "positive_cases_test": 86,
+    "negative_cases_test": 3001
+  },
+  "timing": {
+    "total_seconds": 22.591655492782593,
+    "xgboost_training_seconds": 22.17074942588806,
+    "isolation_forest_training_seconds": 0.1375260353088379,
+    "shap_creation_seconds": 0.04786562919616699
+  }
+}

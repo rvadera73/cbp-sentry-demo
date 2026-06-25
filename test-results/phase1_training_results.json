@@ -1,0 +1,14 @@
+{
+  "xgb_auc": 1.0,
+  "xgb_precision": 1.0,
+  "xgb_recall": 1.0,
+  "f1_score": 1.0,
+  "training_samples": 7200,
+  "test_samples": 3087,
+  "iforest_anomaly_count": 216,
+  "shap_explainer_ready": true,
+  "xgb_model_path": "/home/rahulvadera/cbp-sentry/models/xgboost_model.json",
+  "iforest_model_path": "/home/rahulvadera/cbp-sentry/models/isolation_forest_model.pkl",
+  "training_time_seconds": 22.591655492782593,
+  "issues": []
+}

@@ -8,9 +8,21 @@ Logic:
 - Historical Pattern: Origin shifts, timing, shipper age (0-15)
 """
 
-from typing import Dict, Any, Optional
+import importlib.util
+import sys
+from typing import Dict, Any, Optional, List
 from datetime import datetime
 from pathlib import Path
+
+try:
+    from services.api.risk_models import COUNTRY_ENCODING
+except ImportError:
+    risk_models_path = Path(__file__).resolve().parents[3] / "services" / "api" / "risk_models.py"
+    spec = importlib.util.spec_from_file_location("cbp_sentry_risk_models", risk_models_path)
+    risk_models = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = risk_models
+    spec.loader.exec_module(risk_models)
+    COUNTRY_ENCODING = risk_models.COUNTRY_ENCODING
 
 
 class Tier3Scorer:
@@ -83,7 +95,7 @@ class Tier3Scorer:
 
         return round(commodity_score, 1)
 
-    def score_historical_pattern(self, manifest: Dict[str, Any]) -> float:
+    def score_historical_pattern(self, manifest: Dict[str, Any], evidence: Optional[List[str]] = None) -> float:
         """
         Score historical pattern anomalies (0-15).
 
@@ -106,6 +118,7 @@ class Tier3Scorer:
         country_of_origin = manifest.get("country_of_origin", "")
 
         pattern_score = 0.0
+        evidence = evidence if evidence is not None else []
 
         # Origin shift detection
         # Single origin (same 6m) = 0 points
@@ -116,30 +129,38 @@ class Tier3Scorer:
             if unique_origins >= 3:
                 # 3 or more unique origins = high transshipment signal
                 pattern_score += 12
+                evidence.append(f"{unique_origins} prior origins over 6 months: +12")
             elif unique_origins >= 2:
                 # 2 unique origins = moderate transshipment signal
                 pattern_score += 10
+                evidence.append(f"{unique_origins} prior origins over 6 months: +10")
 
         # Shipper age penalty (newer = suspicious)
         if shipper_incorporation_date:
             try:
                 incorp_date = datetime.fromisoformat(shipper_incorporation_date.replace('Z', '+00:00'))
-                age_months = (datetime.utcnow() - incorp_date).days / 30
+                now = datetime.now(incorp_date.tzinfo) if incorp_date.tzinfo else datetime.utcnow()
+                age_months = (now - incorp_date).days / 30
                 if age_months < 6:
-                    pattern_score += 0
+                    pattern_score += 3
+                    evidence.append(f"Very new shipper ({age_months:.0f} months): +3")
                 elif age_months < 12:
-                    pattern_score += 0
+                    pattern_score += 2
+                    evidence.append(f"New shipper ({age_months:.0f} months): +2")
             except Exception:
                 pass
 
         # Price variance penalty
         if price_variance < -15:  # Greenfield: -18.7%
-            pattern_score += 0
+            penalty = min(3.0, abs(price_variance) / 15)
+            pattern_score += penalty
+            evidence.append(f"Price {price_variance:.1f}% below market: +{penalty:.1f}")
 
         # Known evasion corridor
-        if hts_code.startswith("7604") and country_of_origin == "VN":
+        if hts_code.startswith("7604") and country_of_origin.upper() == "VN":
             # Aluminum from Vietnam is CRITICAL_STRUCTURAL_RISK
-            pattern_score += 0
+            pattern_score += 2
+            evidence.append("VN aluminum evasion corridor (7604): +2")
 
         return round(min(pattern_score, 15), 1)
 
@@ -163,16 +184,14 @@ class Tier3Scorer:
                 hts_code = manifest.get("hts_code", "")
                 hts_6digit = int(hts_code[:6].replace(".", "")) if hts_code else 0
 
-                country_map = {
-                    "VN": 5, "TH": 6, "MY": 1, "CN": 2, "KH": 3, "IN": 4
-                }
                 country_of_origin = manifest.get("country_of_origin", "")
-                country_encoded = country_map.get(country_of_origin, 0)
+                country_encoded = COUNTRY_ENCODING.get(country_of_origin.upper(), 0)
 
                 shipper_date = manifest.get("shipper_incorporation_date", "")
                 try:
                     incorp_date = datetime.fromisoformat(shipper_date.replace('Z', '+00:00'))
-                    shipper_age_months = (datetime.utcnow() - incorp_date).days / 30
+                    now = datetime.now(incorp_date.tzinfo) if incorp_date.tzinfo else datetime.utcnow()
+                    shipper_age_months = (now - incorp_date).days / 30
                 except Exception:
                     shipper_age_months = 24
 

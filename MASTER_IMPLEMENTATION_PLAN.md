@@ -1,6 +1,11 @@
 # Master Implementation Plan: Fix Risk Scoring Model
-**Status:** Ready to Execute  
-**Timeline:** Day 1 (cleanup) + Day 2 (implementation) = 2-3 days total
+
+> ⚠️ **SUPERSEDED** — This document describes a prior consolidation task (completed June 2026).
+> The current master plan is in `CLAUDE.md § Known Issues & TODOs` and the session plan file.
+> For the full maturity roadmap (15%→90%), see `GATES_DEFINITION_AND_CURRENT_STATE.md`.
+
+**Original Status:** Completed — 7-factor rule engine + XGBoost blend is now the single scorer.  
+**Archive Date:** June 24, 2026
 
 ---
 

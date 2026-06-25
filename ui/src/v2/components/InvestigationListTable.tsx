@@ -1,10 +1,14 @@
 import React from 'react';
 import { Search, ArrowRight } from 'lucide-react';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
+import MaturityBadge from './MaturityBadge';
 
 export interface ListItem {
   id: string;
   risk_score?: number;
+  model_maturity?: number;
+  model_version?: string;
+  risk_score_calculated_at?: string;
   name: string;
   entity: string;
   officer?: string;
@@ -131,13 +135,21 @@ export default function InvestigationListTable({
                   onClick={() => onRowClick(item.id)}
                 >
                   <td className={`${TYPOGRAPHY.tableCell} p-3`}>
-                    <span
-                      className={`inline-block px-2.5 py-1 rounded text-center font-bold text-xs text-white ${
-                        (item.risk_score ?? 0) >= 80 ? 'bg-[#D83933]' : 'bg-amber-600'
-                      }`}
-                    >
-                      {item.risk_score}%
-                    </span>
+                    <div className="flex flex-col items-start gap-1">
+                      <span
+                        className={`inline-block px-2.5 py-1 rounded text-center font-bold text-xs text-white ${
+                          (item.risk_score ?? 0) >= 80 ? 'bg-[#D83933]' : 'bg-amber-600'
+                        }`}
+                      >
+                        {item.risk_score}%
+                      </span>
+                      <MaturityBadge
+                        maturity={item.model_maturity}
+                        modelVersion={item.model_version}
+                        scoredAt={item.risk_score_calculated_at}
+                        variant="inline"
+                      />
+                    </div>
                   </td>
                   <td className={`${TYPOGRAPHY.tableCell} p-3`}>
                     <div className="flex flex-col">

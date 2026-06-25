@@ -30,6 +30,8 @@ print_info() {
   echo -e "${YELLOW}→ $1${NC}"
 }
 
+OBS_DIR="/home/rahulvadera/cbp-observability"
+
 show_usage() {
   cat << 'EOF'
 Usage: ./scripts/deploy-local.sh [OPTION]
@@ -42,9 +44,10 @@ Local deployment options:
   data          Rebuild sentry-data only
   cord          Rebuild sentry-cord-integration only
   quick         Quick restart (no rebuild, just docker compose up)
-  status        Show container status
+  status        Show container status (sentry + observability)
   logs          Show container logs
-  down          Stop all containers
+  down          Stop all containers (sentry + observability)
+  obs           Start/stop observability stack only (obs up|obs down|obs status)
   clean         Full system cleanup (docker system prune -a)
   help          Show this help message
 
@@ -53,7 +56,51 @@ Examples:
   ./scripts/deploy-local.sh ui            # Rebuild only UI after changes
   ./scripts/deploy-local.sh quick         # Fast restart (containers already built)
   ./scripts/deploy-local.sh status        # Check health
+  ./scripts/deploy-local.sh obs up        # Start observability stack
+  ./scripts/deploy-local.sh obs down      # Stop observability stack
 EOF
+}
+
+# Wait for sentry-db to be healthy (PostgreSQL)
+wait_for_db() {
+  print_info "Waiting for sentry-db (PostgreSQL) to be ready..."
+  for i in $(seq 1 30); do
+    if docker compose exec -T sentry-db pg_isready -U sentry -d sentry > /dev/null 2>&1; then
+      print_success "sentry-db is healthy (schemas initialised by init.sql)"
+      return 0
+    fi
+    echo -e "  ${YELLOW}→${NC} Attempt $i/30: sentry-db not ready yet, waiting 3s..."
+    sleep 3
+  done
+  print_error "sentry-db did not become healthy in time — check: docker compose logs sentry-db"
+  return 1
+}
+
+# Observability stack helpers
+obs_up() {
+  if [ -d "$OBS_DIR" ]; then
+    print_info "Starting observability stack..."
+    docker compose -f "$OBS_DIR/docker-compose.yml" up -d
+    print_success "Observability stack running → Grafana: http://localhost:3002"
+  else
+    print_error "cbp-observability not found at $OBS_DIR — skipping obs stack"
+  fi
+}
+
+obs_down() {
+  if [ -d "$OBS_DIR" ]; then
+    print_info "Stopping observability stack..."
+    docker compose -f "$OBS_DIR/docker-compose.yml" down
+    print_success "Observability stack stopped"
+  fi
+}
+
+obs_status() {
+  if [ -d "$OBS_DIR" ]; then
+    echo ""
+    print_header "OBSERVABILITY STACK"
+    docker compose -f "$OBS_DIR/docker-compose.yml" ps 2>/dev/null || print_error "Obs stack not running"
+  fi
 }
 
 # Main deployment functions
@@ -63,6 +110,7 @@ deploy_full_clean() {
   print_info "Stopping all containers and removing volumes..."
   cd "$PROJECT_DIR"
   docker compose down -v 2>/dev/null || true
+  obs_down
 
   print_info "Removing all Docker images and build cache..."
   docker system prune -f --all 2>/dev/null || true
@@ -78,10 +126,14 @@ deploy_full_clean() {
   docker compose build --no-cache > /dev/null 2>&1
   print_success "Docker images built"
 
-  print_info "Starting all containers..."
+  print_info "Starting sentry-db (PostgreSQL) and all containers..."
   docker compose up -d
+  wait_for_db
 
-  print_info "Waiting for containers to be healthy..."
+  print_info "Starting observability stack..."
+  obs_up
+
+  print_info "Waiting for application containers to be healthy..."
   sleep 6
 
   print_header "DEPLOYMENT COMPLETE"
@@ -102,6 +154,7 @@ deploy_full_clean() {
 
   echo ""
   print_success "Ready! Open http://localhost:3001 in your browser"
+  echo -e "${YELLOW}→ Grafana (observability): http://localhost:3002${NC}"
   echo -e "${YELLOW}→ Hard refresh: Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)${NC}"
   echo -e "${YELLOW}→ Clear browser cache in DevTools → Application → Clear site data${NC}"
 }
@@ -156,8 +209,10 @@ deploy_quick() {
 
   cd "$PROJECT_DIR"
 
-  print_info "Starting containers..."
+  print_info "Starting sentry-db (PostgreSQL) and containers..."
   docker compose up -d
+  wait_for_db
+  obs_up
 
   sleep 4
 
@@ -178,12 +233,22 @@ show_status() {
   docker compose ps
 
   echo ""
+  print_info "PostgreSQL (sentry-db)..."
+  if docker compose exec -T sentry-db pg_isready -U sentry -d sentry > /dev/null 2>&1; then
+    print_success "sentry-db healthy (cbp_sentry schema)"
+  else
+    print_error "sentry-db not ready"
+  fi
+
+  echo ""
   print_info "Testing API connectivity..."
   if curl -s http://localhost:3001/api/shipments?limit=1 > /dev/null 2>&1; then
     print_success "API responding on localhost:3001"
   else
     print_error "API not responding - check logs"
   fi
+
+  obs_status
 }
 
 show_logs() {
@@ -196,6 +261,7 @@ stop_containers() {
   print_header "STOPPING CONTAINERS"
   cd "$PROJECT_DIR"
   docker compose down
+  obs_down
   print_success "All containers stopped"
 }
 
@@ -251,6 +317,14 @@ case "$1" in
     ;;
   down)
     stop_containers
+    ;;
+  obs)
+    case "${2:-up}" in
+      up)   cd "$PROJECT_DIR" && obs_up ;;
+      down) obs_down ;;
+      status) obs_status ;;
+      *) print_error "Unknown obs sub-command: $2 (use: up, down, status)" ;;
+    esac
     ;;
   clean)
     cleanup_system

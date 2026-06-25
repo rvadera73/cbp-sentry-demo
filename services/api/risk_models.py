@@ -367,3 +367,19 @@ class RiskScoreBreakdown:
             "confidence_interval": self.confidence_interval,
             "calculation_table": self.calculation_table,
         }
+
+
+COUNTRY_ENCODING = {
+    "US": 0,
+    "CA": 0,
+    "MX": 0,
+    "MY": 1,
+    "CN": 2,
+    "SG": 3,
+    "KH": 3,
+    "IN": 4,
+    "VN": 5,
+    "TH": 6,
+    "AE": 7,
+    "HK": 8,
+}

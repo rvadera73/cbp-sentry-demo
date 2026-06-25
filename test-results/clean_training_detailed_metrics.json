@@ -1,0 +1,73 @@
+{
+  "xgboost": {
+    "auc": 0.9934324217508893,
+    "precision": 0.5290322580645161,
+    "recall": 0.9534883720930233,
+    "f1": 0.6804979253112033,
+    "sensitivity": 0.9534883720930233,
+    "specificity": 0.975674775074975,
+    "confusion_matrix": {
+      "tn": 2928,
+      "fp": 73,
+      "fn": 4,
+      "tp": 82
+    }
+  },
+  "isolation_forest": {
+    "anomalies_detected": 216,
+    "contamination": 0.03
+  },
+  "dataset": {
+    "training_samples": 7200,
+    "test_samples": 3087,
+    "total_features": 36,
+    "dropped_features": [
+      "DOCUMENTATION_002_adcvd_applicable",
+      "DOCUMENTATION_005_value_weight_anomaly",
+      "DOCUMENTATION_008_origin_shipper_mismatch",
+      "DOCUMENTATION_009_country_chain_length",
+      "DOCUMENTATION_010_filing_status_risk",
+      "DOCUMENTATION_011_dwell_time_zscore",
+      "ROUTING_004_dwell_time_quartile",
+      "ROUTING_005_multi_port_routing",
+      "ROUTING_008_complex_routing",
+      "ROUTING_009_transshipment_corridor",
+      "COMMODITY_005_unit_price_anomaly",
+      "COMMODITY_009_commodity_frequency",
+      "CORRIDOR_003_shipper_risk_score",
+      "CORRIDOR_004_supply_chain_complexity",
+      "CORRIDOR_006_se_asia_hub_risk",
+      "CORRIDOR_008_hong_kong_route",
+      "CORRIDOR_014_multi_hop_routing",
+      "CORRIDOR_015_combined_corridor_risk",
+      "PARTY_006_shipper_legitimacy_score",
+      "PARTY_008_shipper_repeat_frequency",
+      "PARTY_009_location_mismatch_score",
+      "PATTERN_001_value_anomaly_score",
+      "PATTERN_002_weight_anomaly_score",
+      "PATTERN_003_vw_ratio_anomaly_score",
+      "PATTERN_004_dwell_anomaly_score",
+      "PATTERN_005_ensemble_anomaly",
+      "PATTERN_006_rare_shipper_dest",
+      "PATTERN_007_corridor_price_deviation",
+      "PATTERN_008_rare_commodity_origin",
+      "PATTERN_009_shipper_concentration",
+      "PATTERN_010_multidim_outlier_score",
+      "TIME_SENSITIVITY_001_accelerated_shipping",
+      "TIME_SENSITIVITY_002_high_volume_shipper",
+      "TIME_SENSITIVITY_003_port_congestion_proxy",
+      "TIME_SENSITIVITY_004_urgency_indicator",
+      "TIME_SENSITIVITY_005_commodity_surge"
+    ],
+    "positive_cases_train": 201,
+    "negative_cases_train": 6999,
+    "positive_cases_test": 86,
+    "negative_cases_test": 3001
+  },
+  "timing": {
+    "total_seconds": 68.43941187858582,
+    "xgboost_training_seconds": 67.65143942832947,
+    "isolation_forest_training_seconds": 0.28088808059692383,
+    "shap_creation_seconds": 0.13083457946777344
+  }
+}

@@ -1,616 +1,289 @@
-"""SQLite database initialization and CRUD operations"""
-import sqlite3
+"""PostgreSQL database initialization and CRUD operations."""
+
+import json
+import logging
+import os
 import uuid
 from datetime import datetime
-from typing import Optional, List, Dict, Any
-import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import psycopg2
+import psycopg2.extras
+from psycopg2 import sql
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_DATABASE_URL = "postgresql://sentry:sentry-secret@sentry-db:5432/sentry"
+INIT_SQL_PATH = Path(__file__).with_name("init.sql")
+JSONB_COLUMNS = {
+    "audit_trail",
+    "risk_breakdown",
+    "ai_synthesis",
+    "isf_data",
+    "components",
+    "xai_assertions",
+    "errors",
+    "breakdown_json",
+    "previous_breakdown_json",
+    "new_breakdown_json",
+    "altana_risk_factors",
+}
+TEXT_SERIALIZED_COLUMNS = {
+    "risk_score_breakdown",
+    "confidence_interval",
+    "port_calls",
+    "h2_signals",
+    "customs_flags",
+    "inspection_history",
+}
+SHIPMENT_RESPONSE_JSON_COLUMNS = {
+    "risk_score_breakdown",
+    "confidence_interval",
+    "audit_trail",
+    "risk_breakdown",
+    "ai_synthesis",
+    "isf_data",
+}
 
-def init_db(db_path: str = "/app/data/cbp_sentry.db") -> None:
-    """Initialize SQLite schema with idempotent migrations"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+psycopg2.extras.register_default_json(globally=True, loads=json.loads)
+psycopg2.extras.register_default_jsonb(globally=True, loads=json.loads)
 
-    # Shipments table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS shipments (
-            id TEXT PRIMARY KEY,
-            manifest_id TEXT NOT NULL,
-            shipper_name TEXT NOT NULL,
-            consignee_name TEXT NOT NULL,
-            origin_country TEXT NOT NULL,
-            destination_country TEXT NOT NULL,
-            hs_code TEXT,
-            declared_value_usd REAL,
-            declared_weight_kg REAL,
-            description TEXT,
-            vessel_name TEXT,
-            vessel_imo TEXT,
-            vessel_flag TEXT,
-            dwell_days REAL,
-            ais_stuffing_country TEXT,
-            port_calls TEXT,
-            element9_is_mismatch INTEGER DEFAULT 0,
-            element9_confidence REAL,
-            element9_declared_country TEXT,
-            element9_actual_country TEXT,
-            shipper_age_months INTEGER,
-            shipper_country TEXT,
-            consignee_country TEXT,
-            ad_cvd_rate REAL,
-            ad_cvd_applicable INTEGER DEFAULT 0,
-            status TEXT DEFAULT 'received',
-            risk_score REAL,
-            risk_delta REAL DEFAULT 0,
-            h1_score REAL,
-            h2_score REAL,
-            h3_score REAL,
-            h1_h2_score REAL,
-            last_polled_at TIMESTAMP,
-            ofac_screened_at TIMESTAMP,
-            ofac_match BOOLEAN DEFAULT 0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP
-        )
-    """)
 
-    # Manifests table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS manifests (
-            id TEXT PRIMARY KEY,
-            filename TEXT NOT NULL,
-            row_count INTEGER,
-            extracted_at TIMESTAMP NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+def _get_conn():
+    return psycopg2.connect(
+        os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),
+        options="-c search_path=cbp_sentry",
+    )
 
-    # Manifest Upload Jobs table (for batch upload tracking)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS manifest_upload_jobs (
-            id TEXT PRIMARY KEY,
-            filename TEXT NOT NULL,
-            status TEXT DEFAULT 'pending',
-            total_rows INTEGER DEFAULT 0,
-            processed_rows INTEGER DEFAULT 0,
-            inserted_rows INTEGER DEFAULT 0,
-            duplicate_rows INTEGER DEFAULT 0,
-            high_risk_count INTEGER DEFAULT 0,
-            medium_risk_count INTEGER DEFAULT 0,
-            low_risk_count INTEGER DEFAULT 0,
-            error_count INTEGER DEFAULT 0,
-            errors TEXT DEFAULT '[]',
-            manifest_id TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completed_at TIMESTAMP
-        )
-    """)
 
-    # Scores table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS scores (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            h1_score REAL,
-            h2_score REAL,
-            h1_h2_score REAL,
-            total_score REAL,
-            components TEXT,
-            xai_assertions TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
+def _get_cursor(conn):
+    return conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-    # Corridor definitions table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS corridors (
-            id TEXT PRIMARY KEY,
-            display_name TEXT,
-            origin_country TEXT,
-            destination_country TEXT,
-            risk_level TEXT DEFAULT 'MEDIUM',
-            primary_hs_chapters TEXT,
-            risk_profile TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_refreshed_at TIMESTAMP
-        )
-    """)
 
-    # Corridor duties table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS corridor_duties (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            corridor_id TEXT REFERENCES corridors(id),
-            case_number TEXT,
-            duty_type TEXT,
-            product_description TEXT,
-            hs_prefix TEXT,
-            rate_pct REAL,
-            status TEXT DEFAULT 'ACTIVE',
-            source_url TEXT,
-            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # Corridor enforcement actions table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS corridor_enforcement_actions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            corridor_id TEXT REFERENCES corridors(id),
-            case_id TEXT,
-            entity_name TEXT,
-            case_status TEXT,
-            case_year INTEGER,
-            duty_evaded_usd REAL,
-            source_description TEXT,
-            source_url TEXT,
-            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # Pre-manifest vessels table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pre_manifest_vessels (
-            vessel_imo TEXT PRIMARY KEY,
-            vessel_name TEXT,
-            mmsi TEXT,
-            flag_state TEXT,
-            origin_port TEXT,
-            origin_country TEXT,
-            destination_port TEXT,
-            destination_country TEXT,
-            corridor_id TEXT,
-            eta_us TIMESTAMP,
-            ais_status TEXT,
-            current_lat REAL,
-            current_lon REAL,
-            speed_knots REAL,
-            last_refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # Idempotent column additions for new schema fields
-    cursor.execute("PRAGMA table_info(shipments)")
-    columns = {row[1] for row in cursor.fetchall()}
-
-    if "last_polled_at" not in columns:
-        cursor.execute("ALTER TABLE shipments ADD COLUMN last_polled_at TIMESTAMP")
-        logger.info("Added last_polled_at column to shipments")
-
-    if "risk_delta" not in columns:
-        cursor.execute("ALTER TABLE shipments ADD COLUMN risk_delta REAL DEFAULT 0")
-        logger.info("Added risk_delta column to shipments")
-
-    if "ofac_screened_at" not in columns:
-        cursor.execute("ALTER TABLE shipments ADD COLUMN ofac_screened_at TIMESTAMP")
-        logger.info("Added ofac_screened_at column to shipments")
-
-    if "ofac_match" not in columns:
-        cursor.execute("ALTER TABLE shipments ADD COLUMN ofac_match BOOLEAN DEFAULT 0")
-        logger.info("Added ofac_match column to shipments")
-
-    if "manifest_source_id" not in columns:
-        cursor.execute("ALTER TABLE shipments ADD COLUMN manifest_source_id TEXT")
-        logger.info("Added manifest_source_id column to shipments")
-
-    # Weight Configuration table (for three-level scoring)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS weight_configurations (
-            id TEXT PRIMARY KEY,
-            corridor TEXT,
-            w_corridor REAL NOT NULL,
-            w_vessel REAL NOT NULL,
-            w_manifest REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
-            created_by TEXT NOT NULL,
-            notes TEXT
-        )
-    """)
-
-    # Scoring Overrides table (analyst feedback)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS scoring_overrides (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            original_score REAL NOT NULL,
-            override_decision TEXT NOT NULL,
-            feedback_type TEXT,
-            analyst_id TEXT NOT NULL,
-            analyst_name TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            notes TEXT,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Weight Suggestions table (AI suggestions for weight adjustments)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS weight_suggestions (
-            id TEXT PRIMARY KEY,
-            corridor TEXT,
-            affected_feature TEXT NOT NULL,
-            suggested_value REAL NOT NULL,
-            confidence_pct REAL NOT NULL,
-            corroboration_count INTEGER NOT NULL,
-            status TEXT DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            reviewed_at TIMESTAMP,
-            reviewed_by TEXT,
-            rationale TEXT NOT NULL
-        )
-    """)
-
-    # RFI Response Tables for comprehensive referral packages
-
-    # Shipment Line Items (Table 3-2)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS shipment_line_items (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            line_number INTEGER NOT NULL,
-            sku TEXT,
-            product_description TEXT NOT NULL,
-            quantity REAL NOT NULL,
-            unit TEXT NOT NULL,
-            unit_value_usd REAL NOT NULL,
-            total_value_usd REAL NOT NULL,
-            hs_code TEXT,
-            data_source TEXT DEFAULT 'ISF-Element-1',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Routing Events (Table 3-3)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS routing_events (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            location TEXT NOT NULL,
-            event_date TIMESTAMP NOT NULL,
-            notes TEXT,
-            data_source TEXT DEFAULT 'AIS-Archive',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Parties Involved (Table 3-4)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS parties_involved (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            party_name TEXT NOT NULL,
-            party_role TEXT NOT NULL,
-            country TEXT NOT NULL,
-            risk_note TEXT,
-            data_source TEXT DEFAULT 'ISF-Filing',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Entity Ownership Chain (Table 3-5)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS entity_ownership_chain (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            tier_number INTEGER NOT NULL,
-            entity_name TEXT NOT NULL,
-            jurisdiction TEXT NOT NULL,
-            matching_evidence TEXT NOT NULL,
-            relationship_type TEXT,
-            data_source TEXT DEFAULT 'Senzing-Trade-Graph',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Historical Import Pattern (Table 3-6)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS historical_import_patterns (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            pattern_month TEXT NOT NULL,
-            shipment_count INTEGER NOT NULL,
-            total_weight_kg REAL NOT NULL,
-            declared_origin TEXT NOT NULL,
-            avg_unit_value_usd REAL NOT NULL,
-            pattern_notes TEXT,
-            data_source TEXT DEFAULT 'Trade-Flow-Analysis',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Trade Flow Intelligence (Table 3-7)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS trade_flow_history (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            referenced_shipment_id TEXT,
-            export_month TEXT NOT NULL,
-            origin_country TEXT NOT NULL,
-            export_port TEXT NOT NULL,
-            transit_days INTEGER NOT NULL,
-            quantity_kg REAL NOT NULL,
-            unit_value_usd REAL NOT NULL,
-            shipment_status TEXT NOT NULL,
-            data_source TEXT DEFAULT 'Shipper-Consignee-History',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Entity Relationship Graph (for Cytoscape visualization)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS entity_relationships (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            entity_a_id TEXT NOT NULL,
-            entity_a_name TEXT NOT NULL,
-            entity_a_type TEXT NOT NULL,
-            entity_b_id TEXT NOT NULL,
-            entity_b_name TEXT NOT NULL,
-            entity_b_type TEXT NOT NULL,
-            relationship_type TEXT NOT NULL,
-            confidence_score REAL,
-            data_source TEXT DEFAULT 'Entity-Resolution',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Risk Score Components (detailed breakdown for transparency)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_score_components (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            component_name TEXT NOT NULL,
-            component_category TEXT NOT NULL,
-            component_value REAL NOT NULL,
-            component_max REAL NOT NULL,
-            component_weight REAL NOT NULL,
-            weighted_value REAL NOT NULL,
-            evidence TEXT NOT NULL,
-            data_source TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Risk Score Adjustments (Altana, multipliers, flags, bonuses)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_score_adjustments (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            adjustment_type TEXT NOT NULL,
-            adjustment_name TEXT NOT NULL,
-            adjustment_amount REAL NOT NULL,
-            adjustment_multiplier REAL DEFAULT 1.0,
-            confidence_score REAL NOT NULL,
-            evidence_detail TEXT NOT NULL,
-            data_source TEXT NOT NULL,
-            applied_timestamp TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Risk Score Calculation Ledger (step-by-step audit trail)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_score_ledger (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            ledger_step INTEGER NOT NULL,
-            step_name TEXT NOT NULL,
-            step_description TEXT NOT NULL,
-            input_value REAL,
-            operation TEXT NOT NULL,
-            output_value REAL NOT NULL,
-            notes TEXT,
-            data_source TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # What-If Analysis Scenarios
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_what_if_scenarios (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-            scenario_name TEXT NOT NULL,
-            scenario_description TEXT NOT NULL,
-            scenario_priority TEXT DEFAULT 'MEDIUM',
-            what_if_true_description TEXT NOT NULL,
-            what_if_true_evidence_needed TEXT NOT NULL,
-            what_if_true_risk_score REAL,
-            what_if_false_description TEXT NOT NULL,
-            what_if_false_evidence_needed TEXT NOT NULL,
-            what_if_false_risk_score REAL,
-            current_risk_score REAL NOT NULL,
-            impact_if_true REAL,
-            impact_if_false REAL,
-            impact_category TEXT,
-            investigation_recommendation TEXT,
-            data_source TEXT DEFAULT 'Risk-Analysis-Engine',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # ==================== 7-FACTOR RISK SCORING SCHEMA ====================
-
-    # Table 1: risk_scores_cache (Current Snapshot - One Per Shipment)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_scores_cache (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT UNIQUE NOT NULL,
-
-            -- THE CALCULATION
-            final_score REAL NOT NULL,
-            risk_level TEXT,
-            confidence_interval REAL,
-            breakdown_json TEXT NOT NULL,
-
-            -- METADATA
-            current_model_version TEXT NOT NULL,
-            calculation_timestamp TIMESTAMP NOT NULL,
-            is_stale BOOLEAN DEFAULT 0,
-
-            -- AUDIT
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
-
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Table 2: risk_score_transactions (Complete Audit Trail - SEPARATE)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS risk_score_transactions (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT NOT NULL,
-
-            -- WHAT CHANGED
-            previous_final_score REAL,
-            new_final_score REAL NOT NULL,
-            score_delta REAL,
-
-            -- WHAT HAPPENED
-            transaction_type TEXT NOT NULL,
-            transaction_reason TEXT,
-
-            -- DETAILS
-            previous_breakdown_json TEXT,
-            new_breakdown_json TEXT NOT NULL,
-
-            -- WHO DID IT
-            triggered_by TEXT,
-            triggered_by_model_version TEXT,
-
-            -- TIMESTAMP
-            transaction_timestamp TIMESTAMP NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id)
-        )
-    """)
-
-    # Table 3: model_versions (ML Model Registry)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS model_versions (
-            id TEXT PRIMARY KEY,
-
-            -- METADATA
-            model_name TEXT NOT NULL,
-            version_number TEXT NOT NULL,
-            training_date TIMESTAMP,
-            released_at TIMESTAMP,
-
-            -- ML PARAMETERS
-            isolation_forest_n_estimators INT,
-            isolation_forest_contamination REAL,
-            isolation_forest_random_state INT,
-
-            lightgbm_num_leaves INT,
-            lightgbm_learning_rate REAL,
-            lightgbm_max_depth INT,
-
-            -- STATUS
-            is_active BOOLEAN DEFAULT 0,
-            deprecated_at TIMESTAMP,
-
-            -- USAGE
-            total_calculations INT DEFAULT 0,
-
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            notes TEXT
-        )
-    """)
-
-    # Table 4: altana_scenarios (External API - Conditional Only)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS altana_scenarios (
-            id TEXT PRIMARY KEY,
-            shipment_id TEXT UNIQUE NOT NULL,
-            risk_score_id TEXT NOT NULL,
-
-            -- INVOCATION CONDITION
-            initial_score_before_altana REAL NOT NULL,
-            threshold_met BOOLEAN,
-
-            -- REQUEST
-            query_timestamp TIMESTAMP,
-
-            -- RESPONSE
-            altana_confidence REAL,
-            altana_recommendation TEXT,
-            altana_risk_factors TEXT,
-            supply_chain_opacity REAL,
-            sanctions_exposure BOOLEAN,
-
-            -- ADJUSTMENT
-            confidence_bracket TEXT,
-            adjustment_points REAL,
-            final_score_after_altana REAL,
-
-            -- AUDIT
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP,
-
-            FOREIGN KEY (shipment_id) REFERENCES shipments(id),
-            FOREIGN KEY (risk_score_id) REFERENCES risk_scores_cache(id)
-        )
-    """)
-
-    # CREATE INDEXES for performance
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_cache_shipment ON risk_scores_cache(shipment_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_shipment ON risk_score_transactions(shipment_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_type ON risk_score_transactions(transaction_type)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_risk_txn_timestamp ON risk_score_transactions(transaction_timestamp)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_model_active ON model_versions(is_active)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_altana_shipment ON altana_scenarios(shipment_id)")
-
-    # Idempotent migrations: add new columns if they don't exist
-    # This allows running init_db on an existing database without errors
-    migrations = [
-        "ALTER TABLE shipments ADD COLUMN vessel_imo TEXT",
-        "ALTER TABLE shipments ADD COLUMN vessel_flag TEXT",
-        "ALTER TABLE shipments ADD COLUMN dwell_days REAL",
-        "ALTER TABLE shipments ADD COLUMN ais_stuffing_country TEXT",
-        "ALTER TABLE shipments ADD COLUMN port_calls TEXT",
-        "ALTER TABLE shipments ADD COLUMN element9_is_mismatch INTEGER DEFAULT 0",
-        "ALTER TABLE shipments ADD COLUMN element9_confidence REAL",
-        "ALTER TABLE shipments ADD COLUMN element9_declared_country TEXT",
-        "ALTER TABLE shipments ADD COLUMN element9_actual_country TEXT",
-        "ALTER TABLE shipments ADD COLUMN shipper_age_months INTEGER",
-        "ALTER TABLE shipments ADD COLUMN shipper_country TEXT",
-        "ALTER TABLE shipments ADD COLUMN consignee_country TEXT",
-        "ALTER TABLE shipments ADD COLUMN ad_cvd_rate REAL",
-        "ALTER TABLE shipments ADD COLUMN ad_cvd_applicable INTEGER DEFAULT 0",
-        "ALTER TABLE shipments ADD COLUMN h3_score REAL",
-    ]
-
-    for migration in migrations:
+def _jsonify(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, psycopg2.extras.Json):
+        return value
+    if isinstance(value, (dict, list)):
+        return psycopg2.extras.Json(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return value
         try:
-            cursor.execute(migration)
-            logger.info(f"Migration executed: {migration}")
-        except sqlite3.OperationalError as e:
-            if "duplicate column name" in str(e):
-                logger.debug(f"Column already exists, skipping: {migration}")
-            else:
-                logger.error(f"Migration failed: {migration} — {e}")
-                raise
+            return psycopg2.extras.Json(json.loads(text))
+        except json.JSONDecodeError:
+            return value
+    return value
 
-    conn.commit()
-    conn.close()
+
+def _coerce_value(column: str, value: Any) -> Any:
+    if column in JSONB_COLUMNS:
+        return _jsonify(value)
+    if column in TEXT_SERIALIZED_COLUMNS and value is not None and not isinstance(value, str):
+        return json.dumps(value)
+    return value
+
+
+def _normalize_json_fields(row: Optional[Dict[str, Any]], fields: set[str]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    payload = dict(row)
+    for field in fields:
+        value = payload.get(field)
+        if isinstance(value, str):
+            try:
+                payload[field] = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+    return payload
+
+
+def _normalize_rows(rows: List[Dict[str, Any]], fields: set[str]) -> List[Dict[str, Any]]:
+    return [_normalize_json_fields(dict(row), fields) for row in rows]
+
+
+def _risk_level(score: Optional[float]) -> Optional[str]:
+    if score is None:
+        return None
+    if score >= 80:
+        return "HIGH"
+    if score >= 50:
+        return "MEDIUM"
+    return "LOW"
+
+
+def _record_score_history(
+    cursor,
+    shipment_id: str,
+    score: Optional[float],
+    model_version: Optional[str] = None,
+    model_maturity: Optional[int] = None,
+) -> None:
+    if score is None:
+        return
+    cursor.execute(
+        """
+        INSERT INTO score_history (shipment_id, score, model_version, model_maturity, scored_at)
+        VALUES (%s, %s, %s, %s, %s)
+        """,
+        (shipment_id, score, model_version, model_maturity, datetime.utcnow()),
+    )
+
+
+def _seed_top_shipment_scenarios(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT id, COALESCE(risk_score, 50.0) AS risk_score
+        FROM shipments
+        ORDER BY COALESCE(risk_score, 0) DESC
+        LIMIT 3
+        """
+    )
+    for shipment in cursor.fetchall():
+        shipment_id = shipment["id"]
+        current_risk = shipment["risk_score"] or 50.0
+        cursor.execute(
+            "SELECT COUNT(*) AS count FROM risk_what_if_scenarios WHERE shipment_id = %s",
+            (shipment_id,),
+        )
+        if cursor.fetchone()["count"] > 0:
+            continue
+
+        scenarios = [
+            {
+                "name": "OFAC Hit Confirmed",
+                "description": "If entity is confirmed on OFAC SDN list",
+                "if_true_score": min(current_risk + 25, 100.0),
+                "if_false_score": max(current_risk - 5, 0.0),
+                "priority": "HIGH",
+                "impact_category": "Sanctions-Exposure",
+            },
+            {
+                "name": "ISF Element 9 Mismatch Confirmed",
+                "description": "If stuffing location verification confirms ISF mismatch",
+                "if_true_score": min(current_risk + 15, 100.0),
+                "if_false_score": max(current_risk - 10, 0.0),
+                "priority": "HIGH",
+                "impact_category": "Manifest-Anomaly",
+            },
+            {
+                "name": "Shell Company Chain Detected",
+                "description": "If entity resolution finds shell company ownership chain",
+                "if_true_score": min(current_risk + 20, 100.0),
+                "if_false_score": max(current_risk - 3, 0.0),
+                "priority": "MEDIUM",
+                "impact_category": "Entity-Layering",
+            },
+        ]
+
+        for scenario in scenarios:
+            cursor.execute(
+                """
+                INSERT INTO risk_what_if_scenarios (
+                    id, shipment_id, scenario_name, scenario_description, scenario_priority,
+                    what_if_true_description, what_if_true_evidence_needed, what_if_true_risk_score,
+                    what_if_false_description, what_if_false_evidence_needed, what_if_false_risk_score,
+                    current_risk_score, impact_category, investigation_recommendation, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (
+                    str(uuid.uuid4()),
+                    shipment_id,
+                    scenario["name"],
+                    scenario["description"],
+                    scenario["priority"],
+                    f"Risk increases to {scenario['if_true_score']:.0f}/100",
+                    "Positive OFAC match, court documents, or customs intelligence",
+                    scenario["if_true_score"],
+                    f"Risk decreases to {scenario['if_false_score']:.0f}/100",
+                    "Entity cleared by sanctions screening, or alternative documentation provided",
+                    scenario["if_false_score"],
+                    current_risk,
+                    scenario["impact_category"],
+                    f"Prioritize investigation into {scenario['name'].lower()}; escalate to enforcement if confirmed",
+                    datetime.utcnow(),
+                ),
+            )
+
+
+def _seed_reference_data(cursor) -> None:
+    cursor.execute("SELECT COUNT(*) AS count FROM eapa_cases")
+    if cursor.fetchone()["count"] == 0:
+        eapa_cases = [
+            ("Greenfield Industrial Trading Co.", "VN", "US", 2023, 2800000.0, "Completed", "Aluminum Extrusions (7604)"),
+            ("Shanghai Pacific Metals Ltd.", "CN", "US", 2023, 3500000.0, "Completed", "Steel Coils"),
+            ("Vietnam Trade Solutions", "VN", "US", 2022, 1200000.0, "Completed", "Textiles & Apparel"),
+            ("Foshan Global Import", "CN", "US", 2022, 5600000.0, "Completed", "Aluminum Extrusions (7604)"),
+            ("ASEAN Commerce Group", "TH", "US", 2023, 750000.0, "Completed", "Electronics"),
+        ]
+        for entity_name, origin, dest, year, duty_evaded, outcome, product in eapa_cases:
+            cursor.execute(
+                """
+                INSERT INTO eapa_cases (
+                    id, entity_name, origin_country, destination_country, case_id, case_year,
+                    duty_evaded_usd, outcome, product_description, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (
+                    str(uuid.uuid4()),
+                    entity_name,
+                    origin,
+                    dest,
+                    f"EAPA-{str(uuid.uuid4())[:8]}",
+                    year,
+                    duty_evaded,
+                    outcome,
+                    product,
+                    datetime.utcnow(),
+                ),
+            )
+
+    cursor.execute("SELECT COUNT(*) AS count FROM comtrade_cache")
+    if cursor.fetchone()["count"] == 0:
+        comtrade_data = [
+            ("CN", "US", "7604", 2023, 1200000000.0),
+            ("VN", "US", "7604", 2023, 180000000.0),
+            ("TH", "US", "7604", 2023, 95000000.0),
+            ("CN", "US", "7210", 2023, 850000000.0),
+            ("IN", "US", "6204", 2023, 450000000.0),
+            ("VN", "US", "6204", 2023, 380000000.0),
+        ]
+        for origin, dest, hs_chapter, year, trade_value in comtrade_data:
+            cursor.execute(
+                """
+                INSERT INTO comtrade_cache (
+                    id, origin_country, destination_country, hs_chapter, year, trade_value_usd, created_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (origin_country, destination_country, hs_chapter, year)
+                DO UPDATE SET
+                    trade_value_usd = EXCLUDED.trade_value_usd,
+                    created_at = EXCLUDED.created_at
+                """,
+                (str(uuid.uuid4()), origin, dest, hs_chapter, year, trade_value, datetime.utcnow()),
+            )
+
+    _seed_top_shipment_scenarios(cursor)
+
+
+def init_db() -> None:
+    """Initialize PostgreSQL schema and seed reference tables."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(INIT_SQL_PATH.read_text())
+        _seed_reference_data(cursor)
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def create_shipment(
@@ -625,59 +298,79 @@ def create_shipment(
     description: Optional[str] = None,
     vessel_name: Optional[str] = None,
     manifest_source_id: Optional[str] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> str:
-    """Create a new shipment record, return ID"""
+    """Create a new shipment record, return ID."""
     shipment_id = str(uuid.uuid4())
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO shipments (
+                id, manifest_id, shipper_name, consignee_name, origin_country, destination_country,
+                hs_code, declared_value_usd, declared_weight_kg, description, vessel_name,
+                manifest_source_id, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                shipment_id,
+                manifest_id,
+                shipper_name,
+                consignee_name,
+                origin_country,
+                destination_country,
+                hs_code,
+                declared_value_usd,
+                declared_weight_kg,
+                description,
+                vessel_name,
+                manifest_source_id,
+                datetime.utcnow(),
+            ),
+        )
+        created_id = cursor.fetchone()["id"]
+        conn.commit()
+        return created_id
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute("""
-        INSERT INTO shipments
-        (id, manifest_id, shipper_name, consignee_name, origin_country, destination_country,
-         hs_code, declared_value_usd, declared_weight_kg, description, vessel_name, manifest_source_id, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (shipment_id, manifest_id, shipper_name, consignee_name, origin_country,
-          destination_country, hs_code, declared_value_usd, declared_weight_kg,
-          description, vessel_name, manifest_source_id, datetime.utcnow().isoformat()))
 
-    conn.commit()
-    conn.close()
-    return shipment_id
-
-
-def create_manifest(
-    filename: str,
-    row_count: int,
-    extracted_at: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> str:
-    """Create a new manifest record, return ID"""
+def create_manifest(filename: str, row_count: int, extracted_at: str) -> str:
+    """Create a new manifest record, return ID."""
     manifest_id = str(uuid.uuid4())
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO manifests (id, filename, row_count, extracted_at, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (manifest_id, filename, row_count, extracted_at, datetime.utcnow()),
+        )
+        created_id = cursor.fetchone()["id"]
+        conn.commit()
+        return created_id
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute("""
-        INSERT INTO manifests (id, filename, row_count, extracted_at, created_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (manifest_id, filename, row_count, extracted_at, datetime.utcnow().isoformat()))
 
-    conn.commit()
-    conn.close()
-    return manifest_id
-
-
-def get_shipment(shipment_id: str, db_path: str = "/app/data/cbp_sentry.db") -> Optional[Dict[str, Any]]:
-    """Fetch a single shipment by ID"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM shipments WHERE id = ?", (shipment_id,))
-    row = cursor.fetchone()
-    conn.close()
-
-    return dict(row) if row else None
+def get_shipment(shipment_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch a single shipment by ID."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute("SELECT * FROM shipments WHERE id = %s", (shipment_id,))
+        row = cursor.fetchone()
+        return _normalize_json_fields(row, SHIPMENT_RESPONSE_JSON_COLUMNS)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def get_all_shipments(
@@ -687,51 +380,45 @@ def get_all_shipments(
     corridor_id: Optional[str] = None,
     risk_min: Optional[float] = None,
     risk_max: Optional[float] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> List[Dict[str, Any]]:
-    """Fetch shipments with server-side filtering by corridor and risk level"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+    """Fetch shipments with server-side filtering by corridor and risk level."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        where_conditions: List[str] = []
+        params: List[Any] = []
 
-    # Build WHERE clause dynamically
-    # No ID filter - return all shipments (manifest data uses numeric IDs)
-    where_conditions = []
-    params = []
+        if status:
+            where_conditions.append("status = %s")
+            params.append(status)
 
-    if status:
-        where_conditions.append("status = ?")
-        params.append(status)
+        if corridor_id:
+            if "→" in corridor_id:
+                origin, dest = corridor_id.split("→", 1)
+                where_conditions.append("origin_country = %s AND destination_country = %s")
+                params.extend([origin, dest])
+            else:
+                where_conditions.append("corridor_id = %s")
+                params.append(corridor_id)
 
-    # Handle corridor_id filter
-    if corridor_id:
-        # Decode corridor_id from format "VN→US" to origin/dest
-        if "→" in corridor_id:
-            origin, dest = corridor_id.split("→")
-            where_conditions.append("origin_country = ? AND destination_country = ?")
-            params.extend([origin, dest])
-        else:
-            # Fallback: assume it's a corridor format
-            where_conditions.append("corridor_id = ?")
-            params.append(corridor_id)
+        if risk_min is not None:
+            where_conditions.append("COALESCE(risk_score, 0) >= %s")
+            params.append(risk_min)
 
-    # Handle risk level filters
-    if risk_min is not None:
-        where_conditions.append("COALESCE(risk_score, 0) >= ?")
-        params.append(risk_min)
+        if risk_max is not None:
+            where_conditions.append("COALESCE(risk_score, 0) <= %s")
+            params.append(risk_max)
 
-    if risk_max is not None:
-        where_conditions.append("COALESCE(risk_score, 0) <= ?")
-        params.append(risk_max)
-
-    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-    query = f"SELECT * FROM shipments WHERE {where_clause} ORDER BY COALESCE(risk_score, 0) DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
-
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+        where_clause = " AND ".join(where_conditions) if where_conditions else "TRUE"
+        params.extend([limit, offset])
+        cursor.execute(
+            f"SELECT * FROM shipments WHERE {where_clause} ORDER BY COALESCE(risk_score, 0) DESC LIMIT %s OFFSET %s",
+            params,
+        )
+        return _normalize_rows(cursor.fetchall(), SHIPMENT_RESPONSE_JSON_COLUMNS)
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def get_shipments_count(
@@ -739,224 +426,218 @@ def get_shipments_count(
     corridor_id: Optional[str] = None,
     risk_min: Optional[float] = None,
     risk_max: Optional[float] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> int:
-    """Get total count of manifest shipments (SHP-*) with optional filtering"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    """Get total count of shipments with optional filtering."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        where_conditions: List[str] = []
+        params: List[Any] = []
 
-    # Build WHERE clause dynamically (same as get_all_shipments)
-    # No ID filter - count all shipments (manifest data uses numeric IDs)
-    where_conditions = []
-    params = []
+        if status:
+            where_conditions.append("status = %s")
+            params.append(status)
 
-    if status:
-        where_conditions.append("status = ?")
-        params.append(status)
+        if corridor_id:
+            if "→" in corridor_id:
+                origin, dest = corridor_id.split("→", 1)
+                where_conditions.append("origin_country = %s AND destination_country = %s")
+                params.extend([origin, dest])
+            else:
+                where_conditions.append("corridor_id = %s")
+                params.append(corridor_id)
 
-    if corridor_id:
-        if "→" in corridor_id:
-            origin, dest = corridor_id.split("→")
-            where_conditions.append("origin_country = ? AND destination_country = ?")
-            params.extend([origin, dest])
-        else:
-            where_conditions.append("corridor_id = ?")
-            params.append(corridor_id)
+        if risk_min is not None:
+            where_conditions.append("COALESCE(risk_score, 0) >= %s")
+            params.append(risk_min)
 
-    if risk_min is not None:
-        where_conditions.append("COALESCE(risk_score, 0) >= ?")
-        params.append(risk_min)
+        if risk_max is not None:
+            where_conditions.append("COALESCE(risk_score, 0) <= %s")
+            params.append(risk_max)
 
-    if risk_max is not None:
-        where_conditions.append("COALESCE(risk_score, 0) <= ?")
-        params.append(risk_max)
-
-    where_clause = " AND ".join(where_conditions) if where_conditions else "1=1"
-    query = f"SELECT COUNT(*) FROM shipments WHERE {where_clause}"
-
-    cursor.execute(query, params)
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count
+        where_clause = " AND ".join(where_conditions) if where_conditions else "TRUE"
+        cursor.execute(f"SELECT COUNT(*) AS count FROM shipments WHERE {where_clause}", params)
+        return int(cursor.fetchone()["count"])
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def update_shipment(shipment_id: str, updates: Dict[str, Any], db_path: str = "/app/data/cbp_sentry.db") -> bool:
-    """Update shipment fields"""
+def update_shipment(shipment_id: str, updates: Dict[str, Any]) -> bool:
+    """Update shipment fields."""
     if not updates:
         return True
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # Build dynamic UPDATE query
-    set_clause = ", ".join([f"{k} = ?" for k in updates.keys()])
-    values = list(updates.values()) + [shipment_id]
-
-    cursor.execute(f"UPDATE shipments SET {set_clause}, updated_at = ? WHERE id = ?",
-                   values[:-1] + [datetime.utcnow().isoformat(), shipment_id])
-
-    conn.commit()
-    conn.close()
-    return cursor.rowcount > 0
-
-
-def get_shipments_stats(db_path: str = "/app/data/cbp_sentry.db") -> Dict[str, Any]:
-    """Get dashboard statistics"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) as total FROM shipments")
-    total = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM shipments WHERE risk_score >= 80")
-    high_risk = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM shipments WHERE risk_score >= 50 AND risk_score < 80")
-    medium_risk = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM shipments WHERE risk_score < 50")
-    low_risk = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM shipments WHERE ofac_match = 1")
-    ofac_matches = cursor.fetchone()[0]
-
-    conn.close()
-
-    return {
-        "total_shipments": total,
-        "high_risk": high_risk,
-        "medium_risk": medium_risk,
-        "low_risk": low_risk,
-        "ofac_matches": ofac_matches
-    }
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        assignments = [
+            sql.SQL("{} = %s").format(sql.Identifier(column))
+            for column in updates.keys()
+        ]
+        values = [_coerce_value(column, value) for column, value in updates.items()]
+        query = sql.SQL("UPDATE shipments SET {}, updated_at = %s WHERE id = %s").format(
+            sql.SQL(", ").join(assignments)
+        )
+        cursor.execute(query, values + [datetime.utcnow(), shipment_id])
+        updated = cursor.rowcount > 0
+        if updated:
+            score_value = updates.get("calculated_risk_score", updates.get("risk_score"))
+            _record_score_history(
+                cursor,
+                shipment_id,
+                score_value,
+                updates.get("model_version"),
+                updates.get("model_maturity"),
+            )
+        conn.commit()
+        return updated
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def search_shipments(
-    query: str,
-    limit: int = 50,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Search shipments by shipper/consignee name"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    search_term = f"%{query}%"
-    cursor.execute("""
-        SELECT * FROM shipments
-        WHERE shipper_name LIKE ? OR consignee_name LIKE ? OR hs_code LIKE ?
-        ORDER BY created_at DESC LIMIT ?
-    """, (search_term, search_term, search_term, limit))
-
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
-
-
-def get_corridors(db_path: str = "/app/data/cbp_sentry.db") -> List[Dict[str, Any]]:
-    """Fetch all corridors with computed shipment statistics"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM corridors ORDER BY risk_level DESC, id ASC")
-    corridors = [dict(row) for row in cursor.fetchall()]
-
-    # Compute stats for each corridor
-    for corridor in corridors:
-        origin = corridor["origin_country"]
-        dest = corridor["destination_country"]
-
-        cursor.execute("""
+def get_shipments_stats() -> Dict[str, Any]:
+    """Get dashboard statistics."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
             SELECT
-                COUNT(*) as shipment_count,
-                AVG(risk_score) as avg_risk_score,
-                COUNT(CASE WHEN element9_is_mismatch = 1 THEN 1 END) as mismatch_count,
-                AVG(shipper_age_months) as avg_shipper_age,
-                COUNT(DISTINCT shipper_name) as unique_shippers
+                COUNT(*) AS total_shipments,
+                COUNT(*) FILTER (WHERE COALESCE(risk_score, 0) >= 80) AS high_risk,
+                COUNT(*) FILTER (WHERE COALESCE(risk_score, 0) >= 50 AND COALESCE(risk_score, 0) < 80) AS medium_risk,
+                COUNT(*) FILTER (WHERE COALESCE(risk_score, 0) < 50) AS low_risk,
+                COUNT(*) FILTER (WHERE ofac_match = TRUE) AS ofac_matches
             FROM shipments
-            WHERE origin_country = ? AND destination_country = ?
-        """, (origin, dest))
+            """
+        )
+        stats = cursor.fetchone() or {}
+        return {
+            "total_shipments": int(stats.get("total_shipments", 0)),
+            "high_risk": int(stats.get("high_risk", 0)),
+            "medium_risk": int(stats.get("medium_risk", 0)),
+            "low_risk": int(stats.get("low_risk", 0)),
+            "ofac_matches": int(stats.get("ofac_matches", 0)),
+        }
+    finally:
+        cursor.close()
+        conn.close()
 
-        stats = cursor.fetchone()
-        if stats:
-            total = stats["shipment_count"]
-            mismatch_rate = (stats["mismatch_count"] / total * 100) if total > 0 else 0
+
+def search_shipments(query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Search shipments by shipper/consignee name."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        search_term = f"%{query}%"
+        cursor.execute(
+            """
+            SELECT * FROM shipments
+            WHERE shipper_name ILIKE %s OR consignee_name ILIKE %s OR hs_code ILIKE %s
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (search_term, search_term, search_term, limit),
+        )
+        return _normalize_rows(cursor.fetchall(), SHIPMENT_RESPONSE_JSON_COLUMNS)
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def get_corridors() -> List[Dict[str, Any]]:
+    """Fetch all corridors with computed shipment statistics."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute("SELECT * FROM corridors ORDER BY risk_level DESC, id ASC")
+        corridors = [dict(row) for row in cursor.fetchall()]
+
+        for corridor in corridors:
+            cursor.execute(
+                """
+                SELECT
+                    COUNT(*) AS shipment_count,
+                    AVG(risk_score) AS avg_risk_score,
+                    COUNT(*) FILTER (WHERE element9_is_mismatch = TRUE) AS mismatch_count,
+                    AVG(shipper_age_months) AS avg_shipper_age,
+                    COUNT(DISTINCT shipper_name) AS unique_shippers
+                FROM shipments
+                WHERE origin_country = %s AND destination_country = %s
+                """,
+                (corridor["origin_country"], corridor["destination_country"]),
+            )
+            stats = cursor.fetchone() or {}
+            total = int(stats.get("shipment_count") or 0)
+            mismatch_count = int(stats.get("mismatch_count") or 0)
             corridor["computed_stats"] = {
                 "shipment_count": total,
-                "avg_risk_score": round(stats["avg_risk_score"], 2) if stats["avg_risk_score"] else 0,
-                "element9_mismatch_rate_pct": round(mismatch_rate, 1),
-                "avg_shipper_age_months": round(stats["avg_shipper_age"], 1) if stats["avg_shipper_age"] else 0,
-                "unique_shippers": stats["unique_shippers"] or 0,
+                "avg_risk_score": round(float(stats.get("avg_risk_score") or 0), 2),
+                "element9_mismatch_rate_pct": round((mismatch_count / total * 100) if total else 0, 1),
+                "avg_shipper_age_months": round(float(stats.get("avg_shipper_age") or 0), 1),
+                "unique_shippers": int(stats.get("unique_shippers") or 0),
             }
-        else:
-            corridor["computed_stats"] = {
-                "shipment_count": 0,
-                "avg_risk_score": 0,
-                "element9_mismatch_rate_pct": 0,
-                "avg_shipper_age_months": 0,
-                "unique_shippers": 0,
-            }
-
-    conn.close()
-    return corridors
-
-
-def get_corridor_detail(corridor_id: str, db_path: str = "/app/data/cbp_sentry.db") -> Optional[Dict[str, Any]]:
-    """Fetch single corridor with duties, enforcement actions, and shipment statistics"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM corridors WHERE id = ?", (corridor_id,))
-    corridor = cursor.fetchone()
-    if not corridor:
+        return corridors
+    finally:
+        cursor.close()
         conn.close()
-        return None
 
-    corridor = dict(corridor)
 
-    # Get duties
-    cursor.execute("SELECT * FROM corridor_duties WHERE corridor_id = ? AND status = 'ACTIVE'", (corridor_id,))
-    corridor["duties"] = [dict(row) for row in cursor.fetchall()]
+def get_corridor_detail(corridor_id: str) -> Optional[Dict[str, Any]]:
+    """Fetch single corridor with duties, enforcement actions, and shipment statistics."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute("SELECT * FROM corridors WHERE id = %s", (corridor_id,))
+        corridor = cursor.fetchone()
+        if not corridor:
+            return None
 
-    # Get enforcement actions
-    cursor.execute("SELECT * FROM corridor_enforcement_actions WHERE corridor_id = ?", (corridor_id,))
-    corridor["enforcement_actions"] = [dict(row) for row in cursor.fetchall()]
+        payload = dict(corridor)
 
-    # Compute pattern stats from shipments
-    origin = corridor["origin_country"]
-    dest = corridor["destination_country"]
+        cursor.execute(
+            "SELECT * FROM corridor_duties WHERE corridor_id = %s AND status = 'ACTIVE' ORDER BY id",
+            (corridor_id,),
+        )
+        payload["duties"] = [dict(row) for row in cursor.fetchall()]
 
-    cursor.execute("""
-        SELECT
-            COUNT(*) as shipment_count,
-            AVG(risk_score) as avg_risk_score,
-            COUNT(CASE WHEN element9_is_mismatch = 1 THEN 1 END) as mismatch_count,
-            AVG(shipper_age_months) as avg_shipper_age,
-            COUNT(DISTINCT shipper_name) as unique_shippers,
-            SUM(declared_value_usd) as total_value_usd
-        FROM shipments
-        WHERE origin_country = ? AND destination_country = ?
-    """, (origin, dest))
+        cursor.execute(
+            "SELECT * FROM enforcement_actions WHERE corridor_id = %s ORDER BY id",
+            (corridor_id,),
+        )
+        payload["enforcement_actions"] = [dict(row) for row in cursor.fetchall()]
 
-    stats = cursor.fetchone()
-    if stats:
-        total = stats["shipment_count"]
-        mismatch_rate = (stats["mismatch_count"] / total * 100) if total > 0 else 0
-        corridor["pattern_indicators"] = {
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*) AS shipment_count,
+                AVG(risk_score) AS avg_risk_score,
+                COUNT(*) FILTER (WHERE element9_is_mismatch = TRUE) AS mismatch_count,
+                AVG(shipper_age_months) AS avg_shipper_age,
+                COUNT(DISTINCT shipper_name) AS unique_shippers,
+                SUM(declared_value_usd) AS total_value_usd
+            FROM shipments
+            WHERE origin_country = %s AND destination_country = %s
+            """,
+            (payload["origin_country"], payload["destination_country"]),
+        )
+        stats = cursor.fetchone() or {}
+        total = int(stats.get("shipment_count") or 0)
+        mismatch_count = int(stats.get("mismatch_count") or 0)
+        payload["pattern_indicators"] = {
             "shipment_count": total,
-            "avg_risk_score": round(stats["avg_risk_score"], 2) if stats["avg_risk_score"] else 0,
-            "element9_mismatch_rate_pct": round(mismatch_rate, 1),
-            "avg_shipper_age_months": round(stats["avg_shipper_age"], 1) if stats["avg_shipper_age"] else 0,
-            "unique_shippers": stats["unique_shippers"] or 0,
-            "total_value_usd": int(stats["total_value_usd"]) if stats["total_value_usd"] else 0,
+            "avg_risk_score": round(float(stats.get("avg_risk_score") or 0), 2),
+            "element9_mismatch_rate_pct": round((mismatch_count / total * 100) if total else 0, 1),
+            "avg_shipper_age_months": round(float(stats.get("avg_shipper_age") or 0), 1),
+            "unique_shippers": int(stats.get("unique_shippers") or 0),
+            "total_value_usd": int(float(stats.get("total_value_usd") or 0)),
         }
-    else:
-        corridor["pattern_indicators"] = {}
-
-    conn.close()
-    return corridor
+        return payload
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def create_or_update_corridor(
@@ -967,21 +648,43 @@ def create_or_update_corridor(
     risk_level: str = "MEDIUM",
     primary_hs_chapters: Optional[str] = None,
     risk_profile: Optional[str] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> bool:
-    """Create or update a corridor"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT OR REPLACE INTO corridors
-        (id, display_name, origin_country, destination_country, risk_level, primary_hs_chapters, risk_profile, last_refreshed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (corridor_id, display_name, origin_country, destination_country, risk_level, primary_hs_chapters, risk_profile, datetime.utcnow().isoformat()))
-
-    conn.commit()
-    conn.close()
-    return True
+    """Create or update a corridor."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO corridors (
+                id, display_name, origin_country, destination_country,
+                risk_level, primary_hs_chapters, risk_profile, last_refreshed_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                origin_country = EXCLUDED.origin_country,
+                destination_country = EXCLUDED.destination_country,
+                risk_level = EXCLUDED.risk_level,
+                primary_hs_chapters = EXCLUDED.primary_hs_chapters,
+                risk_profile = EXCLUDED.risk_profile,
+                last_refreshed_at = EXCLUDED.last_refreshed_at
+            """,
+            (
+                corridor_id,
+                display_name,
+                origin_country,
+                destination_country,
+                risk_level,
+                primary_hs_chapters,
+                risk_profile,
+                datetime.utcnow(),
+            ),
+        )
+        conn.commit()
+        return True
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def create_corridor_duty(
@@ -993,22 +696,28 @@ def create_corridor_duty(
     rate_pct: Optional[float] = None,
     status: str = "ACTIVE",
     source_url: Optional[str] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> int:
-    """Create a corridor duty record"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO corridor_duties
-        (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, last_refreshed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, datetime.utcnow().isoformat()))
-
-    duty_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return duty_id
+    """Create a corridor duty record."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO corridor_duties (
+                corridor_id, case_number, duty_type, product_description,
+                hs_prefix, rate_pct, status, source_url, last_refreshed_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (corridor_id, case_number, duty_type, product_description, hs_prefix, rate_pct, status, source_url, datetime.utcnow()),
+        )
+        duty_id = int(cursor.fetchone()["id"])
+        conn.commit()
+        return duty_id
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def create_enforcement_action(
@@ -1020,49 +729,66 @@ def create_enforcement_action(
     duty_evaded_usd: Optional[float] = None,
     source_description: Optional[str] = None,
     source_url: Optional[str] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> int:
-    """Create a corridor enforcement action record"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    """Create a corridor enforcement action record."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO enforcement_actions (
+                corridor_id, case_id, entity_name, case_status, case_year,
+                duty_evaded_usd, source_description, source_url, last_refreshed_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                corridor_id,
+                case_id,
+                entity_name,
+                case_status,
+                case_year,
+                duty_evaded_usd,
+                source_description,
+                source_url,
+                datetime.utcnow(),
+            ),
+        )
+        action_id = int(cursor.fetchone()["id"])
+        conn.commit()
+        return action_id
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute("""
-        INSERT INTO corridor_enforcement_actions
-        (corridor_id, case_id, entity_name, case_status, case_year, duty_evaded_usd, source_description, source_url, last_refreshed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (corridor_id, case_id, entity_name, case_status, case_year, duty_evaded_usd, source_description, source_url, datetime.utcnow().isoformat()))
 
-    action_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return action_id
-
-
-def get_pre_manifest_vessels(
-    corridor_id: Optional[str] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Fetch pre-manifest vessels, optionally filtered by corridor"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    if corridor_id:
-        cursor.execute("""
-            SELECT * FROM pre_manifest_vessels
-            WHERE corridor_id = ? AND destination_country = 'US'
-            ORDER BY last_refreshed_at DESC
-        """, (corridor_id,))
-    else:
-        cursor.execute("""
-            SELECT * FROM pre_manifest_vessels
-            WHERE destination_country = 'US'
-            ORDER BY last_refreshed_at DESC
-        """)
-
-    vessels = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return vessels
+def get_pre_manifest_vessels(corridor_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch pre-manifest vessels, optionally filtered by corridor."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        if corridor_id:
+            cursor.execute(
+                """
+                SELECT * FROM pre_manifest_vessels
+                WHERE corridor_id = %s AND destination_country = 'US'
+                ORDER BY last_refreshed_at DESC
+                """,
+                (corridor_id,),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT * FROM pre_manifest_vessels
+                WHERE destination_country = 'US'
+                ORDER BY last_refreshed_at DESC
+                """
+            )
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def create_or_update_pre_manifest_vessel(
@@ -1080,26 +806,59 @@ def create_or_update_pre_manifest_vessel(
     current_lat: Optional[float] = None,
     current_lon: Optional[float] = None,
     speed_knots: Optional[float] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> bool:
-    """Create or update a pre-manifest vessel"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    """Create or update a pre-manifest vessel."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO pre_manifest_vessels (
+                vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country,
+                destination_port, destination_country, corridor_id, eta_us, ais_status,
+                current_lat, current_lon, speed_knots, last_refreshed_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (vessel_imo) DO UPDATE SET
+                vessel_name = EXCLUDED.vessel_name,
+                mmsi = EXCLUDED.mmsi,
+                flag_state = EXCLUDED.flag_state,
+                origin_port = EXCLUDED.origin_port,
+                origin_country = EXCLUDED.origin_country,
+                destination_port = EXCLUDED.destination_port,
+                destination_country = EXCLUDED.destination_country,
+                corridor_id = EXCLUDED.corridor_id,
+                eta_us = EXCLUDED.eta_us,
+                ais_status = EXCLUDED.ais_status,
+                current_lat = EXCLUDED.current_lat,
+                current_lon = EXCLUDED.current_lon,
+                speed_knots = EXCLUDED.speed_knots,
+                last_refreshed_at = EXCLUDED.last_refreshed_at
+            """,
+            (
+                vessel_imo,
+                vessel_name,
+                mmsi,
+                flag_state,
+                origin_port,
+                origin_country,
+                destination_port,
+                destination_country,
+                corridor_id,
+                eta_us,
+                ais_status,
+                current_lat,
+                current_lon,
+                speed_knots,
+                datetime.utcnow(),
+            ),
+        )
+        conn.commit()
+        return True
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute("""
-        INSERT OR REPLACE INTO pre_manifest_vessels
-        (vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country, destination_port, destination_country,
-         corridor_id, eta_us, ais_status, current_lat, current_lon, speed_knots, last_refreshed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (vessel_imo, vessel_name, mmsi, flag_state, origin_port, origin_country, destination_port, destination_country,
-          corridor_id, eta_us, ais_status, current_lat, current_lon, speed_knots, datetime.utcnow().isoformat()))
-
-    conn.commit()
-    conn.close()
-    return True
-
-
-# ============= RISK SCORING LEDGER POPULATION =============
 
 def populate_risk_scoring_ledger(
     shipment_id: str,
@@ -1108,541 +867,598 @@ def populate_risk_scoring_ledger(
     h3_score: float,
     final_risk_score: float,
     shipment_data: Dict[str, Any],
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> bool:
-    """Generate complete risk scoring ledger with components, adjustments, and what-if analysis"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
+    """Generate complete risk scoring ledger with components, adjustments, and what-if analysis."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        # 1. Create component scores
         _populate_risk_components(cursor, shipment_id, h1_score, h2_score, h3_score, shipment_data)
-        
-        # 2. Create adjustments (Altana, multipliers, bonuses)
         _populate_risk_adjustments(cursor, shipment_id, shipment_data, final_risk_score)
-        
-        # 3. Create calculation ledger (step-by-step)
         _populate_risk_ledger(cursor, shipment_id, h1_score, h2_score, h3_score, final_risk_score)
-        
-        # 4. Create what-if scenarios
         _populate_what_if_scenarios(cursor, shipment_id, final_risk_score, shipment_data)
-        
         conn.commit()
-        logger.info(f"✓ Risk scoring ledger populated for shipment {shipment_id}")
+        logger.info("✓ Risk scoring ledger populated for shipment %s", shipment_id)
         return True
-    except Exception as e:
-        logger.error(f"Error populating risk scoring ledger: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("Error populating risk scoring ledger: %s", exc, exc_info=True)
         conn.rollback()
         return False
     finally:
+        cursor.close()
         conn.close()
 
 
 def _populate_risk_components(cursor, shipment_id: str, h1: float, h2: float, h3: float, data: Dict):
-    """Create detailed component breakdown for each scoring tier"""
-    
-    # H1 Components (Corridor Risk)
+    """Create detailed component breakdown for each scoring tier."""
     h1_components = [
-        ('Origin Country Risk', 'corridor', 8.2, 10.0, 0.25, 'High-risk Vietnam-origin corridor'),
-        ('Destination Country Risk', 'corridor', 6.5, 10.0, 0.20, 'US import market with enforcement history'),
-        ('HS Code Commodity Risk', 'commodity', 9.0, 10.0, 0.30, 'Electronics (HS 8541) - controlled commodity'),
-        ('Shipper Age/History', 'entity', 5.0, 10.0, 0.15, 'Shipper established < 12 months ago'),
-        ('Prior Violation Pattern', 'history', 7.5, 10.0, 0.10, '3 elevated cases in 90 days'),
+        ("Origin Country Risk", "corridor", 8.2, 10.0, 0.25, "High-risk Vietnam-origin corridor"),
+        ("Destination Country Risk", "corridor", 6.5, 10.0, 0.20, "US import market with enforcement history"),
+        ("HS Code Commodity Risk", "commodity", 9.0, 10.0, 0.30, "Electronics (HS 8541) - controlled commodity"),
+        ("Shipper Age/History", "entity", 5.0, 10.0, 0.15, "Shipper established < 12 months ago"),
+        ("Prior Violation Pattern", "history", 7.5, 10.0, 0.10, "3 elevated cases in 90 days"),
     ]
-    
     for comp_name, comp_cat, comp_val, comp_max, weight, evidence in h1_components:
-        comp_id = f"{shipment_id}-H1-{comp_name.replace(' ', '-')}"
         weighted = (comp_val / comp_max) * weight
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_score_components
-            (id, shipment_id, component_name, component_category, component_value,
-             component_max, component_weight, weighted_value, evidence, data_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (comp_id, shipment_id, comp_name, 'H1-Corridor-Risk', comp_val, comp_max,
-              weight, weighted, evidence, 'Trade-Intelligence-ISF-Filing'))
-    
-    # H2 Components (Anomaly Detection)
+        cursor.execute(
+            """
+            INSERT INTO risk_components (
+                id, shipment_id, component_name, component_category, component_value,
+                component_max, component_weight, weighted_value, evidence, data_source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-H1-{comp_name.replace(' ', '-')}",
+                shipment_id,
+                comp_name,
+                "H1-Corridor-Risk",
+                comp_val,
+                comp_max,
+                weight,
+                weighted,
+                evidence,
+                "Trade-Intelligence-ISF-Filing",
+            ),
+        )
+
     h2_components = [
-        ('ISF Element 9 Mismatch', 'anomaly', 8.5, 10.0, 0.40, 'Declared VN, actual stuffing CN - AIS verified'),
-        ('AIS Dwell Time Anomaly', 'timing', 7.2, 10.0, 0.30, '11.2 days vs 2.1 day baseline (5.3x)'),
-        ('Port Timing Inconsistency', 'logistics', 6.0, 10.0, 0.20, 'Port manifests show loading delay'),
-        ('Vessel Routing Flag', 'routing', 8.0, 10.0, 0.10, 'Unscheduled port calls, AIS gaps'),
+        ("ISF Element 9 Mismatch", "anomaly", 8.5, 10.0, 0.40, "Declared VN, actual stuffing CN - AIS verified"),
+        ("AIS Dwell Time Anomaly", "timing", 7.2, 10.0, 0.30, "11.2 days vs 2.1 day baseline (5.3x)"),
+        ("Port Timing Inconsistency", "logistics", 6.0, 10.0, 0.20, "Port manifests show loading delay"),
+        ("Vessel Routing Flag", "routing", 8.0, 10.0, 0.10, "Unscheduled port calls, AIS gaps"),
     ]
-    
     for comp_name, comp_cat, comp_val, comp_max, weight, evidence in h2_components:
-        comp_id = f"{shipment_id}-H2-{comp_name.replace(' ', '-')}"
         weighted = (comp_val / comp_max) * weight
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_score_components
-            (id, shipment_id, component_name, component_category, component_value,
-             component_max, component_weight, weighted_value, evidence, data_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (comp_id, shipment_id, comp_name, 'H2-Anomaly-Detection', comp_val, comp_max,
-              weight, weighted, evidence, 'AIS-Archive-Port-Authority-ISF'))
-    
-    # H3 Components (Intelligence Check)
+        cursor.execute(
+            """
+            INSERT INTO risk_components (
+                id, shipment_id, component_name, component_category, component_value,
+                component_max, component_weight, weighted_value, evidence, data_source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-H2-{comp_name.replace(' ', '-')}",
+                shipment_id,
+                comp_name,
+                "H2-Anomaly-Detection",
+                comp_val,
+                comp_max,
+                weight,
+                weighted,
+                evidence,
+                "AIS-Archive-Port-Authority-ISF",
+            ),
+        )
+
     h3_components = [
-        ('OFAC/SDN Match', 'screening', 0.0, 10.0, 0.30, 'No OFAC matches - clean screening'),
-        ('Shipper Entity History', 'entity', 6.5, 10.0, 0.35, 'Limited prior trade history, new market entrant'),
-        ('Consignee Known Violator', 'screening', 0.0, 10.0, 0.15, 'No prior violations on record'),
-        ('Trade Intelligence Finding', 'intelligence', 7.0, 10.0, 0.20, 'Senzing: shared forwarder with 18 prior CN-origin filings'),
+        ("OFAC/SDN Match", "screening", 0.0, 10.0, 0.30, "No OFAC matches - clean screening"),
+        ("Shipper Entity History", "entity", 6.5, 10.0, 0.35, "Limited prior trade history, new market entrant"),
+        ("Consignee Known Violator", "screening", 0.0, 10.0, 0.15, "No prior violations on record"),
+        ("Trade Intelligence Finding", "intelligence", 7.0, 10.0, 0.20, "Senzing: shared forwarder with 18 prior CN-origin filings"),
     ]
-    
     for comp_name, comp_cat, comp_val, comp_max, weight, evidence in h3_components:
-        comp_id = f"{shipment_id}-H3-{comp_name.replace(' ', '-')}"
         weighted = (comp_val / comp_max) * weight
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_score_components
-            (id, shipment_id, component_name, component_category, component_value,
-             component_max, component_weight, weighted_value, evidence, data_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (comp_id, shipment_id, comp_name, 'H3-Intelligence-Check', comp_val, comp_max,
-              weight, weighted, evidence, 'OFAC-Senzing-Trade-Intelligence'))
+        cursor.execute(
+            """
+            INSERT INTO risk_components (
+                id, shipment_id, component_name, component_category, component_value,
+                component_max, component_weight, weighted_value, evidence, data_source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-H3-{comp_name.replace(' ', '-')}",
+                shipment_id,
+                comp_name,
+                "H3-Intelligence-Check",
+                comp_val,
+                comp_max,
+                weight,
+                weighted,
+                evidence,
+                "OFAC-Senzing-Trade-Intelligence",
+            ),
+        )
 
 
 def _populate_risk_adjustments(cursor, shipment_id: str, data: Dict, final_score: float):
-    """Create adjustment records (Altana, multipliers, bonuses, flags)"""
-    
+    """Create adjustment records (Altana, multipliers, bonuses, flags)."""
     adjustments = [
-        ('altana_verification', 'Altana Supply Chain Verification', 4.2, 1.0, 0.92,
-         'Altana Atlas confidence score 0.92 - supply chain inconsistency detected'),
-        ('isf_mismatch_multiplier', 'ISF Element 9 Mismatch Multiplier', 0.0, 1.15, 0.95,
-         'ISF mismatch confirmed via port manifests - apply 1.15x multiplier'),
-        ('multi_corridor_flag', 'Multi-Corridor Red Flag', 3.0, 1.0, 0.88,
-         'Same shipper-consignee pair in 3 high-risk corridors'),
-        ('violation_pattern_bonus', 'Recent Violation Pattern Bonus', 2.5, 1.0, 0.90,
-         '3 elevated-risk cases from same shipper in 90 days'),
-        ('entity_chain_anomaly', 'Senzing Entity Chain Anomaly', 1.8, 1.0, 0.85,
-         'Tier 3 Chinese manufacturing principal with 18 prior direct-origin filings'),
+        ("altana_verification", "Altana Supply Chain Verification", 4.2, 1.0, 0.92, "Altana Atlas confidence score 0.92 - supply chain inconsistency detected"),
+        ("isf_mismatch_multiplier", "ISF Element 9 Mismatch Multiplier", 0.0, 1.15, 0.95, "ISF mismatch confirmed via port manifests - apply 1.15x multiplier"),
+        ("multi_corridor_flag", "Multi-Corridor Red Flag", 3.0, 1.0, 0.88, "Same shipper-consignee pair in 3 high-risk corridors"),
+        ("violation_pattern_bonus", "Recent Violation Pattern Bonus", 2.5, 1.0, 0.90, "3 elevated-risk cases from same shipper in 90 days"),
+        ("entity_chain_anomaly", "Senzing Entity Chain Anomaly", 1.8, 1.0, 0.85, "Tier 3 Chinese manufacturing principal with 18 prior direct-origin filings"),
     ]
-    
     for adj_type, adj_name, adj_amount, adj_mult, conf, evidence in adjustments:
-        adj_id = f"{shipment_id}-ADJ-{adj_type}"
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_score_adjustments
-            (id, shipment_id, adjustment_type, adjustment_name, adjustment_amount,
-             adjustment_multiplier, confidence_score, evidence_detail, data_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (adj_id, shipment_id, adj_type, adj_name, adj_amount, adj_mult, conf,
-              evidence, 'Altana-Senzing-Trade-Intelligence'))
+        cursor.execute(
+            """
+            INSERT INTO risk_adjustments (
+                id, shipment_id, adjustment_type, adjustment_name, adjustment_amount,
+                adjustment_multiplier, confidence_score, evidence_detail, data_source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-ADJ-{adj_type}",
+                shipment_id,
+                adj_type,
+                adj_name,
+                adj_amount,
+                adj_mult,
+                conf,
+                evidence,
+                "Altana-Senzing-Trade-Intelligence",
+            ),
+        )
 
 
 def _populate_risk_ledger(cursor, shipment_id: str, h1: float, h2: float, h3: float, final: float):
-    """Create step-by-step calculation ledger"""
-    
+    """Create step-by-step calculation ledger."""
     steps = [
-        (1, 'H1 Score Calculation', 'Corridor Risk weighted components aggregated', None, 'SUM', h1),
-        (2, 'H2 Score Calculation', 'Anomaly Detection weighted components aggregated', None, 'SUM', h2),
-        (3, 'H3 Score Calculation', 'Intelligence Check weighted components aggregated', None, 'SUM', h3),
-        (4, 'Base Score Aggregation', f'({h1:.2f}×0.40) + ({h2:.2f}×0.35) + ({h3:.2f}×0.25)', None, '+', 
-         (h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)),
-        (5, 'Altana Adjustment', f'Base Score + 4.2 points (confidence: 0.92)', 
-         (h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25), '+', ((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2),
-        (6, 'ISF Mismatch Multiplier', 'Apply 1.15x multiplier for Element 9 mismatch',
-         ((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2, '×', 
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15),
-        (7, 'Red Flag Bonus', 'Add 3.0 points for multi-corridor pattern',
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15, '+',
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0),
-        (8, 'Violation Pattern Bonus', 'Add 2.5 points for recent elevation pattern',
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0, '+',
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0 + 2.5),
-        (9, 'Entity Chain Anomaly Bonus', 'Add 1.8 points for Senzing ownership mismatch',
-         (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0 + 2.5, '+',
-         final),
-        (10, 'FINAL RISK SCORE', f'Complete calculation: {final:.1f}/100',
-         None, 'RESULT', final),
+        (1, "H1 Score Calculation", "Corridor Risk weighted components aggregated", None, "SUM", h1),
+        (2, "H2 Score Calculation", "Anomaly Detection weighted components aggregated", None, "SUM", h2),
+        (3, "H3 Score Calculation", "Intelligence Check weighted components aggregated", None, "SUM", h3),
+        (4, "Base Score Aggregation", f"({h1:.2f}×0.40) + ({h2:.2f}×0.35) + ({h3:.2f}×0.25)", None, "+", (h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)),
+        (5, "Altana Adjustment", "Base Score + 4.2 points (confidence: 0.92)", (h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25), "+", ((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2),
+        (6, "ISF Mismatch Multiplier", "Apply 1.15x multiplier for Element 9 mismatch", ((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2, "×", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15),
+        (7, "Red Flag Bonus", "Add 3.0 points for multi-corridor pattern", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15, "+", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0),
+        (8, "Violation Pattern Bonus", "Add 2.5 points for recent elevation pattern", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0, "+", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0 + 2.5),
+        (9, "Entity Chain Anomaly Bonus", "Add 1.8 points for Senzing ownership mismatch", (((h1 * 0.40) + (h2 * 0.35) + (h3 * 0.25)) + 4.2) * 1.15 + 3.0 + 2.5, "+", final),
+        (10, "FINAL RISK SCORE", f"Complete calculation: {final:.1f}/100", None, "RESULT", final),
     ]
-    
-    for step_num, step_name, step_desc, input_val, op, output_val in steps:
-        ledger_id = f"{shipment_id}-LEDGER-{step_num}"
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_score_ledger
-            (id, shipment_id, ledger_step, step_name, step_description, input_value,
-             operation, output_value, data_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (ledger_id, shipment_id, step_num, step_name, step_desc, input_val, op, output_val,
-              'Three-Level-Scoring-Engine-v2.1'))
+    for step_num, step_name, step_desc, input_val, operation, output_val in steps:
+        cursor.execute(
+            """
+            INSERT INTO risk_ledger (
+                id, shipment_id, ledger_step, step_name, step_description,
+                input_value, operation, output_value, data_source
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-LEDGER-{step_num}",
+                shipment_id,
+                step_num,
+                step_name,
+                step_desc,
+                input_val,
+                operation,
+                output_val,
+                "Three-Level-Scoring-Engine-v2.1",
+            ),
+        )
 
 
 def _populate_what_if_scenarios(cursor, shipment_id: str, current_score: float, data: Dict):
-    """Create what-if scenario analysis"""
-    
+    """Create what-if scenario analysis."""
     scenarios = [
-        ('Vietnam Origin Authenticity', 
-         'Is the declared Vietnamese origin legitimate manufacturing?',
-         'HIGH',
-         'Production records, lot numbers, factory QC documentation all support Vietnamese manufacture',
-         'Factory inspection records, supplier contracts, raw material invoices from verified Vietnamese suppliers',
-         20.5,  # Risk if true (evidence validates origin)
-         'Documents are generic templates, recycled across shipments, no verifiable factory',
-         'Factory visit with customs official, production records with sequential lot numbers, supplier documentation',
-         72.3,  # Risk if false (documents are fraudulent)
-         current_score,
-         current_score - 20.5,
-         current_score + 72.3 - current_score,
-         'CRITICAL',
-         'REQUEST: Factory inspection with CBP, verified supplier documentation, sequential lot tracing'),
-        
-        ('Transshipment Only Model',
-         'Is the shipment merely transiting Vietnam, or is transformation occurring?',
-         'HIGH',
-         'Goods produced elsewhere, routed through Vietnam with minimal handling (warehousing only)',
-         'Warehouse receipt only, goods in sealed containers, no transformation records, direct Vietnam-to-US routing',
-         45.2,  # Risk if true (transit only increases risk)
-         'Goods are substantially transformed in Vietnam (repackaging, QC testing, relabeling)',
-         'Factory transformation records, inspection certificates from Vietnam, assembly/testing documentation',
-         28.7,  # Risk if false (transformation supports origin)
-         current_score,
-         current_score + 45.2 - current_score,
-         current_score - 28.7,
-         'CRITICAL',
-         'REQUEST: Warehouse records for Vietnam location, detailed transformation process documentation'),
-        
-        ('Shipper Legitimacy',
-         'Is the declared shipper a genuine exporter or a shell trading company?',
-         'CRITICAL',
-         'Shipper demonstrates manufacturing ownership through plant contracts, subcontracting agreements, QC traceability',
-         'Multi-year supplier contracts, factory audits, QC records, employee roster at facility, equipment inventory',
-         18.4,  # Risk if true (legitimate shipper lowers risk)
-         'Shipper has no verifiable manufacturing role, operates as paper exporter using third-party suppliers',
-         'Factory visit records, contract with actual manufacturer, shipper business registration, supplier agreements',
-         68.9,  # Risk if false (paper exporter - high risk)
-         current_score,
-         current_score - 18.4,
-         current_score + 68.9 - current_score,
-         'CRITICAL',
-         'REQUEST: Factory location verification, manufacturer contracts, QC documentation, shipper registration'),
-        
-        ('ISF Element 9 Resolution',
-         'Can the ISF Element 9 country mismatch be explained by legitimate circumstances?',
-         'HIGH',
-         'Declared manufacturing location in Vietnam verified; AIS dwell explained by legitimate delays (port congestion)',
-         'Factory documentation showing production, shipper statement on delays, port authority congestion records',
-         15.6,  # Risk if true (mismatch is innocent)
-         'Mismatch indicates origin fraud; goods actually produced in China, ISF misrepresented',
-         'Factory audit in declared location, Chinese factory source records, shipper documentation',
-         88.2,  # Risk if false (mismatch confirms fraud)
-         current_score,
-         current_score - 15.6,
-         current_score + 88.2 - current_score,
-         'CRITICAL',
-         'REQUEST: ISF correction submission, factory audit, shipper sworn affidavit on origin'),
+        ("Vietnam Origin Authenticity", "Is the declared Vietnamese origin legitimate manufacturing?", "HIGH", "Production records, lot numbers, factory QC documentation all support Vietnamese manufacture", "Factory inspection records, supplier contracts, raw material invoices from verified Vietnamese suppliers", 20.5, "Documents are generic templates, recycled across shipments, no verifiable factory", "Factory visit with customs official, production records with sequential lot numbers, supplier documentation", 72.3, current_score, current_score - 20.5, current_score + 72.3 - current_score, "CRITICAL", "REQUEST: Factory inspection with CBP, verified supplier documentation, sequential lot tracing"),
+        ("Transshipment Only Model", "Is the shipment merely transiting Vietnam, or is transformation occurring?", "HIGH", "Goods produced elsewhere, routed through Vietnam with minimal handling (warehousing only)", "Warehouse receipt only, goods in sealed containers, no transformation records, direct Vietnam-to-US routing", 45.2, "Goods are substantially transformed in Vietnam (repackaging, QC testing, relabeling)", "Factory transformation records, inspection certificates from Vietnam, assembly/testing documentation", 28.7, current_score, current_score + 45.2 - current_score, current_score - 28.7, "CRITICAL", "REQUEST: Warehouse records for Vietnam location, detailed transformation process documentation"),
+        ("Shipper Legitimacy", "Is the declared shipper a genuine exporter or a shell trading company?", "CRITICAL", "Shipper demonstrates manufacturing ownership through plant contracts, subcontracting agreements, QC traceability", "Multi-year supplier contracts, factory audits, QC records, employee roster at facility, equipment inventory", 18.4, "Shipper has no verifiable manufacturing role, operates as paper exporter using third-party suppliers", "Factory visit records, contract with actual manufacturer, shipper business registration, supplier agreements", 68.9, current_score, current_score - 18.4, current_score + 68.9 - current_score, "CRITICAL", "REQUEST: Factory location verification, manufacturer contracts, QC documentation, shipper registration"),
+        ("ISF Element 9 Resolution", "Can the ISF Element 9 country mismatch be explained by legitimate circumstances?", "HIGH", "Declared manufacturing location in Vietnam verified; AIS dwell explained by legitimate delays (port congestion)", "Factory documentation showing production, shipper statement on delays, port authority congestion records", 15.6, "Mismatch indicates origin fraud; goods actually produced in China, ISF misrepresented", "Factory audit in declared location, Chinese factory source records, shipper documentation", 88.2, current_score, current_score - 15.6, current_score + 88.2 - current_score, "CRITICAL", "REQUEST: ISF correction submission, factory audit, shipper sworn affidavit on origin"),
     ]
-    
-    for scenario_name, scenario_desc, priority, true_desc, true_evid, true_risk, \
-        false_desc, false_evid, false_risk, curr_risk, impact_true, impact_false, impact_cat, recommendation in scenarios:
-        scenario_id = f"{shipment_id}-SCENARIO-{scenario_name.replace(' ', '-')}"
-        cursor.execute("""
-            INSERT OR IGNORE INTO risk_what_if_scenarios
-            (id, shipment_id, scenario_name, scenario_description, scenario_priority,
-             what_if_true_description, what_if_true_evidence_needed, what_if_true_risk_score,
-             what_if_false_description, what_if_false_evidence_needed, what_if_false_risk_score,
-             current_risk_score, impact_if_true, impact_if_false, impact_category, investigation_recommendation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (scenario_id, shipment_id, scenario_name, scenario_desc, priority,
-              true_desc, true_evid, true_risk,
-              false_desc, false_evid, false_risk,
-              curr_risk, impact_true, impact_false, impact_cat, recommendation))
+    for scenario_name, scenario_desc, priority, true_desc, true_evid, true_risk, false_desc, false_evid, false_risk, curr_risk, impact_true, impact_false, impact_cat, recommendation in scenarios:
+        cursor.execute(
+            """
+            INSERT INTO risk_what_if_scenarios (
+                id, shipment_id, scenario_name, scenario_description, scenario_priority,
+                what_if_true_description, what_if_true_evidence_needed, what_if_true_risk_score,
+                what_if_false_description, what_if_false_evidence_needed, what_if_false_risk_score,
+                current_risk_score, impact_if_true, impact_if_false, impact_category, investigation_recommendation
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                f"{shipment_id}-SCENARIO-{scenario_name.replace(' ', '-')}",
+                shipment_id,
+                scenario_name,
+                scenario_desc,
+                priority,
+                true_desc,
+                true_evid,
+                true_risk,
+                false_desc,
+                false_evid,
+                false_risk,
+                curr_risk,
+                impact_true,
+                impact_false,
+                impact_cat,
+                recommendation,
+            ),
+        )
 
 
-def get_risk_components(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> Dict[str, List[Dict[str, Any]]]:
-    """Get component-level scoring breakdown grouped by category"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT * FROM risk_score_components 
-        WHERE shipment_id = ? 
-        ORDER BY component_category, component_name
-    """, (shipment_id,))
-    
-    components = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    
-    # Group by category
-    grouped = {}
-    for comp in components:
-        cat = comp['component_category']
-        if cat not in grouped:
-            grouped[cat] = []
-        grouped[cat].append(comp)
-    
-    return grouped
+def get_risk_components(shipment_id: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Get component-level scoring breakdown grouped by category."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM risk_components
+            WHERE shipment_id = %s
+            ORDER BY component_category, component_name
+            """,
+            (shipment_id,),
+        )
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for component in cursor.fetchall():
+            payload = dict(component)
+            grouped.setdefault(payload["component_category"], []).append(payload)
+        return grouped
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def get_risk_adjustments(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Get all adjustments, multipliers, and bonuses"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT * FROM risk_score_adjustments 
-        WHERE shipment_id = ? 
-        ORDER BY adjustment_type
-    """, (shipment_id,))
-    
-    adjustments = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return adjustments
+def get_risk_adjustments(shipment_id: str) -> List[Dict[str, Any]]:
+    """Get all adjustments, multipliers, and bonuses."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM risk_adjustments
+            WHERE shipment_id = %s
+            ORDER BY adjustment_type
+            """,
+            (shipment_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def get_risk_ledger(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Get step-by-step calculation ledger"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT * FROM risk_score_ledger 
-        WHERE shipment_id = ? 
-        ORDER BY ledger_step
-    """, (shipment_id,))
-    
-    ledger = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return ledger
+def get_risk_ledger(shipment_id: str) -> List[Dict[str, Any]]:
+    """Get step-by-step calculation ledger."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM risk_ledger
+            WHERE shipment_id = %s
+            ORDER BY ledger_step
+            """,
+            (shipment_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def get_what_if_scenarios(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Get what-if scenario analysis"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        SELECT * FROM risk_what_if_scenarios
-        WHERE shipment_id = ?
-        ORDER BY scenario_priority DESC, scenario_name
-    """, (shipment_id,))
-
-    scenarios = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return scenarios
-
-
-# ============= MANIFEST UPLOAD JOB MANAGEMENT =============
-
-def create_upload_job(
-    job_id: str,
-    filename: str,
-    total_rows: int,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> str:
-    """Create a manifest upload job record"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        INSERT INTO manifest_upload_jobs
-        (id, filename, status, total_rows, created_at)
-        VALUES (?, ?, 'pending', ?, ?)
-    """, (job_id, filename, total_rows, datetime.utcnow().isoformat()))
-
-    conn.commit()
-    conn.close()
-    return job_id
+def get_what_if_scenarios(shipment_id: str) -> List[Dict[str, Any]]:
+    """Get what-if scenario analysis."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            SELECT * FROM risk_what_if_scenarios
+            WHERE shipment_id = %s
+            ORDER BY scenario_priority DESC, scenario_name
+            """,
+            (shipment_id,),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def get_upload_job(
-    job_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> Optional[Dict[str, Any]]:
-    """Get upload job status"""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
+def create_upload_job(job_id: str, filename: str, total_rows: int) -> str:
+    """Create a manifest upload job record."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            INSERT INTO upload_jobs (id, filename, status, total_rows, created_at)
+            VALUES (%s, %s, 'pending', %s, %s)
+            RETURNING id
+            """,
+            (job_id, filename, total_rows, datetime.utcnow()),
+        )
+        created_id = cursor.fetchone()["id"]
+        conn.commit()
+        return created_id
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute("SELECT * FROM manifest_upload_jobs WHERE id = ?", (job_id,))
-    row = cursor.fetchone()
-    conn.close()
 
-    if row:
-        return dict(row)
-    return None
+def get_upload_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Get upload job status."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute("SELECT * FROM upload_jobs WHERE id = %s", (job_id,))
+        return _normalize_json_fields(cursor.fetchone(), {"errors"})
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def update_upload_job(
-    job_id: str,
-    **fields
-) -> None:
-    """Update upload job fields"""
+def update_upload_job(job_id: str, **fields) -> None:
+    """Update upload job fields."""
     if not fields:
         return
 
-    db_path = fields.pop('db_path', "/app/data/cbp_sentry.db")
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-
-    # Build dynamic UPDATE statement
-    set_clause = ", ".join(f"{k} = ?" for k in fields.keys())
-    values = list(fields.values()) + [job_id]
-
-    cursor.execute(f"UPDATE manifest_upload_jobs SET {set_clause} WHERE id = ?", values)
-    conn.commit()
-    conn.close()
-
-
-def batch_create_shipments(
-    rows: List[Dict[str, Any]],
-    manifest_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[str]:
-    """Batch create shipment records, return IDs"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    shipment_ids = []
-
-    for row in rows:
-        shipment_id = str(uuid.uuid4())
-        cursor.execute("""
-            INSERT INTO shipments
-            (id, manifest_id, shipper_name, consignee_name, origin_country, destination_country,
-             hs_code, declared_value_usd, declared_weight_kg, description, vessel_name,
-             vessel_imo, vessel_flag, dwell_days, ais_stuffing_country, port_calls,
-             element9_is_mismatch, element9_declared_country, element9_actual_country,
-             shipper_age_months, ad_cvd_rate, ad_cvd_applicable, manifest_source_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            shipment_id, manifest_id,
-            row.get('shipper_name'), row.get('consignee_name'),
-            row.get('origin_country'), row.get('destination_country'),
-            row.get('hs_code'), row.get('declared_value_usd'),
-            row.get('declared_weight_kg'), row.get('description'),
-            row.get('vessel_name'), row.get('vessel_imo'),
-            row.get('vessel_flag'), row.get('dwell_days'),
-            row.get('ais_stuffing_country'), row.get('port_calls'),
-            row.get('element9_is_mismatch'), row.get('element9_declared_country'),
-            row.get('element9_actual_country'), row.get('shipper_age_months'),
-            row.get('ad_cvd_rate'), row.get('ad_cvd_applicable'),
-            row.get('manifest_source_id'), datetime.utcnow().isoformat()
-        ))
-        shipment_ids.append(shipment_id)
-
-    conn.commit()
-    conn.close()
-    return shipment_ids
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        assignments = [
+            sql.SQL("{} = %s").format(sql.Identifier(column))
+            for column in fields.keys()
+        ]
+        values = [_coerce_value(column, value) for column, value in fields.items()]
+        query = sql.SQL("UPDATE upload_jobs SET {} WHERE id = %s").format(
+            sql.SQL(", ").join(assignments)
+        )
+        cursor.execute(query, values + [job_id])
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def batch_update_risk_scores(
-    updates: List[Dict[str, Any]],
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> None:
-    """Batch update risk scores for shipments"""
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+def batch_create_shipments(rows: List[Dict[str, Any]], manifest_id: str) -> List[str]:
+    """Batch create shipment records, return IDs."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    shipment_ids: List[str] = []
+    columns = [
+        "id", "manifest_id", "shipper_name", "consignee_name", "origin_country", "destination_country",
+        "hs_code", "declared_value_usd", "declared_weight_kg", "description", "vessel_name",
+        "vessel_imo", "vessel_flag", "dwell_days", "ais_stuffing_country", "port_calls",
+        "element9_is_mismatch", "element9_confidence", "element9_declared_country", "element9_actual_country",
+        "shipper_age_months", "shipper_country", "consignee_country", "ad_cvd_rate", "ad_cvd_applicable",
+        "status", "risk_score", "risk_delta", "h1_score", "h2_score", "h3_score", "h1_h2_score",
+        "manifest_source_id", "ship_id", "calculated_risk_score", "risk_score_calculated_at",
+        "risk_score_breakdown", "confidence_interval", "model_version", "model_maturity", "corridor_id",
+        "bill_of_lading", "voyage_number", "h2_signals", "h3_recommendation", "customs_flags",
+        "inspection_history", "commodity_code", "commodity_name", "price_variance_percent",
+        "unit_price_per_kg", "declared_unit_value", "audit_trail", "risk_breakdown", "ai_synthesis",
+        "isf_data", "isf_element_mismatch", "isf_filed_date", "isf_late_filing", "created_at"
+    ]
+    placeholders = ", ".join(["%s"] * len(columns))
+    try:
+        for row in rows:
+            shipment_id = str(uuid.uuid4())
+            values_by_column = {
+                "id": shipment_id,
+                "manifest_id": manifest_id,
+                "shipper_name": row.get("shipper_name"),
+                "consignee_name": row.get("consignee_name"),
+                "origin_country": row.get("origin_country"),
+                "destination_country": row.get("destination_country"),
+                "hs_code": row.get("hs_code"),
+                "declared_value_usd": row.get("declared_value_usd"),
+                "declared_weight_kg": row.get("declared_weight_kg"),
+                "description": row.get("description"),
+                "vessel_name": row.get("vessel_name"),
+                "vessel_imo": row.get("vessel_imo"),
+                "vessel_flag": row.get("vessel_flag"),
+                "dwell_days": row.get("dwell_days"),
+                "ais_stuffing_country": row.get("ais_stuffing_country"),
+                "port_calls": row.get("port_calls"),
+                "element9_is_mismatch": row.get("element9_is_mismatch"),
+                "element9_confidence": row.get("element9_confidence"),
+                "element9_declared_country": row.get("element9_declared_country"),
+                "element9_actual_country": row.get("element9_actual_country"),
+                "shipper_age_months": row.get("shipper_age_months"),
+                "shipper_country": row.get("shipper_country"),
+                "consignee_country": row.get("consignee_country"),
+                "ad_cvd_rate": row.get("ad_cvd_rate"),
+                "ad_cvd_applicable": row.get("ad_cvd_applicable"),
+                "status": row.get("status", "received"),
+                "risk_score": row.get("risk_score"),
+                "risk_delta": row.get("risk_delta"),
+                "h1_score": row.get("h1_score"),
+                "h2_score": row.get("h2_score"),
+                "h3_score": row.get("h3_score"),
+                "h1_h2_score": row.get("h1_h2_score"),
+                "manifest_source_id": row.get("manifest_source_id"),
+                "ship_id": row.get("ship_id"),
+                "calculated_risk_score": row.get("calculated_risk_score"),
+                "risk_score_calculated_at": row.get("risk_score_calculated_at"),
+                "risk_score_breakdown": row.get("risk_score_breakdown"),
+                "confidence_interval": row.get("confidence_interval"),
+                "model_version": row.get("model_version"),
+                "model_maturity": row.get("model_maturity"),
+                "corridor_id": row.get("corridor_id"),
+                "bill_of_lading": row.get("bill_of_lading"),
+                "voyage_number": row.get("voyage_number"),
+                "h2_signals": row.get("h2_signals"),
+                "h3_recommendation": row.get("h3_recommendation"),
+                "customs_flags": row.get("customs_flags"),
+                "inspection_history": row.get("inspection_history"),
+                "commodity_code": row.get("commodity_code"),
+                "commodity_name": row.get("commodity_name"),
+                "price_variance_percent": row.get("price_variance_percent"),
+                "unit_price_per_kg": row.get("unit_price_per_kg"),
+                "declared_unit_value": row.get("declared_unit_value"),
+                "audit_trail": row.get("audit_trail"),
+                "risk_breakdown": row.get("risk_breakdown"),
+                "ai_synthesis": row.get("ai_synthesis"),
+                "isf_data": row.get("isf_data"),
+                "isf_element_mismatch": row.get("isf_element_mismatch"),
+                "isf_filed_date": row.get("isf_filed_date"),
+                "isf_late_filing": row.get("isf_late_filing"),
+                "created_at": datetime.utcnow(),
+            }
+            values = [_coerce_value(column, values_by_column.get(column)) for column in columns]
+            cursor.execute(
+                f"INSERT INTO shipments ({', '.join(columns)}) VALUES ({placeholders})",
+                values,
+            )
+            shipment_ids.append(shipment_id)
+        conn.commit()
+        return shipment_ids
+    finally:
+        cursor.close()
+        conn.close()
 
-    for update in updates:
-        shipment_id = update.get('id')
-        cursor.execute("""
-            UPDATE shipments SET
-            risk_score = ?, h1_score = ?, h2_score = ?, h3_score = ?,
-            status = 'scored', updated_at = ?
-            WHERE id = ?
-        """, (
-            update.get('risk_score'),
-            update.get('h1_score'),
-            update.get('h2_score'),
-            update.get('h3_score'),
-            datetime.utcnow().isoformat(),
-            shipment_id
-        ))
 
-    conn.commit()
-    conn.close()
+def batch_update_risk_scores(updates: List[Dict[str, Any]]) -> None:
+    """Batch update risk scores for shipments."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        for update in updates:
+            shipment_id = update.get("id")
+            if not shipment_id:
+                continue
+
+            fields: Dict[str, Any] = {
+                "risk_score": update.get("risk_score"),
+                "h1_score": update.get("h1_score"),
+                "h2_score": update.get("h2_score"),
+                "h3_score": update.get("h3_score"),
+                "status": update.get("status", "scored"),
+                "updated_at": datetime.utcnow(),
+            }
+            for optional_field in (
+                "calculated_risk_score",
+                "risk_score_calculated_at",
+                "risk_score_breakdown",
+                "confidence_interval",
+                "model_version",
+                "model_maturity",
+            ):
+                if optional_field in update:
+                    fields[optional_field] = update.get(optional_field)
+
+            assignments = [
+                sql.SQL("{} = %s").format(sql.Identifier(column))
+                for column in fields.keys()
+            ]
+            values = [_coerce_value(column, value) for column, value in fields.items()]
+            query = sql.SQL("UPDATE shipments SET {} WHERE id = %s").format(sql.SQL(", ").join(assignments))
+            cursor.execute(query, values + [shipment_id])
+            _record_score_history(
+                cursor,
+                shipment_id,
+                update.get("calculated_risk_score", update.get("risk_score")),
+                update.get("model_version"),
+                update.get("model_maturity"),
+            )
+        conn.commit()
+    finally:
+        cursor.close()
+        conn.close()
 
 
-def find_existing_source_ids(
-    source_ids: List[str],
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> set:
-    """Find which manifest_source_ids already exist in the database"""
+def find_existing_source_ids(source_ids: List[str]) -> set:
+    """Find which manifest_source_ids already exist in the database."""
     if not source_ids:
         return set()
 
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            "SELECT manifest_source_id FROM shipments WHERE manifest_source_id = ANY(%s)",
+            (source_ids,),
+        )
+        return {row["manifest_source_id"] for row in cursor.fetchall() if row.get("manifest_source_id")}
+    finally:
+        cursor.close()
+        conn.close()
 
-    placeholders = ",".join("?" * len(source_ids))
-    cursor.execute(
-        f"SELECT manifest_source_id FROM shipments WHERE manifest_source_id IN ({placeholders})",
-        source_ids
-    )
-
-    existing = {row[0] for row in cursor.fetchall()}
-    conn.close()
-    return existing
-
-
-# ==================== 7-FACTOR RISK SCORING (CLEAN SCHEMA) ====================
 
 def create_or_update_risk_score_cache(
     shipment_id: str,
     final_score: float,
     breakdown_json: str,
     current_model_version: str = "7factor-v1.0",
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> str:
-    """Create or update risk score in cache (current snapshot)"""
+    """Create or update risk score in cache (current snapshot)."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    cache_id = str(uuid.uuid4())
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        cache_id = str(uuid.uuid4())
-        cursor.execute("""
-            INSERT OR REPLACE INTO risk_scores_cache
-            (id, shipment_id, final_score, breakdown_json, current_model_version, calculation_timestamp, is_stale)
-            VALUES (?, ?, ?, ?, ?, ?, 0)
-        """, (
-            cache_id,
-            shipment_id,
-            final_score,
-            breakdown_json,
-            current_model_version,
-            datetime.utcnow().isoformat()
-        ))
-
+        cursor.execute(
+            """
+            INSERT INTO risk_score_cache (
+                id, shipment_id, final_score, risk_level, breakdown_json,
+                current_model_version, calculation_timestamp, is_stale, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, FALSE, %s)
+            ON CONFLICT (shipment_id) DO UPDATE SET
+                final_score = EXCLUDED.final_score,
+                risk_level = EXCLUDED.risk_level,
+                breakdown_json = EXCLUDED.breakdown_json,
+                current_model_version = EXCLUDED.current_model_version,
+                calculation_timestamp = EXCLUDED.calculation_timestamp,
+                is_stale = FALSE,
+                updated_at = EXCLUDED.updated_at
+            RETURNING id
+            """,
+            (
+                cache_id,
+                shipment_id,
+                final_score,
+                _risk_level(final_score),
+                _coerce_value("breakdown_json", breakdown_json),
+                current_model_version,
+                datetime.utcnow(),
+                datetime.utcnow(),
+            ),
+        )
+        saved_id = cursor.fetchone()["id"]
         conn.commit()
+        logger.info("Cached risk score for %s: %s/100 (model: %s)", shipment_id, final_score, current_model_version)
+        return saved_id
+    finally:
+        cursor.close()
         conn.close()
-        logger.info(f"Cached risk score for {shipment_id}: {final_score}/100 (model: {current_model_version})")
-        return cache_id
-    except Exception as e:
-        logger.error(f"Failed to cache risk score for {shipment_id}: {e}")
-        raise
 
 
-def get_risk_score_cache(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> Optional[Dict[str, Any]]:
-    """Retrieve current cached risk score"""
+def get_risk_score_cache(shipment_id: str) -> Optional[Dict[str, Any]]:
+    """Retrieve current cached risk score."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT * FROM risk_scores_cache WHERE shipment_id = ?", (shipment_id,))
-        row = cursor.fetchone()
-        conn.close()
-
-        return dict(row) if row else None
-    except Exception as e:
-        logger.error(f"Failed to retrieve cached score for {shipment_id}: {e}")
+        cursor.execute("SELECT * FROM risk_score_cache WHERE shipment_id = %s", (shipment_id,))
+        return _normalize_json_fields(cursor.fetchone(), {"breakdown_json"})
+    except Exception as exc:
+        logger.error("Failed to retrieve cached score for %s: %s", shipment_id, exc)
         return None
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def record_risk_score_transaction(
@@ -1655,95 +1471,92 @@ def record_risk_score_transaction(
     previous_breakdown_json: str = None,
     triggered_by: str = "system",
     triggered_by_model_version: str = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> str:
-    """Record score change as immutable transaction"""
+    """Record score change as immutable transaction."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    txn_id = str(uuid.uuid4())
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        txn_id = str(uuid.uuid4())
         score_delta = new_final_score - previous_final_score if previous_final_score is not None else None
-
-        cursor.execute("""
-            INSERT INTO risk_score_transactions
-            (id, shipment_id, previous_final_score, new_final_score, score_delta,
-             transaction_type, transaction_reason, previous_breakdown_json, new_breakdown_json,
-             triggered_by, triggered_by_model_version, transaction_timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            txn_id,
-            shipment_id,
-            previous_final_score,
-            new_final_score,
-            score_delta,
-            transaction_type,
-            transaction_reason,
-            previous_breakdown_json,
-            new_breakdown_json,
-            triggered_by,
-            triggered_by_model_version,
-            datetime.utcnow().isoformat()
-        ))
-
+        cursor.execute(
+            """
+            INSERT INTO risk_score_transactions (
+                id, shipment_id, previous_final_score, new_final_score, score_delta,
+                transaction_type, transaction_reason, previous_breakdown_json, new_breakdown_json,
+                triggered_by, triggered_by_model_version, transaction_timestamp
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                txn_id,
+                shipment_id,
+                previous_final_score,
+                new_final_score,
+                score_delta,
+                transaction_type,
+                transaction_reason,
+                _coerce_value("previous_breakdown_json", previous_breakdown_json),
+                _coerce_value("new_breakdown_json", new_breakdown_json),
+                triggered_by,
+                triggered_by_model_version,
+                datetime.utcnow(),
+            ),
+        )
+        saved_id = cursor.fetchone()["id"]
         conn.commit()
+        logger.info("Recorded transaction for %s: %s (%s)", shipment_id, transaction_type, transaction_reason)
+        return saved_id
+    finally:
+        cursor.close()
         conn.close()
-        logger.info(f"Recorded transaction for {shipment_id}: {transaction_type} ({transaction_reason})")
-        return txn_id
-    except Exception as e:
-        logger.error(f"Failed to record transaction for {shipment_id}: {e}")
-        raise
 
 
-def get_risk_score_history(
-    shipment_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> List[Dict[str, Any]]:
-    """Retrieve all score transactions for a shipment"""
+def get_risk_score_history(shipment_id: str) -> List[Dict[str, Any]]:
+    """Retrieve all score transactions for a shipment."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM risk_score_transactions
-            WHERE shipment_id = ?
+            WHERE shipment_id = %s
             ORDER BY transaction_timestamp DESC
-        """, (shipment_id,))
-
-        rows = cursor.fetchall()
+            """,
+            (shipment_id,),
+        )
+        return _normalize_rows(cursor.fetchall(), {"previous_breakdown_json", "new_breakdown_json"})
+    except Exception as exc:
+        logger.error("Failed to retrieve history for %s: %s", shipment_id, exc)
+        return []
+    finally:
+        cursor.close()
         conn.close()
 
-        return [dict(row) for row in rows]
-    except Exception as e:
-        logger.error(f"Failed to retrieve history for {shipment_id}: {e}")
-        return []
 
-
-def mark_scores_stale(
-    model_version: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> int:
-    """Mark all scores from old model as stale"""
+def mark_scores_stale(model_version: str) -> int:
+    """Mark all scores from old model as stale."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            UPDATE risk_scores_cache
-            SET is_stale = 1
-            WHERE current_model_version != ? AND is_stale = 0
-        """, (model_version,))
-
+        cursor.execute(
+            """
+            UPDATE risk_score_cache
+            SET is_stale = TRUE, updated_at = %s
+            WHERE current_model_version != %s AND is_stale = FALSE
+            """,
+            (datetime.utcnow(), model_version),
+        )
         count = cursor.rowcount
         conn.commit()
-        conn.close()
-
-        logger.info(f"Marked {count} scores as stale (new model: {model_version})")
+        logger.info("Marked %s scores as stale (new model: %s)", count, model_version)
         return count
-    except Exception as e:
-        logger.error(f"Failed to mark scores stale: {e}")
+    except Exception as exc:
+        logger.error("Failed to mark scores stale: %s", exc)
         return 0
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def record_altana_scenario(
@@ -1751,19 +1564,16 @@ def record_altana_scenario(
     risk_score_id: str,
     initial_score: float,
     altana_response: Dict[str, Any] = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> Optional[str]:
-    """Record Altana API call (only if score >= 70)"""
+    """Record Altana API call (only if score >= 70)."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    scenario_id = str(uuid.uuid4())
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        scenario_id = str(uuid.uuid4())
         threshold_met = initial_score >= 70
-
+        altana_response = altana_response or {}
         if threshold_met and altana_response:
-            # Calculate adjustment based on confidence
-            confidence = altana_response.get('confidence', 0)
+            confidence = altana_response.get("confidence", 0)
             if confidence > 0.85:
                 adjustment = 5.0
                 bracket = ">85%"
@@ -1773,45 +1583,66 @@ def record_altana_scenario(
             else:
                 adjustment = -8.0
                 bracket = "<60%"
-
             final_score = initial_score + adjustment
         else:
-            adjustment = 0
+            adjustment = 0.0
             bracket = "NOT_CALLED"
             final_score = initial_score
             altana_response = {}
 
-        cursor.execute("""
-            INSERT INTO altana_scenarios
-            (id, shipment_id, risk_score_id, initial_score_before_altana, threshold_met,
-             query_timestamp, altana_confidence, altana_recommendation, altana_risk_factors,
-             supply_chain_opacity, sanctions_exposure, confidence_bracket, adjustment_points,
-             final_score_after_altana)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            scenario_id,
-            shipment_id,
-            risk_score_id,
-            initial_score,
-            threshold_met,
-            datetime.utcnow().isoformat() if threshold_met else None,
-            altana_response.get('confidence'),
-            altana_response.get('recommendation'),
-            json.dumps(altana_response.get('risk_factors', [])),
-            altana_response.get('supply_chain_opacity'),
-            altana_response.get('sanctions_exposure'),
-            bracket,
-            adjustment,
-            final_score
-        ))
-
+        cursor.execute(
+            """
+            INSERT INTO altana_scenarios (
+                id, shipment_id, risk_score_id, initial_score_before_altana, threshold_met,
+                query_timestamp, altana_confidence, altana_recommendation, altana_risk_factors,
+                supply_chain_opacity, sanctions_exposure, confidence_bracket, adjustment_points,
+                final_score_after_altana, updated_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (shipment_id) DO UPDATE SET
+                risk_score_id = EXCLUDED.risk_score_id,
+                initial_score_before_altana = EXCLUDED.initial_score_before_altana,
+                threshold_met = EXCLUDED.threshold_met,
+                query_timestamp = EXCLUDED.query_timestamp,
+                altana_confidence = EXCLUDED.altana_confidence,
+                altana_recommendation = EXCLUDED.altana_recommendation,
+                altana_risk_factors = EXCLUDED.altana_risk_factors,
+                supply_chain_opacity = EXCLUDED.supply_chain_opacity,
+                sanctions_exposure = EXCLUDED.sanctions_exposure,
+                confidence_bracket = EXCLUDED.confidence_bracket,
+                adjustment_points = EXCLUDED.adjustment_points,
+                final_score_after_altana = EXCLUDED.final_score_after_altana,
+                updated_at = EXCLUDED.updated_at
+            RETURNING id
+            """,
+            (
+                scenario_id,
+                shipment_id,
+                risk_score_id,
+                initial_score,
+                threshold_met,
+                datetime.utcnow() if threshold_met else None,
+                altana_response.get("confidence"),
+                altana_response.get("recommendation"),
+                _coerce_value("altana_risk_factors", altana_response.get("risk_factors", [])),
+                altana_response.get("supply_chain_opacity"),
+                altana_response.get("sanctions_exposure"),
+                bracket,
+                adjustment,
+                final_score,
+                datetime.utcnow(),
+            ),
+        )
+        saved_id = cursor.fetchone()["id"]
         conn.commit()
-        conn.close()
-        logger.info(f"Recorded Altana scenario for {shipment_id} (threshold_met={threshold_met})")
-        return scenario_id
-    except Exception as e:
-        logger.error(f"Failed to record Altana scenario for {shipment_id}: {e}")
+        logger.info("Recorded Altana scenario for %s (threshold_met=%s)", shipment_id, threshold_met)
+        return saved_id
+    except Exception as exc:
+        logger.error("Failed to record Altana scenario for %s: %s", shipment_id, exc)
         return None
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def register_model_version(
@@ -1819,143 +1650,151 @@ def register_model_version(
     version_number: str,
     model_params: Dict[str, Any] = None,
     notes: str = None,
-    db_path: str = "/app/data/cbp_sentry.db"
 ) -> str:
-    """Register a new ML model version"""
+    """Register a new ML model version."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    model_id = f"{model_name}-{version_number}"
+    params = model_params or {}
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        model_id = f"{model_name}-{version_number}"
-        model_params = model_params or {}
-
-        cursor.execute("""
-            INSERT OR REPLACE INTO model_versions
-            (id, model_name, version_number, training_date, released_at,
-             isolation_forest_n_estimators, isolation_forest_contamination, isolation_forest_random_state,
-             lightgbm_num_leaves, lightgbm_learning_rate, lightgbm_max_depth,
-             is_active, total_calculations, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)
-        """, (
-            model_id,
-            model_name,
-            version_number,
-            model_params.get('training_date'),
-            datetime.utcnow().isoformat(),
-            model_params.get('isolation_forest_n_estimators'),
-            model_params.get('isolation_forest_contamination'),
-            model_params.get('isolation_forest_random_state'),
-            model_params.get('lightgbm_num_leaves'),
-            model_params.get('lightgbm_learning_rate'),
-            model_params.get('lightgbm_max_depth'),
-            notes
-        ))
-
+        cursor.execute(
+            """
+            INSERT INTO model_versions (
+                id, model_name, version_number, training_date, released_at,
+                isolation_forest_n_estimators, isolation_forest_contamination, isolation_forest_random_state,
+                lightgbm_num_leaves, lightgbm_learning_rate, lightgbm_max_depth,
+                is_active, total_calculations, notes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, TRUE, 0, %s)
+            ON CONFLICT (id) DO UPDATE SET
+                model_name = EXCLUDED.model_name,
+                version_number = EXCLUDED.version_number,
+                training_date = EXCLUDED.training_date,
+                released_at = EXCLUDED.released_at,
+                isolation_forest_n_estimators = EXCLUDED.isolation_forest_n_estimators,
+                isolation_forest_contamination = EXCLUDED.isolation_forest_contamination,
+                isolation_forest_random_state = EXCLUDED.isolation_forest_random_state,
+                lightgbm_num_leaves = EXCLUDED.lightgbm_num_leaves,
+                lightgbm_learning_rate = EXCLUDED.lightgbm_learning_rate,
+                lightgbm_max_depth = EXCLUDED.lightgbm_max_depth,
+                is_active = EXCLUDED.is_active,
+                notes = EXCLUDED.notes
+            RETURNING id
+            """,
+            (
+                model_id,
+                model_name,
+                version_number,
+                params.get("training_date"),
+                datetime.utcnow(),
+                params.get("isolation_forest_n_estimators"),
+                params.get("isolation_forest_contamination"),
+                params.get("isolation_forest_random_state"),
+                params.get("lightgbm_num_leaves"),
+                params.get("lightgbm_learning_rate"),
+                params.get("lightgbm_max_depth"),
+                notes,
+            ),
+        )
+        saved_id = cursor.fetchone()["id"]
         conn.commit()
+        logger.info("Registered model version: %s", saved_id)
+        return saved_id
+    finally:
+        cursor.close()
         conn.close()
-        logger.info(f"Registered model version: {model_id}")
-        return model_id
-    except Exception as e:
-        logger.error(f"Failed to register model version: {e}")
-        raise
 
 
-def get_active_model_version(
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> Optional[Dict[str, Any]]:
-    """Get the currently active model version"""
+def get_active_model_version() -> Optional[Dict[str, Any]]:
+    """Get the currently active model version."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("""
+        cursor.execute(
+            """
             SELECT * FROM model_versions
-            WHERE is_active = 1
+            WHERE is_active = TRUE
             ORDER BY released_at DESC
             LIMIT 1
-        """)
-
+            """
+        )
         row = cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as exc:
+        logger.error("Failed to get active model version: %s", exc)
+        return None
+    finally:
+        cursor.close()
         conn.close()
 
-        return dict(row) if row else None
-    except Exception as e:
-        logger.error(f"Failed to get active model version: {e}")
-        return None
 
-
-def get_model_version_by_id(
-    model_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> Optional[Dict[str, Any]]:
-    """Get a specific model version by ID"""
+def get_model_version_by_id(model_id: str) -> Optional[Dict[str, Any]]:
+    """Get a specific model version by ID."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("SELECT * FROM model_versions WHERE id = ?", (model_id,))
+        cursor.execute("SELECT * FROM model_versions WHERE id = %s", (model_id,))
         row = cursor.fetchone()
-        conn.close()
-
         return dict(row) if row else None
-    except Exception as e:
-        logger.error(f"Failed to get model version {model_id}: {e}")
+    except Exception as exc:
+        logger.error("Failed to get model version %s: %s", model_id, exc)
         return None
-
-
-def deactivate_model_version(
-    model_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> bool:
-    """Deactivate a model version"""
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            UPDATE model_versions
-            SET is_active = 0, deprecated_at = ?
-            WHERE id = ?
-        """, (datetime.utcnow().isoformat(), model_id))
-
-        conn.commit()
+    finally:
+        cursor.close()
         conn.close()
-        logger.info(f"Deactivated model version: {model_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to deactivate model version: {e}")
-        return False
 
 
-def activate_model_version(
-    model_id: str,
-    db_path: str = "/app/data/cbp_sentry.db"
-) -> bool:
-    """Activate a model version (deactivates all others)"""
+def deactivate_model_version(model_id: str) -> bool:
+    """Deactivate a model version."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        # Deactivate all other models
-        cursor.execute("""
+        cursor.execute(
+            """
             UPDATE model_versions
-            SET is_active = 0
-            WHERE id != ?
-        """, (model_id,))
-
-        # Activate the specified model
-        cursor.execute("""
-            UPDATE model_versions
-            SET is_active = 1
-            WHERE id = ?
-        """, (model_id,))
-
+            SET is_active = FALSE, deprecated_at = %s
+            WHERE id = %s
+            """,
+            (datetime.utcnow(), model_id),
+        )
         conn.commit()
-        conn.close()
-        logger.info(f"Activated model version: {model_id}")
+        logger.info("Deactivated model version: %s", model_id)
         return True
-    except Exception as e:
-        logger.error(f"Failed to activate model version: {e}")
+    except Exception as exc:
+        logger.error("Failed to deactivate model version: %s", exc)
         return False
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def activate_model_version(model_id: str) -> bool:
+    """Activate a model version (deactivates all others)."""
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        cursor.execute(
+            """
+            UPDATE model_versions
+            SET is_active = FALSE
+            WHERE id != %s
+            """,
+            (model_id,),
+        )
+        cursor.execute(
+            """
+            UPDATE model_versions
+            SET is_active = TRUE, deprecated_at = NULL, released_at = COALESCE(released_at, %s)
+            WHERE id = %s
+            """,
+            (datetime.utcnow(), model_id),
+        )
+        conn.commit()
+        logger.info("Activated model version: %s", model_id)
+        return True
+    except Exception as exc:
+        logger.error("Failed to activate model version: %s", exc)
+        return False
+    finally:
+        cursor.close()
+        conn.close()

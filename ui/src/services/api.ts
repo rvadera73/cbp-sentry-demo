@@ -509,6 +509,83 @@ class SentryAPI {
       return { status: 'error', parties: [] }
     }
   }
+
+  /**
+   * Stream Ask-AI assistant response with function calling and source attribution
+   * GET /api/gemini/assistant/stream (SSE)
+   *
+   * Returns an async iterable of SSE events: {type, content, tool?, summary?, hit?}
+   */
+  async *streamAskAIResponse(
+    message: string,
+    params?: {
+      session_id?: string
+      page?: string
+      shipment_id?: string
+      entity?: string
+    }
+  ): AsyncGenerator<{ type: string; content?: string; tool?: string; summary?: string; hit?: boolean }, void, unknown> {
+    try {
+      const queryParams = new URLSearchParams({
+        message,
+        ...(params?.session_id && { session_id: params.session_id }),
+        ...(params?.page && { page: params.page }),
+        ...(params?.shipment_id && { shipment_id: params.shipment_id }),
+        ...(params?.entity && { entity: params.entity }),
+      })
+
+      const url = `${API_BASE_URL}/gemini/assistant/stream?${queryParams}`
+      const response = await fetch(url, { method: 'GET' })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) throw new Error('No response body')
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const event = JSON.parse(line.substring(6))
+              yield event
+            } catch (e) {
+              // Skip non-JSON lines
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Ask-AI stream error:', error)
+      yield {
+        type: 'error',
+        content: error instanceof Error ? error.message : 'Unknown error',
+      }
+    }
+  }
+
+  /**
+   * Clear Ask-AI session history
+   * DELETE /api/gemini/assistant/session/{session_id}
+   */
+  async clearAskAISession(session_id: string): Promise<any> {
+    try {
+      const response = await this.client.delete(`/gemini/assistant/session/${session_id}`)
+      return response.data
+    } catch (error) {
+      console.error('Error clearing session:', error)
+      return { status: 'error' }
+    }
+  }
 }
 
 export const api = new SentryAPI()

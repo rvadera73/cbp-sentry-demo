@@ -1,0 +1,155 @@
+{
+  "total_features": 72,
+  "matrix_shape": [
+    10287,
+    72
+  ],
+  "generation_timestamp": "2026-06-12T13:48:12.500247",
+  "factors": {
+    "DOCUMENTATION_RISK": {
+      "weight": 0.25,
+      "count": 12,
+      "features": [
+        "DOCUMENTATION_001_element9_mismatch",
+        "DOCUMENTATION_002_adcvd_applicable",
+        "DOCUMENTATION_003_manifest_completeness",
+        "DOCUMENTATION_004_missing_fields_pct",
+        "DOCUMENTATION_005_value_weight_anomaly",
+        "DOCUMENTATION_006_hs_code_control_level",
+        "DOCUMENTATION_007_shipper_consignee_mismatch",
+        "DOCUMENTATION_008_origin_shipper_mismatch",
+        "DOCUMENTATION_009_country_chain_length",
+        "DOCUMENTATION_010_filing_status_risk",
+        "DOCUMENTATION_011_dwell_time_zscore",
+        "DOCUMENTATION_012_field_count_ratio"
+      ]
+    },
+    "ROUTING_RISK": {
+      "weight": 0.15,
+      "count": 10,
+      "features": [
+        "ROUTING_001_hub_destination",
+        "ROUTING_002_origin_dest_distance",
+        "ROUTING_003_vessel_flag_risk",
+        "ROUTING_004_dwell_time_quartile",
+        "ROUTING_005_multi_port_routing",
+        "ROUTING_006_vessel_condition_score",
+        "ROUTING_007_origin_frequency",
+        "ROUTING_008_complex_routing",
+        "ROUTING_009_transshipment_corridor",
+        "ROUTING_010_destination_mismatch"
+      ]
+    },
+    "COMMODITY_RISK": {
+      "weight": 0.15,
+      "count": 10,
+      "features": [
+        "COMMODITY_001_hs_control_level",
+        "COMMODITY_002_high_value_flag",
+        "COMMODITY_003_electronics_flag",
+        "COMMODITY_004_precious_materials",
+        "COMMODITY_005_unit_price_anomaly",
+        "COMMODITY_006_weight_anomaly",
+        "COMMODITY_007_commodity_origin_risk",
+        "COMMODITY_008_dual_use_equipment",
+        "COMMODITY_009_commodity_frequency",
+        "COMMODITY_010_restricted_destination_match"
+      ]
+    },
+    "CORRIDOR_RISK": {
+      "weight": 0.2,
+      "count": 15,
+      "features": [
+        "CORRIDOR_001_origin_risk_score",
+        "CORRIDOR_002_destination_risk_score",
+        "CORRIDOR_003_shipper_risk_score",
+        "CORRIDOR_004_supply_chain_complexity",
+        "CORRIDOR_005_high_risk_route",
+        "CORRIDOR_006_se_asia_hub_risk",
+        "CORRIDOR_007_china_origin_indicator",
+        "CORRIDOR_008_hong_kong_route",
+        "CORRIDOR_009_corridor_frequency",
+        "CORRIDOR_010_panama_jurisdiction",
+        "CORRIDOR_011_geographic_distance",
+        "CORRIDOR_012_sanctioned_shipper",
+        "CORRIDOR_013_sanctioned_consignee",
+        "CORRIDOR_014_multi_hop_routing",
+        "CORRIDOR_015_combined_corridor_risk"
+      ]
+    },
+    "PARTY_RISK": {
+      "weight": 0.15,
+      "count": 10,
+      "features": [
+        "PARTY_001_shipper_age_risk",
+        "PARTY_002_new_shipper_flag",
+        "PARTY_003_very_new_shipper_flag",
+        "PARTY_004_shipper_name_opacity",
+        "PARTY_005_generic_name_score",
+        "PARTY_006_shipper_legitimacy_score",
+        "PARTY_007_shipper_consignee_match",
+        "PARTY_008_shipper_repeat_frequency",
+        "PARTY_009_location_mismatch_score",
+        "PARTY_010_combined_party_risk"
+      ]
+    },
+    "PATTERN_RISK": {
+      "weight": 0.1,
+      "count": 10,
+      "features": [
+        "PATTERN_001_value_anomaly_score",
+        "PATTERN_002_weight_anomaly_score",
+        "PATTERN_003_vw_ratio_anomaly_score",
+        "PATTERN_004_dwell_anomaly_score",
+        "PATTERN_005_ensemble_anomaly",
+        "PATTERN_006_rare_shipper_dest",
+        "PATTERN_007_corridor_price_deviation",
+        "PATTERN_008_rare_commodity_origin",
+        "PATTERN_009_shipper_concentration",
+        "PATTERN_010_multidim_outlier_score"
+      ]
+    },
+    "TIME_SENSITIVITY": {
+      "weight": 0.1,
+      "count": 5,
+      "features": [
+        "TIME_SENSITIVITY_001_accelerated_shipping",
+        "TIME_SENSITIVITY_002_high_volume_shipper",
+        "TIME_SENSITIVITY_003_port_congestion_proxy",
+        "TIME_SENSITIVITY_004_urgency_indicator",
+        "TIME_SENSITIVITY_005_commodity_surge"
+      ]
+    }
+  },
+  "validation": {
+    "null_values_pct": 0.0,
+    "max_correlation": 1.0,
+    "constant_features": [
+      "DOCUMENTATION_003_manifest_completeness",
+      "DOCUMENTATION_004_missing_fields_pct",
+      "DOCUMENTATION_007_shipper_consignee_mismatch",
+      "DOCUMENTATION_012_field_count_ratio",
+      "ROUTING_001_hub_destination",
+      "ROUTING_002_origin_dest_distance",
+      "ROUTING_003_vessel_flag_risk",
+      "COMMODITY_010_restricted_destination_match",
+      "CORRIDOR_001_origin_risk_score",
+      "CORRIDOR_002_destination_risk_score",
+      "CORRIDOR_005_high_risk_route",
+      "CORRIDOR_008_hong_kong_route",
+      "CORRIDOR_010_panama_jurisdiction",
+      "CORRIDOR_012_sanctioned_shipper",
+      "CORRIDOR_013_sanctioned_consignee",
+      "PARTY_003_very_new_shipper_flag",
+      "PARTY_004_shipper_name_opacity",
+      "PARTY_006_shipper_legitimacy_score",
+      "PARTY_007_shipper_consignee_match",
+      "PATTERN_006_rare_shipper_dest",
+      "TIME_SENSITIVITY_001_accelerated_shipping"
+    ],
+    "issues": [
+      "Constant features: 21",
+      "High correlation: 1.0000"
+    ]
+  }
+}

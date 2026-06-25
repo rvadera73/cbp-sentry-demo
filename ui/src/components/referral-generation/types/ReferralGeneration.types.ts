@@ -16,6 +16,29 @@ export interface ReferralDisplayData {
   risk_breakdown?: RiskBreakdown;
   sections: Record<string, any>;
   edited_sections?: Record<string, EditedSection>;
+  analyzed_sections?: Record<string, AnalyzedSection>;
+  overall_confidence?: number;
+}
+
+export interface AnalyzedSection {
+  section_id: string;
+  raw_data: any;
+  analysis: {
+    narrative: string;
+    risk_factors: Array<{
+      factor: string;
+      level: 'HIGH' | 'MEDIUM' | 'LOW';
+      evidence: string;
+    }>;
+    confidence_score: number;
+  };
+  narrative?: string;
+  risk_factors?: Array<{
+    factor: string;
+    level: 'HIGH' | 'MEDIUM' | 'LOW';
+    evidence: string;
+  }>;
+  confidence_score?: number;
 }
 
 export interface RiskBreakdown {

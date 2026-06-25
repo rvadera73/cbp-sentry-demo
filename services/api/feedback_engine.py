@@ -19,6 +19,15 @@ logger = logging.getLogger(__name__)
 LEARNING_RATE = 0.05  # α for weight adjustment
 CORROBORATION_THRESHOLD = 3  # Number of similar overrides to trigger suggestion
 CONFIDENCE_THRESHOLD = 70.0  # Minimum confidence % to suggest changes
+DEFAULT_7_FACTOR_WEIGHTS = {
+    "w_documentation": 0.25,
+    "w_commodity": 0.15,
+    "w_routing": 0.15,
+    "w_party": 0.15,
+    "w_corridor": 0.20,
+    "w_pattern": 0.10,
+    "w_time": 0.10,
+}
 
 
 class FeedbackEngine:
@@ -31,9 +40,30 @@ class FeedbackEngine:
         elif os.path.exists("/app/data/cbp_sentry.db"):
             self.db_path = "/app/data/cbp_sentry.db"
         else:
-            # Fallback to /tmp directory
-            os.makedirs("/tmp/cbp_sentry", exist_ok=True)
-            self.db_path = "/tmp/cbp_sentry/cbp_sentry.db"
+            self.db_path = "/home/rahulvadera/cbp-sentry/data/cbp_sentry.db"
+
+    @staticmethod
+    def _ensure_weight_configurations_v2(cursor: sqlite3.Cursor) -> None:
+        """Create the 7-factor weight configuration table if it does not exist."""
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weight_configurations_v2 (
+                id TEXT PRIMARY KEY,
+                corridor TEXT,
+                w_documentation REAL NOT NULL,
+                w_commodity REAL NOT NULL,
+                w_routing REAL NOT NULL,
+                w_party REAL NOT NULL,
+                w_corridor REAL NOT NULL,
+                w_pattern REAL NOT NULL,
+                w_time REAL NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP,
+                created_by TEXT NOT NULL,
+                notes TEXT
+            )
+            """
+        )
 
     def record_override(
         self,
@@ -203,18 +233,38 @@ class FeedbackEngine:
         adjustment_map = {
             "factory_expansion": {
                 "feature": "w_corridor",
-                "direction": -0.02,  # Reduce corridor weight
-                "rationale": "Legitimate factory expansions cause false positives in corridor analysis",
+                "direction": -0.02,
+                "rationale": "Legitimate factory expansions reduce corridor weight",
+            },
+            "ais_false_positive": {
+                "feature": "w_routing",
+                "direction": -0.02,
+                "rationale": "AIS anomaly was false positive — reduce routing weight",
+            },
+            "documentation_mismatch": {
+                "feature": "w_documentation",
+                "direction": +0.03,
+                "rationale": "Element 9 mismatch confirmed — increase documentation weight",
+            },
+            "party_legitimate": {
+                "feature": "w_party",
+                "direction": -0.02,
+                "rationale": "Party profile was legitimate — reduce party weight",
+            },
+            "commodity_error": {
+                "feature": "w_commodity",
+                "direction": -0.01,
+                "rationale": "Commodity misclassification — reduce commodity weight",
             },
             "dual_origin": {
-                "feature": "w_manifest",
+                "feature": "w_documentation",
                 "direction": -0.01,
-                "rationale": "Legitimate dual-origin materials cause false positives in manifest analysis",
+                "rationale": "Legitimate dual-origin reduces doc weight",
             },
             "misclassified_vessel": {
-                "feature": "w_vessel",
+                "feature": "w_routing",
                 "direction": -0.03,
-                "rationale": "Vessel route misclassification is causing false alerts",
+                "rationale": "Vessel route misclassification",
             },
         }
 
@@ -374,10 +424,13 @@ class FeedbackEngine:
                 (datetime.utcnow().isoformat(), analyst_name, suggestion_id),
             )
 
-            # Fetch current weight configuration (global or corridor-specific)
+            self._ensure_weight_configurations_v2(cursor)
+
+            # Fetch current 7-factor weight configuration (global or corridor-specific)
             cursor.execute(
                 """
-                SELECT * FROM weight_configurations
+                SELECT *
+                FROM weight_configurations_v2
                 WHERE corridor IS ?
                 ORDER BY created_at DESC
                 LIMIT 1
@@ -388,62 +441,63 @@ class FeedbackEngine:
             weight_config = cursor.fetchone()
 
             if not weight_config:
-                # Create default configuration if none exists
-                logger.warning(f"No weight configuration found for corridor {corridor}, creating default")
-                # Default weights for three-level model (deprecated - using 7-factor model now)
-                DEFAULT_WEIGHTS = {"w_corridor": 0.20, "w_vessel": 0.35, "w_manifest": 0.45}
+                logger.warning(f"No v2 weight configuration found for corridor {corridor}, using defaults")
+                current_weights = DEFAULT_7_FACTOR_WEIGHTS.copy()
+            else:
+                (
+                    _config_id,
+                    _corridor,
+                    w_documentation,
+                    w_commodity,
+                    w_routing,
+                    w_party,
+                    w_corridor,
+                    w_pattern,
+                    w_time,
+                    _created_at,
+                    _updated_at,
+                    _created_by,
+                    _notes,
+                ) = weight_config
+                current_weights = {
+                    "w_documentation": w_documentation,
+                    "w_commodity": w_commodity,
+                    "w_routing": w_routing,
+                    "w_party": w_party,
+                    "w_corridor": w_corridor,
+                    "w_pattern": w_pattern,
+                    "w_time": w_time,
+                }
 
-                cursor.execute(
-                    """
-                    INSERT INTO weight_configurations
-                    (id, corridor, w_corridor, w_vessel, w_manifest, created_at, created_by, notes)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                    (
-                        str(uuid.uuid4()),
-                        corridor,
-                        DEFAULT_WEIGHTS["w_corridor"],
-                        DEFAULT_WEIGHTS["w_vessel"],
-                        DEFAULT_WEIGHTS["w_manifest"],
-                        datetime.utcnow().isoformat(),
-                        analyst_name,
-                        "Auto-created default configuration",
-                    ),
-                )
-                conn.commit()
+            if affected_feature not in current_weights:
+                raise ValueError(f"Unsupported 7-factor feature: {affected_feature}")
 
-                cursor.execute(
-                    """
-                    SELECT * FROM weight_configurations
-                    WHERE corridor IS ?
-                    ORDER BY created_at DESC
-                    LIMIT 1
-                """,
-                    (corridor,),
-                )
-                weight_config = cursor.fetchone()
-
-            config_id, _, config_corridor, w_corridor, w_vessel, w_manifest, _, _, created_by, _ = weight_config
-
-            # Apply adjustment using SGD
-            # W_new = W_old + adjustment_value
-            new_value = getattr(locals(), affected_feature, 0) + suggested_value
+            new_value = current_weights[affected_feature] + suggested_value
             new_value = max(0.01, min(0.99, new_value))  # Clamp to valid range
+            updated_weights = current_weights.copy()
+            updated_weights[affected_feature] = new_value
 
             # Create new configuration record
             new_config_id = str(uuid.uuid4())
             cursor.execute(
                 """
-                INSERT INTO weight_configurations
-                (id, corridor, w_corridor, w_vessel, w_manifest, created_at, created_by, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO weight_configurations_v2
+                (
+                    id, corridor, w_documentation, w_commodity, w_routing, w_party,
+                    w_corridor, w_pattern, w_time, created_at, created_by, notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     new_config_id,
                     corridor,
-                    w_corridor if affected_feature != "w_corridor" else new_value,
-                    w_vessel if affected_feature != "w_vessel" else new_value,
-                    w_manifest if affected_feature != "w_manifest" else new_value,
+                    updated_weights["w_documentation"],
+                    updated_weights["w_commodity"],
+                    updated_weights["w_routing"],
+                    updated_weights["w_party"],
+                    updated_weights["w_corridor"],
+                    updated_weights["w_pattern"],
+                    updated_weights["w_time"],
                     datetime.utcnow().isoformat(),
                     analyst_name,
                     f"Approved suggestion {suggestion_id}: {rationale}",
@@ -460,9 +514,7 @@ class FeedbackEngine:
             return {
                 "config_id": new_config_id,
                 "corridor": corridor,
-                "w_corridor": w_corridor if affected_feature != "w_corridor" else new_value,
-                "w_vessel": w_vessel if affected_feature != "w_vessel" else new_value,
-                "w_manifest": w_manifest if affected_feature != "w_manifest" else new_value,
+                **updated_weights,
                 "applied_suggestion": suggestion_id,
                 "applied_by": analyst_name,
                 "applied_at": datetime.utcnow().isoformat(),
@@ -553,6 +605,35 @@ class FeedbackEngine:
             **default_weights,
             "corridor": corridor,
         }
+
+    def get_current_weights(self) -> Dict[str, float]:
+        """Return current 7-factor weights for use in risk_scoring_engine."""
+        defaults = DEFAULT_7_FACTOR_WEIGHTS.copy()
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            self._ensure_weight_configurations_v2(cursor)
+            cursor.execute("SELECT * FROM weight_configurations_v2 ORDER BY created_at DESC LIMIT 1")
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return {
+                    key: row[key]
+                    for key in (
+                        "w_documentation",
+                        "w_commodity",
+                        "w_routing",
+                        "w_party",
+                        "w_corridor",
+                        "w_pattern",
+                        "w_time",
+                    )
+                    if key in row.keys()
+                }
+        except Exception as e:
+            logger.warning(f"Could not retrieve 7-factor weights: {e}")
+        return defaults
 
 
 # Global feedback engine instance

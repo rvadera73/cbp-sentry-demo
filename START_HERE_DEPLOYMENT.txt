@@ -1,0 +1,258 @@
+================================================================================
+                  🚀 START HERE: Deploy Phase 2 NOW
+================================================================================
+
+You have:
+  ✅ Phase 1: Precise Risk Model (trained, tested)
+  ✅ Phase 2: CBP Sentry Integration (code written, ready to run)
+  ✅ Full testing guide (with test cases & checklist)
+  ✅ Rollback strategy (instant, no redeployment)
+
+Next: RUN IT LOCALLY (3 services, 30 minutes)
+
+================================================================================
+WHAT YOU'RE RUNNING
+================================================================================
+
+SERVICE 1: Precise Risk Engine (Port 8004)
+  ├─ Trained XGBoost model (AUC 1.0)
+  ├─ Isolation Forest + SHAP
+  ├─ Flask API
+  └─ Location: /home/rahulvadera/cbp-sentry/services/risk-engine/
+
+SERVICE 2: CBP Sentry API (Port 8000)
+  ├─ FastAPI application
+  ├─ Phase 2 integration (feature flag + routing)
+  ├─ Fallback mechanism (legacy safety net)
+  └─ Location: /home/rahulvadera/cbp-sentry/services/api/
+
+SERVICE 3: Web UI (Port 3000)
+  ├─ React frontend
+  ├─ All 5 CBP Sentry tabs
+  └─ Location: /home/rahulvadera/cbp-sentry/ui/
+
+================================================================================
+QUICK START (Copy-Paste These)
+================================================================================
+
+TERMINAL 1 - Start Precise Risk Engine:
+────────────────────────────────────────
+cd /home/rahulvadera/cbp-sentry/services/risk-engine
+pip install -r requirements.txt
+python -m flask run --port 8004
+
+# Wait for: ======== Running on http://127.0.0.1:8004 ========
+
+
+TERMINAL 2 - Start CBP Sentry API:
+────────────────────────────────────────
+cd /home/rahulvadera/cbp-sentry/services/api
+export USE_PRECISE_RISK_MODEL=false
+export PRECISE_RISK_ENGINE_URL=http://localhost:8004
+python main.py
+
+# Wait for: INFO:     Uvicorn running on http://0.0.0.0:8000
+
+
+TERMINAL 3 - Test Both Services:
+────────────────────────────────────────
+# Verify both are running
+curl -s http://localhost:8004/health | jq .
+curl -s http://localhost:8000/health | jq .
+
+# Check feature flag (should be OFF)
+curl -s http://localhost:8000/api/feature-flag | jq .
+
+# Score a shipment with legacy model
+curl -X POST http://localhost:8000/api/shipment/score \
+  -H "Content-Type: application/json" \
+  -d '{"shipment_id":"test-001","origin_country":"CN","destination_country":"US","declared_value_usd":50000,"dwell_days":2.5}'
+
+# Should return: {"risk_score": XX, "model_version": "legacy", "route": "legacy", ...}
+
+✅ If you see this → BOTH SERVICES WORKING!
+
+================================================================================
+THEN TEST TRAFFIC RAMPING
+================================================================================
+
+STEP 1: Enable 10% New Model Traffic
+────────────────────────────────────
+curl -X POST http://localhost:8000/api/feature-flag \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "traffic_percentage": 10}'
+
+# Score again
+curl -X POST http://localhost:8000/api/shipment/score ... 
+# Should show: "route": "new" OR "route": "fallback"
+
+
+STEP 2: Increase to 50% Traffic
+────────────────────────────────
+curl -X POST http://localhost:8000/api/feature-flag \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true, "traffic_percentage": 50}'
+
+
+STEP 3: Compare Models Side-by-Side
+────────────────────────────────────
+curl -X POST http://localhost:8000/api/shipment/score/compare \
+  -H "Content-Type: application/json" \
+  -d '{"shipment_id":"compare-001","origin_country":"CN","destination_country":"US","declared_value_usd":50000,"dwell_days":5.5,"element9_is_mismatch":1}'
+
+# Returns: {"legacy_model": {...}, "new_model": {...}, "comparison": {"score_difference": X, "agreement": "AGREE/DIFFER"}}
+
+
+STEP 4: Instant Rollback (If Needed)
+────────────────────────────────────
+curl -X POST http://localhost:8000/api/feature-flag \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": false}'
+
+# Back to legacy immediately (no redeployment!)
+
+================================================================================
+WHAT TO TEST (Checklist)
+================================================================================
+
+FUNCTIONALITY:
+  □ Precise Risk Engine /health responds
+  □ CBP Sentry API /health responds
+  □ Feature flag GET returns state
+  □ Feature flag POST updates state
+  □ Score with legacy model (route="legacy")
+  □ Score with new model (route="new")
+  □ Model comparison (both scores returned)
+  □ Fallback mechanism (new model unavailable → legacy)
+
+PERFORMANCE:
+  □ Legacy model latency < 200ms
+  □ New model latency < 200ms
+  □ P95 latency < 200ms (20 requests)
+  □ No timeout errors
+  □ No memory leaks (1000 requests)
+
+ACCURACY:
+  □ High-risk cases score HIGH (>70)
+  □ Low-risk cases score LOW (<40)
+  □ Models generally agree (diff < 10)
+  □ EAPA cases flagged correctly
+
+BACKWARD COMPATIBILITY:
+  □ CommandCenter tab works
+  □ ActiveInvestigations tab works
+  □ ShipmentIntelligence tab works
+  □ EntityResolution tab works
+  □ V2AITuningPage tab works
+  □ No broken links
+  □ No console errors
+
+================================================================================
+FILES TO SHARE WITH STAKEHOLDERS AFTER TESTING
+================================================================================
+
+DEPLOYMENT:
+  - QUICK_START_DEPLOYMENT.md (step-by-step deployment)
+  - DEPLOYMENT_AND_TESTING_GUIDE.md (detailed testing checklist)
+
+DECISIONS:
+  - PHASE_2_READY_FOR_STAKEHOLDERS.txt (decision framework)
+  - PHASE_2_COMPLETION_REPORT.md (technical details)
+
+ARCHITECTURE:
+  - /docs/precise-risk-model/ (all design docs)
+
+SUMMARY:
+  - This file (START_HERE_DEPLOYMENT.txt)
+
+================================================================================
+ESTIMATED TIMELINE
+================================================================================
+
+30 mins:   Deploy both services locally
+10 mins:   Run basic tests (health checks, feature flag)
+20 mins:   Test legacy model (5 shipments)
+20 mins:   Test new model (5 shipments)
+15 mins:   Test model comparison (3 shipments)
+15 mins:   Test fallback (stop service, verify, restart)
+10 mins:   Traffic ramping (0% → 10% → 50%)
+
+TOTAL:     ~2 hours to full testing
+
+================================================================================
+SUCCESS LOOKS LIKE THIS
+================================================================================
+
+✅ Terminal 1: Flask server running
+✅ Terminal 2: FastAPI server running
+✅ Terminal 3: All curl commands return 200 OK
+✅ Feature flag toggle works
+✅ Legacy model scores shipments
+✅ New model scores shipments
+✅ Fallback to legacy when new unavailable
+✅ Model comparison shows both scores
+✅ Latency < 200ms
+✅ All tabs still load
+✅ Ready for stakeholder demo
+
+================================================================================
+NEXT STEPS AFTER TESTING
+================================================================================
+
+1. ✅ Local testing complete (you are here)
+
+2. ⏳ Stakeholder Demo
+   - Show them both models working
+   - Demonstrate instant rollback
+   - Explain traffic ramping strategy
+   - Get feedback on accuracy
+
+3. ⏳ Staged Deployment (Optional)
+   - Deploy to staging environment
+   - Run full regression tests
+   - Let stakeholders test in staging
+
+4. ⏳ Production Deployment
+   - Deploy Phase 2 code
+   - Keep feature flag OFF (safe)
+   - Start traffic ramping based on feedback
+   - Monitor metrics
+
+5. ⏳ Phase 3 Planning (FDA, Opioid)
+   - After Phase 2 stakeholder feedback
+   - Use Phase 2 learnings
+   - Plan Weeks 9-12 execution
+
+================================================================================
+COMMON QUESTIONS
+================================================================================
+
+Q: Will this break the existing CBP Sentry?
+A: No. Feature flag OFF by default = legacy model only = no changes.
+
+Q: Can I rollback if something goes wrong?
+A: Yes, instantly. Set feature flag OFF = back to legacy (no redeployment).
+
+Q: What if the new model is down?
+A: Fallback mechanism = automatically switches to legacy.
+
+Q: Do I need to restart services to change traffic percentage?
+A: No, just POST to /api/feature-flag endpoint.
+
+Q: Can stakeholders decide when to increase traffic?
+A: Yes, that's the point of gradual ramping (0% → 10% → 50% → 90% → 100%).
+
+Q: What about the web UI (React)?
+A: No changes needed. It calls the API which routes to correct model.
+
+================================================================================
+READY? START TERMINAL 1 ABOVE! 🚀
+
+Once both services running (Terminal 1 & 2):
+  → Go to Terminal 3 and run tests
+  → Follow DEPLOYMENT_AND_TESTING_GUIDE.md for detailed testing
+  → Share results with stakeholders
+  → Plan next steps based on feedback
+
+Let's ship it! 🚀
+================================================================================

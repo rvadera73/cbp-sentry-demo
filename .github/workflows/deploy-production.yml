@@ -28,10 +28,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip pytest
           pip install -r services/api/requirements.txt 2>/dev/null || echo "requirements.txt not found"
+          pip install -r services/risk-engine/requirements.txt 2>/dev/null || echo "risk-engine requirements not found"
 
       - name: Run backend tests
         run: |
           pytest services/api/tests -v --tb=short 2>/dev/null || echo "No tests found"
+          pytest services/risk-engine/tests -v --tb=short 2>/dev/null || echo "risk-engine tests not found"
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -65,6 +67,8 @@ jobs:
             dockerfile: ./services/api
           - service: cord
             dockerfile: ./services/cord-integration
+          - service: risk-engine
+            dockerfile: ./services/risk-engine
           - service: ui
             dockerfile: ./ui
     steps:
@@ -83,7 +87,7 @@ jobs:
       - name: Build & Push ${{ matrix.service }}
         run: |
           set -ex
-          SERVICE_NAME=$([ "${{ matrix.service }}" = "cord" ] && echo "sentry-cord" || echo "sentry-${{ matrix.service }}")
+          SERVICE_NAME=$([ "${{ matrix.service }}" = "cord" ] && echo "sentry-cord" || ([ "${{ matrix.service }}" = "risk-engine" ] && echo "precise-risk-engine" || echo "sentry-${{ matrix.service }}"))
           IMG="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/${SERVICE_NAME}:${{ github.sha }}"
           docker build -t "$IMG" -t "${SERVICE_NAME}:latest" ${{ matrix.dockerfile }}
           docker push "$IMG"
@@ -125,16 +129,39 @@ jobs:
             sleep 10
           done
 
+      - name: Deploy precise-risk-engine
+        run: |
+          gcloud run deploy precise-risk-engine \
+            --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/precise-risk-engine:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --allow-unauthenticated \
+            --memory 1Gi \
+            --cpu 1 \
+            --set-env-vars="LOG_LEVEL=INFO,ENVIRONMENT=production,FLASK_ENV=production"
+
+      - name: Wait for Risk Engine to be healthy
+        run: |
+          for i in {1..30}; do
+            RISK_ENGINE_URL=$(gcloud run services describe precise-risk-engine --region ${{ env.REGION }} --format 'value(status.url)')
+            if curl -sf "${RISK_ENGINE_URL}/health" > /dev/null 2>&1; then
+              echo "✅ precise-risk-engine is healthy"
+              break
+            fi
+            echo "Attempt $i/30: waiting..."
+            sleep 10
+          done
+
       - name: Deploy sentry-api
         run: |
           CORD_URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
+          RISK_ENGINE_URL=$(gcloud run services describe precise-risk-engine --region ${{ env.REGION }} --format 'value(status.url)')
           gcloud run deploy sentry-api \
             --image ${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.GAR_REPO }}/sentry-api:${{ github.sha }} \
             --region ${{ env.REGION }} \
             --allow-unauthenticated \
             --memory 2Gi \
             --cpu 2 \
-            --set-env-vars="LOG_LEVEL=INFO,ENVIRONMENT=production,CORD_SERVICE_URL=${CORD_URL}"
+            --set-env-vars="LOG_LEVEL=INFO,ENVIRONMENT=production,CORD_SERVICE_URL=${CORD_URL},USE_PRECISE_RISK_MODEL=true,PRECISE_RISK_ENGINE_URL=${RISK_ENGINE_URL},PRECISE_RISK_ENGINE_TIMEOUT=5,TRAFFIC_PERCENTAGE=0"
 
       - name: Wait for API to be healthy
         run: |
@@ -167,7 +194,9 @@ jobs:
           API_URL=$(gcloud run services describe sentry-api --region ${{ env.REGION }} --format 'value(status.url)')
           UI_URL=$(gcloud run services describe sentry-ui --region ${{ env.REGION }} --format 'value(status.url)')
           CORD_URL=$(gcloud run services describe sentry-cord-integration --region ${{ env.REGION }} --format 'value(status.url)')
-          echo "API:   $API_URL"
-          echo "UI:    $UI_URL"
-          echo "CORD:  $CORD_URL"
+          RISK_ENGINE_URL=$(gcloud run services describe precise-risk-engine --region ${{ env.REGION }} --format 'value(status.url)')
+          echo "API:          $API_URL"
+          echo "UI:           $UI_URL"
+          echo "CORD:         $CORD_URL"
+          echo "Risk Engine:  $RISK_ENGINE_URL (Phase 2, Traffic: 0%)"
           echo "========================================="

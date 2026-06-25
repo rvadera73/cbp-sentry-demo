@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useRole } from './context/RoleContext'
 import { WorkflowProvider } from './context/WorkflowContext'
 import { CommandCenterProvider } from './context/CommandCenterContext'
@@ -8,14 +8,17 @@ import NotFoundPage from './pages/NotFoundPage'
 import ScoringCalibrationPage from './pages/ScoringCalibrationPage'
 
 // V2 Imports
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import V2Layout from './v2/layout/V2Layout'
 import V2DashboardPage from './v2/pages/V2DashboardPage'
 import V2InvestigationsPage from './v2/pages/V2InvestigationsPage'
 import V2ShippingIntelligencePage from './v2/pages/V2ShippingIntelligencePage'
 import V2EntitiesPage from './v2/pages/V2EntitiesPage'
+import V2EntityResolutionPage from './v2/pages/V2EntityResolutionPage'
+import V2EntityWorkspacePage from './v2/pages/V2EntityWorkspacePage'
 import V2WatchlistsPage from './v2/pages/V2WatchlistsPage'
 import V2AITuningPage from './v2/pages/V2AITuningPage'
+import RiskModelManagement from './pages/RiskModelManagement'
 import { CBPOfficer, AIFinding, ReferralPackage, Case, Shipment } from './v2/types/v2.types'
 import { useV2Cases } from './v2/hooks/useV2Cases'
 import { useV2Referrals } from './v2/hooks/useV2Referrals'
@@ -29,6 +32,25 @@ function V2AppWrapper() {
   // Core state
   const [activeTab, setActiveTab] = useState('dashboard');
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
+  const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+
+  // Sync activeTab with URL path (enables navigate('/investigations') to work)
+  const location = useLocation();
+  useEffect(() => {
+    const path = location.pathname.replace(/^\//, '') || 'dashboard';
+    const tabMap: Record<string, string> = {
+      dashboard: 'dashboard',
+      investigations: 'investigations',
+      shipments: 'shipments',
+      entities: 'entities',
+      'entity-workspace': 'entity-workspace',
+      watchlists: 'watchlists',
+      'ai-tuning': 'ai-tuning',
+      'risk-models': 'risk-models',
+      referrals: 'referrals',
+    };
+    if (tabMap[path]) setActiveTab(tabMap[path]);
+  }, [location.pathname]);
 
   // Fetch cases and shipments
   const { cases, shipments, loading: casesLoading } = useV2Cases();
@@ -248,6 +270,7 @@ function V2AppWrapper() {
       shipments={shipments}
       selectCaseForDetail={selectCaseForDetail}
       synopsisMap={synopsisMap}
+      setActiveTab={setActiveTab}
     />,
     investigations: <V2InvestigationsPage
       cases={cases}
@@ -268,9 +291,19 @@ function V2AppWrapper() {
       shipments={shipments}
       cases={cases}
     />,
-    entities: <V2EntitiesPage />,
+    entities: <V2EntityResolutionPage
+      selectedEntityId={selectedEntityId}
+      setSelectedEntityId={setSelectedEntityId}
+      setActiveTab={setActiveTab}
+    />,
+    'entity-workspace': <V2EntityWorkspacePage
+      selectedEntityId={selectedEntityId}
+      setSelectedEntityId={setSelectedEntityId}
+      setActiveTab={setActiveTab}
+    />,
     watchlists: <V2WatchlistsPage />,
     'ai-tuning': <V2AITuningPage />,
+    'risk-models': <RiskModelManagement />,
   }
 
   return (
@@ -365,6 +398,10 @@ function App() {
             />
             <Route
               path="/ai-tuning"
+              element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['analyst']} />}
+            />
+            <Route
+              path="/risk-models"
               element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['analyst']} />}
             />
 

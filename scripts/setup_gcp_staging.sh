@@ -267,6 +267,17 @@ gcloud sql users create postgres \
     --project="$PROJECT_ID" \
     --password 2>/dev/null || true
 
+# Create mlops and cord schemas inside the cbp_sentry database
+# These are PostgreSQL schemas (namespaces), not separate databases.
+# sentry-data, cbp-risk-engine, and sentry-cord-integration share one Cloud SQL instance.
+echo "Creating mlops and cord schemas in cbp_sentry database..."
+gcloud sql connect "$SQL_INSTANCE" --user=postgres --project="$PROJECT_ID" << 'SQL' 2>/dev/null || true
+CREATE SCHEMA IF NOT EXISTS cbp_sentry;
+CREATE SCHEMA IF NOT EXISTS mlops;
+CREATE SCHEMA IF NOT EXISTS cord;
+SQL
+echo -e "${GREEN}✓${NC} Schemas cbp_sentry, mlops, cord created (or already exist)"
+
 echo -e "${GREEN}✓${NC} Cloud SQL configured (IP: $SQL_IP)"
 echo ""
 
@@ -297,7 +308,7 @@ create_secret() {
     fi
 
     # Grant access to all Cloud Run services
-    for sa in sentry-api sentry-data sentry-ui; do
+    for sa in sentry-api sentry-data sentry-ui sentry-cord cbp-risk-engine; do
         gcloud secrets add-iam-policy-binding "$secret_name" \
             --project="$PROJECT_ID" \
             --member="serviceAccount:${sa}@${PROJECT_ID}.iam.gserviceaccount.com" \
@@ -309,13 +320,20 @@ create_secret() {
 # Generate a strong random password for database
 DB_PASSWORD=$(openssl rand -base64 32)
 DB_USER="postgres"
-DB_HOST="${SQL_INSTANCE}:${GCP_REGION}:sentry-staging" # Cloud SQL Proxy format
-DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${SQL_INSTANCE}?host=/cloudsql/${PROJECT_ID}:${GCP_REGION}:${SQL_INSTANCE}"
+CLOUD_SQL_CONN="${PROJECT_ID}:${GCP_REGION}:${SQL_INSTANCE}"
 
-# Create secrets (use placeholder values for now)
-create_secret "DATABASE_URL" "$DATABASE_URL"
-create_secret "VESSELAPI_KEY" "placeholder-vesselapi-key"
-create_secret "OFAC_API_KEY" "placeholder-ofac-api-key"
+# Each service gets its own DATABASE_URL pointing to the same Cloud SQL instance
+# but with schema-specific search_path so they stay isolated.
+DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${SQL_INSTANCE}?host=/cloudsql/${CLOUD_SQL_CONN}&options=-c%20search_path%3Dcbp_sentry"
+MLOPS_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${SQL_INSTANCE}?host=/cloudsql/${CLOUD_SQL_CONN}&options=-c%20search_path%3Dmlops"
+CORD_DATABASE_URL="postgresql://${DB_USER}:${DB_PASSWORD}@/${SQL_INSTANCE}?host=/cloudsql/${CLOUD_SQL_CONN}&options=-c%20search_path%3Dcord"
+
+# Create secrets
+create_secret "DATABASE_URL"       "$DATABASE_URL"        # sentry-data (cbp_sentry schema)
+create_secret "MLOPS_DATABASE_URL" "$MLOPS_DATABASE_URL"  # cbp-risk-engine (mlops schema)
+create_secret "CORD_DATABASE_URL"  "$CORD_DATABASE_URL"   # sentry-cord-integration (cord schema)
+create_secret "VESSELAPI_KEY"      "placeholder-vesselapi-key"
+create_secret "OFAC_API_KEY"       "placeholder-ofac-api-key"
 
 echo ""
 

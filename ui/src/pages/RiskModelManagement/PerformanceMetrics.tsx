@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Download, BarChart3 } from 'lucide-react'
+import { usePerformanceMetrics } from '../../v2/hooks/useMCPEngine'
 
 interface PerformanceMetricsProps {
   onExport?: () => void
@@ -25,44 +26,28 @@ interface FairnessMetric {
 
 const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({ onExport }) => {
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d' | 'custom'>('24h')
-  const [compareModel, setCompareModel] = useState<string>('v3.1')
-  const [loading, setLoading] = useState(true)
+  const [compareModel, setCompareModel] = useState<string>('')
+  const { history: mcpHistory, performance, loading } = usePerformanceMetrics()
   const [accuracyTrend, setAccuracyTrend] = useState<MetricPoint[]>([])
   const [confusionMatrix, setConfusionMatrix] = useState<ConfusionMatrixData | null>(null)
   const [fairnessMetrics, setFairnessMetrics] = useState<FairnessMetric[]>([])
 
   useEffect(() => {
-    loadMetrics()
-  }, [timeRange, compareModel])
-
-  const loadMetrics = async () => {
-    setLoading(true)
-    try {
-      // TODO: Replace with actual API calls to /api/risk-models/{model_id}/metrics
-      setAccuracyTrend([
-        { timestamp: '00:00', accuracy: 92.1, latency: 83 },
-        { timestamp: '06:00', accuracy: 92.3, latency: 84 },
-        { timestamp: '12:00', accuracy: 92.4, latency: 85 },
-        { timestamp: '18:00', accuracy: 92.3, latency: 86 },
-        { timestamp: '23:59', accuracy: 92.4, latency: 85 },
-      ])
-
-      setConfusionMatrix({
-        clear: { clear: 8234, examine: 156, hold: 10 },
-        examine: { clear: 245, examine: 3421, hold: 89 },
-        hold: { clear: 32, examine: 78, hold: 443 },
-      })
-
-      setFairnessMetrics([
-        { segment: 'CN (China)', accuracy: 91.8, count: 4532 },
-        { segment: 'MX (Mexico)', accuracy: 93.2, count: 3124 },
-        { segment: 'IN (India)', accuracy: 92.5, count: 2891 },
-        { segment: 'Other', accuracy: 92.3, count: 4885 },
-      ])
-    } finally {
-      setLoading(false)
+    if (mcpHistory.length) {
+      setAccuracyTrend(mcpHistory.map(h => ({
+        timestamp: new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        accuracy: (h.accuracy ?? 0) * 100,
+        latency: h.latency_p95_ms ?? 0,
+      })))
     }
-  }
+    if (performance) {
+      const p = performance as Record<string, unknown>
+      const cm = p['confusion_matrix'] as ConfusionMatrixData | undefined
+      if (cm) setConfusionMatrix(cm)
+      const fm = p['fairness_by_corridor'] as FairnessMetric[] | undefined
+      if (fm) setFairnessMetrics(fm)
+    }
+  }, [mcpHistory, performance])
 
   if (loading) {
     return (

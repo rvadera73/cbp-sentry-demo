@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { AlertTriangle, CheckCircle, TrendingDown } from 'lucide-react'
+import { useDataDrift } from '../../v2/hooks/useMCPEngine'
 
 interface DataDriftMonitoringProps {
   onInvestigate?: (featureName: string) => void
@@ -18,56 +19,28 @@ interface DriftFeature {
 const DataDriftMonitoring: React.FC<DataDriftMonitoringProps> = ({ onInvestigate }) => {
   const [baselinePeriod] = useState('Last 7d Baseline')
   const [currentPeriod] = useState('Last 24h')
+  const { drift: mcpDrift, loading, error } = useDataDrift()
   const [features, setFeatures] = useState<DriftFeature[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadDriftData()
-  }, [])
-
-  const loadDriftData = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // TODO: Replace with actual API calls to /api/risk-models/{model_id}/drift
-      setFeatures([
-        {
-          name: 'origin_country',
-          driftScore: 0.34,
-          driftType: 'categorical_shift',
-          baselineData: { CN: 32.4, MX: 22.1, IN: 20.5, HK: 8.2, Other: 16.8 },
-          currentData: { CN: 28.9, MX: 24.3, IN: 22.8, HK: 9.1, Other: 14.9 },
-          status: 'elevated',
-          recommendation: 'Monitor for 48h',
-        },
-        {
-          name: 'commodity_value',
-          driftScore: 0.08,
-          driftType: 'numeric_distribution',
-          baselineData: 'Mean: $2,145, Std: $1,240',
-          currentData: 'Mean: $2,168 (+1.1%), Std: $1,255 (+1.2%)',
-          status: 'normal',
-        },
-        {
-          name: 'documentation_risk',
-          driftScore: 0.06,
-          driftType: 'numeric_distribution',
-          baselineData: 'Avg 2.34, Std 1.12',
-          currentData: 'Avg 2.31, Std 1.09',
-          status: 'normal',
-        },
-      ])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load drift data')
-    } finally {
-      setLoading(false)
+    if (mcpDrift.length) {
+      setFeatures(mcpDrift.map(d => ({
+        name: d.name,
+        driftScore: d.drift_score,
+        driftType: d.drift_type as DriftFeature['driftType'],
+        baselineData: '',
+        currentData: '',
+        status: d.status,
+        recommendation: d.recommendation,
+      })))
     }
-  }
+  }, [mcpDrift])
 
   const elevatedDriftCount = features.filter(f => f.status === 'elevated').length
   const normalDriftCount = features.filter(f => f.status === 'normal').length
-  const overallDriftScore = (elevatedDriftCount * 0.34 + normalDriftCount * 0.06) / features.length
+  const overallDriftScore = features.length
+    ? (elevatedDriftCount * 0.34 + normalDriftCount * 0.06) / features.length
+    : 0
 
   if (loading) {
     return (

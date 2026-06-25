@@ -5,11 +5,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Download, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronRight, ChevronLeft, Download } from 'lucide-react';
 import { ReferralPackageGenerationTabProps, ReferralDisplayData } from './types/ReferralGeneration.types';
-import ReferralDisplayPanel from './ReferralDisplayPanel';
+import ProfessionalReferralDisplay from './ProfessionalReferralDisplay';
 import { useOfficerAnalysisForm } from './hooks/useOfficerAnalysisForm';
 import { useReferralDisplay } from './hooks/useReferralDisplay';
+import ProfessionalOfficerAnalysisForm from './ProfessionalOfficerAnalysisForm';
 import './ReferralPackageGenerationTab.css';
 
 interface TabState {
@@ -179,17 +180,19 @@ export default function ReferralPackageGenerationTab({ shipmentId, onClose }: Re
       {/* Tab Content */}
       <div className="referral-gen-tab__content">
         {tabState.activeTab === 'display' && (
-          <ReferralDisplayPanel
+          <ProfessionalReferralDisplay
             referralData={tabState.referralData}
-            onNarrativeEdit={handleNarrativeEdit}
             onExportPDF={handleExportPDF}
           />
         )}
 
-        {tabState.activeTab === 'analysis' && (
-          <div className="p-6 bg-white rounded-sm border border-[#D0D7DE]">
-            <p className="text-sm text-[#5C5C5C]">Officer Analysis Form - Coming Soon</p>
-          </div>
+        {tabState.activeTab === 'analysis' && tabState.referralData && (
+          <ProfessionalOfficerAnalysisForm
+            referralId={tabState.referralData.referral_id}
+            referralData={tabState.referralData}
+            onSubmit={handleAnalysisSubmit}
+            onCancel={() => handleSwitchTab('display')}
+          />
         )}
       </div>
     </div>

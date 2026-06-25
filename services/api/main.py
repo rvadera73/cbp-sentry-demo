@@ -1061,10 +1061,44 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
             "altana_validation": audit_trail.get("altana_response", {}) if audit_trail["altana_query"] else None,
         }
 
+        final_score = audit_trail["final_risk_score"]
+
+        # WRITE-BACK: persist calculated score + provenance to DB
+        try:
+            async with await get_data_service_client() as client:
+                import json as _json
+                scored_at = datetime.utcnow().isoformat()
+                update_payload = {
+                    "calculated_risk_score": final_score,
+                    "risk_score_calculated_at": scored_at,
+                    "model_version": "xgb-v1.0-15pct",
+                    "model_maturity": 15,
+                    "risk_score_breakdown": _json.dumps({
+                        "components": [
+                            {"component": c.component, "score": round(c.score, 1),
+                             "weight": round(c.weight, 1), "weighted_result": round(c.weighted_result, 1)}
+                            for c in risk_breakdown.components
+                        ],
+                        "final_score": round(risk_breakdown.final_score, 1),
+                        "scoring_method": "xgb_blend_v1",
+                    }),
+                }
+                resp = await client.patch(f"/shipments/{shipment_id}", json=update_payload)
+                if resp.status_code not in (200, 204):
+                    logger.warning(f"Score write-back HTTP {resp.status_code} for {shipment_id}: {resp.text[:200]}")
+                else:
+                    logger.debug(f"Score write-back OK for {shipment_id}: {final_score:.1f}")
+        except Exception as wb_err:
+            logger.warning(f"Score write-back failed for {shipment_id}: {wb_err}")
+
         # Prepare response with full transparency
         return {
             "shipment_id": shipment_id,
-            "risk_score": audit_trail["final_risk_score"],
+            "risk_score": final_score,
+            "calculated_risk_score": final_score,
+            "model_version": "xgb-v1.0-15pct",
+            "model_maturity": 15,
+            "scored_at": datetime.utcnow().isoformat(),
             "confidence_interval": risk_breakdown.confidence_interval,
             "risk_breakdown": {
                 "components": [
@@ -1112,6 +1146,52 @@ async def comprehensive_risk_scoring_endpoint(payload: Dict[str, Any]) -> Dict[s
     except Exception as e:
         logger.error(f"Comprehensive risk scoring endpoint error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Risk scoring failed: {str(e)}")
+
+
+def _build_score_validation(
+    seed_score: Optional[float],
+    model_score: Optional[float],
+    maturity: Optional[int],
+) -> Dict[str, Any]:
+    """Build a score validation note explaining the relationship between
+    the seeded/estimated risk_score and the model-calculated score."""
+    if model_score is None:
+        return {
+            "status": "pending",
+            "message": "Model score not yet calculated. Showing estimated risk score.",
+            "seed_score": seed_score,
+            "model_score": None,
+        }
+
+    maturity_note = None
+    if maturity is not None and maturity < 30:
+        maturity_note = (
+            f"Model at {maturity}% maturity — limited feature coverage. "
+            "Scores are indicative; verify findings manually."
+        )
+    elif maturity is not None and maturity < 70:
+        maturity_note = f"Model at {maturity}% maturity — human review recommended for edge cases."
+
+    delta = abs((seed_score or 0) - model_score)
+    if delta > 20:
+        return {
+            "status": "discrepancy",
+            "message": (
+                f"Score discrepancy: estimated={seed_score:.0f}, model={model_score:.1f} "
+                f"(Δ{delta:.0f} pts). "
+                "Model uses available features only — enriching shipment data will improve accuracy."
+            ),
+            "maturity_note": maturity_note,
+            "seed_score": seed_score,
+            "model_score": model_score,
+        }
+
+    return {
+        "status": "ok",
+        "message": maturity_note or "Score consistent with model output.",
+        "seed_score": seed_score,
+        "model_score": model_score,
+    }
 
 
 def _generate_risk_summary(shipment: Dict, breakdown: Any, audit_trail: Dict) -> str:
@@ -2677,26 +2757,40 @@ async def list_shipments(
     """
     try:
         async with await get_data_service_client() as client:
-            # Build params for data service
-            fetch_limit = min(limit, 5000)
-            params = {"limit": fetch_limit, "offset": offset}
-
+            # Data service max page size is 1000 — paginate if caller wants more
+            DATA_SERVICE_PAGE = 1000
+            total_wanted = min(limit, 10000)
+            base_params: Dict[str, Any] = {}
             if corridor_id:
-                params["corridor_id"] = corridor_id
+                base_params["corridor_id"] = corridor_id
             if risk_min is not None:
-                params["risk_min"] = risk_min
+                base_params["risk_min"] = risk_min
             if risk_max is not None:
-                params["risk_max"] = risk_max
+                base_params["risk_max"] = risk_max
             if status:
-                params["status"] = status
+                base_params["status"] = status
 
-            resp = await client.get("/shipments", params=params)
-            if resp.status_code != 200:
-                logger.warning(f"Non-200 response from data service: {resp.status_code}")
-                return {"data": [], "count": 0}
+            shipments_raw = []
+            server_count = 0
+            current_offset = offset
+            while len(shipments_raw) < total_wanted:
+                fetch_limit = min(DATA_SERVICE_PAGE, total_wanted - len(shipments_raw))
+                params = {"limit": fetch_limit, "offset": current_offset, **base_params}
+                resp = await client.get("/shipments", params=params)
+                if resp.status_code != 200:
+                    logger.warning(f"Non-200 response from data service: {resp.status_code}")
+                    break
+                page = resp.json()
+                page_items = page.get("data", [])
+                if server_count == 0:
+                    server_count = page.get("count", 0)
+                shipments_raw.extend(page_items)
+                if len(page_items) < fetch_limit:
+                    break  # No more pages
+                current_offset += fetch_limit
 
-        data = resp.json()
-        shipments_raw = data.get("data", [])
+        if not shipments_raw and server_count == 0:
+            return {"data": [], "count": 0}
 
         # Geographic coordinates
         origin_coords = {
@@ -2736,13 +2830,21 @@ async def list_shipments(
             hs_code = str(shipment.get("hs_code", "9999")).split(".")[0]
             commodity = commodity_map.get(hs_code, {"name": "General Merchandise", "category": "Other"})
 
-            # Use real risk score from database, default to 0 if not yet scored
-            risk_score = shipment.get("risk_score") or 0
+            # Canonical score: prefer model-calculated score over seeded/estimated score
+            seed_risk_score = shipment.get("risk_score") or 0
+            calculated_risk_score = shipment.get("calculated_risk_score")
+            model_maturity = shipment.get("model_maturity")
+            model_version = shipment.get("model_version")
+            risk_score_calculated_at = shipment.get("risk_score_calculated_at")
+            canonical_score = calculated_risk_score if calculated_risk_score is not None else seed_risk_score
 
-            # Derive risk level from score
-            if risk_score >= 70:
+            # Build score validation note
+            score_validation = _build_score_validation(seed_risk_score, calculated_risk_score, model_maturity)
+
+            # Derive risk level from canonical score
+            if canonical_score >= 70:
                 h1_risk_level = "HIGH"
-            elif risk_score >= 50:
+            elif canonical_score >= 50:
                 h1_risk_level = "MEDIUM"
             else:
                 h1_risk_level = "LOW"
@@ -2753,18 +2855,18 @@ async def list_shipments(
             element_9 = shipment.get("element_9") or shipment.get("ais_stuffing_country")
             if element_9 and element_9 != origin_country and origin_country != "VN":
                 h2_signals.append("ISF_MISMATCH")
-            elif risk_score >= 60:
+            elif canonical_score >= 60:
                 h2_signals.append("ISF_MISMATCH")
             # Check for vessel dwell time anomaly
             dwell_days = shipment.get("dwell_days", 0)
             if dwell_days and dwell_days > 10:
                 h2_signals.append("DWELL_ANOMALY")
-            elif risk_score >= 70:
+            elif canonical_score >= 70:
                 h2_signals.append("DWELL_ANOMALY")
             if not h2_signals:
                 h2_signals = ["NONE"]
 
-            h3_recommendation = "EXAMINE" if risk_score >= 70 else ("REVIEW" if risk_score >= 50 else "CLEAR")
+            h3_recommendation = "EXAMINE" if canonical_score >= 70 else ("REVIEW" if canonical_score >= 50 else "CLEAR")
 
             shipments_detailed.append(
                 {
@@ -2787,19 +2889,37 @@ async def list_shipments(
                     "element9_is_mismatch": bool(shipment.get("element9_is_mismatch", 0)),
                     "element9_declared_country": shipment.get("element9_declared_country"),
                     "element9_actual_country": shipment.get("element9_actual_country"),
-                    "risk_score": risk_score,
+                    # Canonical score: model-calculated if available, else seed estimate
+                    "risk_score": canonical_score,
+                    "seed_risk_score": seed_risk_score,
+                    "calculated_risk_score": calculated_risk_score,
+                    "model_version": model_version,
+                    "model_maturity": model_maturity,
+                    "risk_score_calculated_at": risk_score_calculated_at,
+                    "score_validation": score_validation,
                     "h1_risk_level": h1_risk_level,
                     "h2_signals": h2_signals,
                     "h3_recommendation": h3_recommendation,
                     "status": shipment.get("status", "received").upper(),
                     "created_at": shipment.get("created_at"),
+                    # Pass through additional fields used by v2 hooks
+                    "h1_score": shipment.get("h1_score"),
+                    "h2_score": shipment.get("h2_score"),
+                    "shipper_age_months": shipment.get("shipper_age_months"),
+                    "dwell_days": shipment.get("dwell_days"),
+                    "ad_cvd_applicable": shipment.get("ad_cvd_applicable"),
+                    "ad_cvd_rate": shipment.get("ad_cvd_rate"),
+                    "vessel_name": shipment.get("vessel_name"),
+                    "vessel_imo": shipment.get("vessel_imo"),
+                    "voyage_number": shipment.get("voyage_number"),
+                    "bill_of_lading": shipment.get("bill_of_lading"),
+                    "port_calls": shipment.get("port_calls"),
+                    "hs_code": shipment.get("hs_code"),
+                    "eapa_case_number": shipment.get("eapa_case_number"),
                 }
             )
 
         # Data service already filters by corridor/risk, just return as-is
-        # Response already contains count from server
-        server_count = data.get("count", len(shipments_raw))
-
         return {"data": shipments_detailed, "count": server_count, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Error in list_shipments: {e}", exc_info=True)
@@ -2875,12 +2995,20 @@ async def get_shipment_detail(shipment_id: str) -> Dict[str, Any]:
     hs_code = shipment.get("hs_code", "9999").split(".")[0]
     commodity = commodity_map.get(hs_code, {"name": "General Merchandise", "category": "Other"})
 
-    # Derive risk level from actual score
-    risk_score = shipment.get("risk_score", 50)
-    if risk_score >= 70:
+    # Canonical score: prefer model-calculated over seeded estimate
+    seed_risk_score = shipment.get("risk_score", 50)
+    calculated_risk_score = shipment.get("calculated_risk_score")
+    model_maturity = shipment.get("model_maturity")
+    model_version = shipment.get("model_version")
+    risk_score_calculated_at = shipment.get("risk_score_calculated_at")
+    canonical_score = calculated_risk_score if calculated_risk_score is not None else seed_risk_score
+
+    score_validation = _build_score_validation(seed_risk_score, calculated_risk_score, model_maturity)
+
+    if canonical_score >= 70:
         h1_risk_level = "HIGH"
         h3_recommendation = "EXAMINE"
-    elif risk_score >= 50:
+    elif canonical_score >= 50:
         h1_risk_level = "MEDIUM"
         h3_recommendation = "REVIEW"
     else:
@@ -2903,7 +3031,14 @@ async def get_shipment_detail(shipment_id: str) -> Dict[str, Any]:
         "commodity_code": shipment.get("hs_code", "9999"),
         "commodity_name": commodity["name"],
         "declared_value": shipment.get("declared_value_usd", 0),
-        "risk_score": risk_score,  # Real score from database
+        # Canonical score + provenance
+        "risk_score": canonical_score,
+        "seed_risk_score": seed_risk_score,
+        "calculated_risk_score": calculated_risk_score,
+        "model_version": model_version,
+        "model_maturity": model_maturity,
+        "risk_score_calculated_at": risk_score_calculated_at,
+        "score_validation": score_validation,
         "h1_score": shipment.get("h1_score"),
         "h2_score": shipment.get("h2_score"),
         "h1_risk_level": h1_risk_level,
@@ -2911,6 +3046,7 @@ async def get_shipment_detail(shipment_id: str) -> Dict[str, Any]:
         "h3_recommendation": h3_recommendation,
         "status": shipment.get("status", "IN_TRANSIT"),
         "created_at": shipment.get("created_at"),
+        "eapa_case_number": shipment.get("eapa_case_number"),
     }
 
 

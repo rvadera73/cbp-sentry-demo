@@ -1,0 +1,25 @@
+stages:
+  train:
+    cmd: python3 train_models_phase1.py
+    deps:
+      - train_models_phase1.py
+      - data/training_data.csv
+      - data/feature_matrix_72.csv
+    outs:
+      - models/xgboost_model.json
+      - models/isolation_forest_model.pkl
+      - models/shap_explainer.pkl
+    metrics:
+      - test-results/phase1_training_results.json:
+          cache: false
+    plots:
+      - test-results/phase1_detailed_metrics.json:
+          x: model
+          y: metrics
+    params:
+      - train_models_phase1.py:
+          - XGBOOST_PARAMS
+          - IFOREST_PARAMS
+
+metrics:
+  - test-results/phase1_training_results.json

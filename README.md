@@ -1,8 +1,8 @@
 # Sentry CBP — Trade Enforcement Intelligence Platform
 
-**Status**: Phase 1 Backend (In Progress) — Paused for architecture documentation  
-**Last Updated**: May 19, 2026  
-**Team**: Rahul Vadera (solo implementation)
+**Status**: 15% Model Maturity — Active Development  
+**Last Updated**: June 24, 2026  
+**Primary Corridor:** VN → US (aluminum extrusions HS 7604, solar panels HS 8541)
 
 ---
 
@@ -11,21 +11,26 @@
 Sentry CBP automates **illegal transshipment detection** for CBP officers. Given a manifest of imports, the system:
 
 1. **Parses Excel manifest** → extracts shipper, consignee, HS code, value, vessel
-2. **Scores risk in 3 horizons** → H1 (corridor), H2 (anomaly), H3 (intelligence)
-3. **Generates referral package** → 14-table CBP EAPA dossier
-4. **Displays Case Viewer** → 6-tab investigation interface for officer review
+2. **Scores risk across 7 factors** → XGBoost (60%) + rule engine (40%) blend
+3. **Generates referral package** → 14-section CBP EAPA dossier with Gemini narratives
+4. **Displays Investigation Workspace** → 6-tab officer interface with entity graph + risk breakdown
 
-**Total Risk Score**: 0-100 points (HIGH ≥70, MEDIUM 50-69, LOW <50)
+**Total Risk Score**: 0-100 (HIGH ≥70, MEDIUM 50-69, LOW <50)
 
 ---
 
-## Documentation (Read This First)
+## Documentation
 
 | Document | Purpose | For Whom |
 |----------|---------|----------|
-| **[PROJECT_STATUS.md](PROJECT_STATUS.md)** | What's done, what's blocked, next steps | Everyone (start here) |
-| **[ARCHITECTURE.md](ARCHITECTURE.md)** | System design, scoring model, DB schema | Architects, Backend engineers |
-| **[DEPLOYMENT.md](DEPLOYMENT.md)** | How to deploy locally, staging, production | DevOps, Operations |
+| **[CLAUDE.md](CLAUDE.md)** | Developer guide: ports, commands, architecture, data status | Developers (start here) |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System design, scoring model, data pipelines, MLOps | Architects, Backend engineers |
+| **[docs/DESIGN.md](docs/DESIGN.md)** | UI/UX design, scoring deep-dive, referral workflow | Product Owners, UI/UX, AI/ML |
+| **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** | How to deploy locally, staging | DevOps, Operations |
+| **[GATES_DEFINITION_AND_CURRENT_STATE.md](GATES_DEFINITION_AND_CURRENT_STATE.md)** | Gate definitions (15%→30%→50%→70%→90%) + current state | All |
+
+> **Note:** Many other `.md` files in the root are historical session notes from prior development
+> phases. Treat `CLAUDE.md`, `docs/ARCHITECTURE.md`, and `docs/DESIGN.md` as the canonical references.
 
 ---
 

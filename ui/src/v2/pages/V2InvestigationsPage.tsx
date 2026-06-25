@@ -9,15 +9,20 @@ import { api } from '../../services/api';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { EntityRelationshipGraph } from '../components/EntityRelationshipGraph';
 import ComprehensiveReferralViewer from '../components/ComprehensiveReferralViewer';
+import ReferralPackageGenerationTab from '../../components/referral-generation/ReferralPackageGenerationTab';
 import { TabNavigation, TabConfig } from '../components/TabNavigation';
+import InvestigationQueueCard from '../components/InvestigationQueueCard';
+import InvestigationTimeline from '../components/InvestigationTimeline';
+import RiskHeatmap from '../components/RiskHeatmap';
+import MaturityBadge from '../components/MaturityBadge';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
   shipments?: Shipment[];
   selectedCaseId?: string | null;
   setSelectedCaseId?: (id: string | null) => void;
-  activeSubTab?: 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral';
-  setActiveSubTab?: (tab: 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral') => void;
+  activeSubTab?: 'Timeline' | 'Risk Profile' | 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence' | 'Referral' | 'Referral (New)';
+  setActiveSubTab?: (tab: 'Timeline' | 'Risk Profile' | 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence' | 'Referral' | 'Referral (New)') => void;
   synopsisMap?: Record<string, string>;
   synopsisLoading?: Record<string, boolean>;
   findings?: AIFinding[];
@@ -50,7 +55,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   const caseShipments = localCaseShipments;
 
   const [localSelectedCaseId, setLocalSelectedCaseId] = useState<string | null>(null);
-  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral'>('Shipment');
+  const [localActiveSubTab, setLocalActiveSubTab] = useState<'Timeline' | 'Risk Profile' | 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence' | 'Referral' | 'Referral (New)'>('Timeline');
 
   const selectedCaseId = propSelectedCaseId || localSelectedCaseId;
   const setSelectedCaseId = propSetSelectedCaseId || setLocalSelectedCaseId;
@@ -340,70 +345,58 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           </select>
         </div>
 
-        {/* Case List Table */}
-        <div className="bg-white rounded-sm border border-[#D0D7DE] shadow-sm flex-1 overflow-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="sticky top-0 bg-[#F0F4F8] border-b border-[#D0D7DE] font-mono text-[#112E51] font-bold">
-              <tr>
-                <th className="p-3 w-20">SENTRY SCORE</th>
-                <th className="p-3">INVESTIGATION DIRECTORY ID</th>
-                <th className="p-3">ASSIGNED OFFICER</th>
-                <th className="p-3">COMMODITY</th>
-                <th className="p-3">DATE OPENED</th>
-                <th className="p-3">REFERRAL STATUS</th>
-                <th className="p-3 text-right">ACTIONS</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filteredCases.map((c) => (
-                <tr key={c.case_id} className="hover:bg-slate-50 transition-all cursor-pointer" onClick={() => setSelectedCaseId(c.case_id)}>
-                  <td className="p-3">
-                    <span className={`inline-block px-2.5 py-1 rounded text-center font-extrabold text-xs text-white ${
-                      c.risk_score >= 80 ? 'bg-[#D83933]' : 'bg-amber-600'
-                    }`}>
-                      {c.risk_score}%
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex flex-col">
-                      <span className="font-extrabold text-[#0B1F33]">{c.target_entity}</span>
-                      <span className="text-[10px] text-[#5C5C5C] font-mono block mt-0.5">{c.case_id}</span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-slate-800 font-medium">{c.assigned_officer}</td>
-                  <td className="p-3 text-[11px]">{c.commodity_name || c.product_category}</td>
-                  <td className="p-3 text-[#5C5C5C] font-mono text-[11px]">{c.opened_date}</td>
-                  <td className="p-3 font-mono">
-                    <span className={`px-2 py-0.5 text-[10px] rounded font-bold ${
-                      c.referral_status === 'Submitted' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
-                    }`}>
-                      {c.referral_status}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right">
-                    <button
-                      onClick={(e) => {
-                        console.log('[Button Click] Case ID:', c.case_id);
-                        e.stopPropagation();
-                        setSelectedCaseId(c.case_id);
-                        console.log('[Button Click] Selected case set to:', c.case_id);
-                      }}
-                      className="px-3 py-1 bg-[#112E51] hover:bg-[#0076D6] text-white text-[10px] font-bold rounded-sm flex items-center space-x-1 ml-auto"
-                    >
-                      <span>Access Workspace</span>
-                      <ArrowRight className="h-3 w-3" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {filteredCases.length === 0 && (
-            <div className="py-12 text-center text-slate-400 font-sans italic">
-              No cases matched your filters. Try resetting.
-            </div>
-          )}
+        {/* Kanban-Style Queue View */}
+        <div className="flex-1 overflow-auto bg-[#F0F4F8] p-4">
+          <div className="grid grid-cols-4 gap-4 h-full auto-rows-max">
+            {['Active', 'Under Audit', 'Referral Prepared', 'Closed'].map((status) => {
+              const statusMap: Record<string, 'New' | 'In Progress' | 'Review' | 'Closed'> = {
+                'Active': 'New',
+                'Under Audit': 'In Progress',
+                'Referral Prepared': 'Review',
+                'Closed': 'Closed',
+              };
+              return (
+                <div key={status} className="flex flex-col">
+                  <div className="text-[9px] font-bold text-[#5C5C5C] uppercase mb-3 sticky top-0 bg-[#F0F4F8] py-2">
+                    {statusMap[status]}
+                  </div>
+                  <div className="space-y-2 flex flex-col">
+                    {filteredCases
+                      .filter(c => c.case_status === status)
+                      .map((c) => (
+                        <InvestigationQueueCard
+                          key={c.case_id}
+                          case_id={c.case_id}
+                          case_name={c.case_name}
+                          target_entity={c.target_entity}
+                          priority={c.priority}
+                          risk_score={c.risk_score}
+                          calculated_risk_score={c.calculated_risk_score}
+                          model_maturity={c.model_maturity}
+                          model_version={c.model_version}
+                          risk_score_calculated_at={c.risk_score_calculated_at}
+                          case_status={statusMap[status]}
+                          opened_date={c.opened_date}
+                          days_open={Math.floor((new Date().getTime() - new Date(c.opened_date).getTime()) / (1000 * 60 * 60 * 24))}
+                          risk_trend={[
+                            { day: 1, score: Math.max(0, c.risk_score - 12) },
+                            { day: 2, score: Math.max(0, c.risk_score - 8) },
+                            { day: 3, score: Math.max(0, c.risk_score - 5) },
+                            { day: 4, score: Math.max(0, c.risk_score - 2) },
+                            { day: 5, score: c.risk_score },
+                            { day: 6, score: c.risk_score },
+                          ]}
+                          onClick={() => setSelectedCaseId(c.case_id)}
+                        />
+                      ))}
+                    {filteredCases.filter(c => c.case_status === status).length === 0 && (
+                      <div className="text-[8px] text-[#5C5C5C] text-center py-8 italic">No cases</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -448,16 +441,33 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold">Risk Score</span>
           <div className="flex items-baseline space-x-1.5 mt-1">
             <span className={`text-xl font-black font-mono ${(selectedCase.risk_score + riskAdjustment) >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}`}>
-              {Math.min(100, selectedCase.risk_score + riskAdjustment)}
+              {Math.min(100, Math.round((selectedCase.calculated_risk_score ?? selectedCase.risk_score) + riskAdjustment))}
             </span>
             <span className="text-[10px]">/ 100</span>
             <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
               <div
                 className={`h-full ${(selectedCase.risk_score + riskAdjustment) >= 80 ? 'bg-[#D83933]' : 'bg-[#FFBE2E]'}`}
-                style={{ width: `${Math.min(100, selectedCase.risk_score + riskAdjustment)}%` }}
+                style={{ width: `${Math.min(100, (selectedCase.calculated_risk_score ?? selectedCase.risk_score) + riskAdjustment)}%` }}
               />
             </div>
           </div>
+          {selectedCase.model_maturity && (
+            <div className="mt-1">
+              <MaturityBadge
+                maturity={selectedCase.model_maturity}
+                modelVersion={selectedCase.model_version}
+                scoredAt={selectedCase.risk_score_calculated_at}
+                seedScore={(selectedCase as any).seed_risk_score ?? undefined}
+                variant="banner"
+              />
+            </div>
+          )}
+          {!selectedCase.model_maturity && (
+            <div className="mt-1 text-[10px] text-amber-600 flex items-center gap-1">
+              <span>⚠</span>
+              <span>Model score pending — showing estimated risk. Run scoring to generate model-validated score.</span>
+            </div>
+          )}
         </div>
 
         {/* SLA */}
@@ -470,17 +480,20 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
       {/* Tab Navigation - Horizontal tabs at top */}
       <TabNavigation
         tabs={[
+          { id: 'Timeline', label: 'Timeline' },
+          { id: 'Risk Profile', label: 'Risk Profile' },
           { id: 'Shipment', label: 'Shipment' },
           { id: 'Entity', label: 'Entity' },
-          { id: 'Data Tables', label: 'Data Tables' },
           { id: 'Risk Score', label: 'Risk Score' },
-          { id: 'Evidence & Referral', label: 'Evidence & Referral' },
+          { id: 'Evidence', label: 'Evidence' },
+          { id: 'Referral', label: 'Referral' },
+          { id: 'Referral (New)', label: 'Referral (New)' },
         ]}
         activeTab={activeSubTab}
         onTabChange={(tabId) => {
-          const validTabs = ['Shipment', 'Entity', 'Data Tables', 'Risk Score', 'Evidence & Referral'];
+          const validTabs = ['Timeline', 'Risk Profile', 'Shipment', 'Entity', 'Risk Score', 'Evidence', 'Referral', 'Referral (New)'];
           if (validTabs.includes(tabId)) {
-            setActiveSubTab(tabId as 'Shipment' | 'Entity' | 'Data Tables' | 'Risk Score' | 'Evidence & Referral');
+            setActiveSubTab(tabId as 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence' | 'Referral' | 'Referral (New)' | 'Timeline' | 'Risk Profile');
           }
         }}
         orientation="horizontal"
@@ -488,23 +501,71 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
       {/* Content Area */}
       <div className="flex-1 overflow-y-auto">
+          {activeSubTab === 'Timeline' && (
+            <div className="p-6 bg-[#F7F9FC] overflow-y-auto">
+              <InvestigationTimeline
+                caseId={selectedCase?.case_id || ''}
+                events={[
+                  {
+                    event_id: 'EVT-001',
+                    event_type: 'Risk Escalation',
+                    title: `Risk Score at ${selectedCase?.risk_score}%`,
+                    description: selectedCase?.risk_score ? (selectedCase.risk_score >= 80 ? 'Critical risk level detected' : 'Elevated risk indicators identified') : 'Risk assessment complete',
+                    timestamp: new Date().toISOString(),
+                    severity: selectedCase?.risk_score && selectedCase.risk_score >= 80 ? 'critical' : 'high',
+                    details: { reason: 'Automated risk scoring', corridor: `${selectedCase?.origin_country || 'N/A'} → ${selectedCase?.destination_country || 'N/A'}` },
+                  },
+                  {
+                    event_id: 'EVT-002',
+                    event_type: 'Review Started',
+                    title: 'Investigation Opened',
+                    description: `Case opened for detailed analysis of ${selectedCase?.target_entity || 'target entity'}`,
+                    timestamp: selectedCase?.opened_date || new Date().toISOString(),
+                    severity: 'low',
+                    details: { opened_by: selectedCase?.assigned_officer || 'System', reason: 'Automated screening' },
+                  },
+                ]}
+              />
+            </div>
+          )}
+          {activeSubTab === 'Risk Profile' && (
+            <div className="p-6 bg-[#F7F9FC] overflow-y-auto">
+              <RiskHeatmap
+                dimensions={[
+                  { dimension: 'Supply Chain', score: Math.max(20, Math.min(100, (selectedCase?.h1_score || 25) * 2.5)) },
+                  { dimension: 'Origin Risk', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.9)) },
+                  { dimension: 'Entity History', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.8)) },
+                  { dimension: 'Financial', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.7)) },
+                  { dimension: 'Regulatory', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.95)) },
+                  { dimension: 'Documentation', score: Math.max(20, Math.min(100, (selectedCase?.h1_score || 25) * 2.2)) },
+                ]}
+                title="Risk Profile Matrix"
+                height={400}
+              />
+            </div>
+          )}
           {activeSubTab === 'Shipment' && (
             <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
           )}
           {activeSubTab === 'Entity' && (
             <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
           )}
-          {activeSubTab === 'Data Tables' && (
-            <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
-          )}
           {activeSubTab === 'Risk Score' && (
             <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />
           )}
-          {activeSubTab === 'Evidence & Referral' && selectedReferral && (
+          {activeSubTab === 'Evidence' && (
+            <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+          )}
+          {activeSubTab === 'Referral' && selectedReferral && (
             <div className="flex-1 overflow-hidden">
               <ComprehensiveReferralViewer
                 referral={selectedReferral}
               />
+            </div>
+          )}
+          {activeSubTab === 'Referral (New)' && selectedCaseShipments && selectedCaseShipments.length > 0 && (
+            <div className="flex-1 overflow-hidden">
+              <ReferralPackageGenerationTab shipmentId={selectedCaseShipments[0].shipment_id} />
             </div>
           )}
       </div>

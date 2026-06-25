@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Send, Sparkles, ChevronLeft, ChevronRight, Database, AlertCircle, Database as DbIcon } from 'lucide-react';
+
+interface SourceCard {
+  tool: string;
+  summary: string;
+  hit: boolean;
+}
 
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  sources?: string[];
+  sources?: SourceCard[];
+  isDone?: boolean;
 }
 
 interface V2ChatPanelProps {
@@ -14,21 +21,32 @@ interface V2ChatPanelProps {
     target: string;
     riskScore: number;
     officer: string;
+    shipmentId?: string;
   };
   isExpanded?: boolean;
   onToggleExpand?: () => void;
+  currentPage?: string;
+  selectedEntity?: string;
 }
 
-export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleExpand }: V2ChatPanelProps) {
+export default function V2ChatPanel({
+  caseContext,
+  isExpanded = true,
+  onToggleExpand,
+  currentPage = 'dashboard',
+  selectedEntity
+}: V2ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      text: 'Authorized Sentry Platform Secure Assistant live. Ask me to cross-reference container logs, evaluate routing anomalies, or draft a DOJ referral narrative.',
+      text: 'Authorized Sentry Platform Secure Assistant live. Ask me about active cases, entity intelligence, risk scores, corridors, or referral packages.',
+      sources: []
     },
   ]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
+  const sessionIdRef = useRef<string>(generateUUID());
 
   useEffect(() => {
     if (chatRef.current) {
@@ -44,32 +62,119 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setLoading(true);
 
+    // Add placeholder assistant message for streaming
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      text: '',
+      sources: [],
+      isDone: false
+    }]);
+
     try {
-      const response = await fetch('/api/gemini/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userText,
-          history: messages.map(m => ({ role: m.role, content: m.text })),
-          context: caseContext,
-        }),
+      const params = new URLSearchParams({
+        message: userText,
+        session_id: sessionIdRef.current!,
+        page: currentPage,
+        ...(caseContext?.shipmentId && { shipment_id: caseContext.shipmentId }),
+        ...(caseContext?.target && { entity: caseContext.target }),
+        ...(selectedEntity && { entity: selectedEntity }),
       });
 
-      const data = await response.json();
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: data.text || 'No response received.',
-        sources: data.sources || []
-      }]);
+      const response = await fetch(`/api/gemini/assistant/stream?${params}`, {
+        method: 'GET',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let currentText = '';
+      let currentSources: SourceCard[] = [];
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.substring(6));
+
+                if (event.type === 'text') {
+                  currentText += event.content;
+                  // Update message incrementally
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = {
+                      ...updated[updated.length - 1],
+                      text: currentText,
+                    };
+                    return updated;
+                  });
+                } else if (event.type === 'source') {
+                  const source: SourceCard = {
+                    tool: event.tool,
+                    summary: event.summary,
+                    hit: event.hit,
+                  };
+                  currentSources.push(source);
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = {
+                      ...updated[updated.length - 1],
+                      sources: [...currentSources],
+                    };
+                    return updated;
+                  });
+                } else if (event.type === 'done') {
+                  setMessages(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = {
+                      ...updated[updated.length - 1],
+                      isDone: true,
+                    };
+                    return updated;
+                  });
+                } else if (event.type === 'error') {
+                  setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    text: `Error: ${event.content}`,
+                    sources: [],
+                    isDone: true
+                  }]);
+                }
+              } catch (e) {
+                // Skip non-JSON lines
+              }
+            }
+          }
+        }
+      }
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
         text: 'Error: Unable to connect to AI service. Please try again.',
+        sources: [],
+        isDone: true
       }]);
     } finally {
       setLoading(false);
     }
   };
+
+  function generateUUID(): string {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
 
   // Collapsed view
   if (!isExpanded) {
@@ -119,7 +224,7 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed ${
+                className={`max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed whitespace-pre-wrap ${
                   msg.role === 'user'
                     ? 'bg-[#005EA2] text-white rounded-br-none'
                     : 'bg-[#F7F9FC] border border-[#D0D7DE] text-[#1B1B1B] rounded-bl-none'
@@ -129,10 +234,27 @@ export default function V2ChatPanel({ caseContext, isExpanded = true, onToggleEx
               </div>
             </div>
             {msg.sources && msg.sources.length > 0 && (
-              <div className="flex justify-start mt-1 px-1">
-                <div className="text-[9px] text-slate-500 font-mono">
-                  Sources: {msg.sources.join(', ')}
-                </div>
+              <div className="flex justify-start mt-2 px-1 flex-wrap gap-2">
+                {msg.sources.map((source, sidx) => (
+                  <div
+                    key={sidx}
+                    className={`inline-flex items-center space-x-1 px-2 py-1 rounded text-[8px] font-mono border ${
+                      source.hit
+                        ? 'bg-blue-50 border-blue-200 text-blue-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-700'
+                    }`}
+                    title={source.summary}
+                  >
+                    {source.hit && source.summary.includes('HIT') && (
+                      <AlertCircle className="w-3 h-3" />
+                    )}
+                    {!source.hit && source.summary.includes('Error') && (
+                      <AlertCircle className="w-3 h-3 text-red-500" />
+                    )}
+                    <DbIcon className="w-3 h-3" />
+                    <span className="truncate max-w-[120px]">{source.tool}: {source.summary.substring(0, 40)}</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>

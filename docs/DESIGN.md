@@ -1,6 +1,6 @@
 # CBP Sentry — Solution & Application Design
 
-**Version:** 2.0 | **Updated:** 2026-05-23 | **Audience:** Product Owners, Architects, UI/UX Leads, AI/ML Engineers
+**Version:** 2.1 | **Updated:** 2026-06-24 | **Audience:** Product Owners, Architects, UI/UX Leads, AI/ML Engineers
 
 ---
 
@@ -527,27 +527,45 @@ ALGORITHM:
 
 ### 7-Factor Model Formula
 
+> **Current model (June 2026):** 60% XGBoost calibrated probability + 40% rule engine blend.
+> Score write-back in progress — existing DB values are pre-seeded synthetic (not model-computed).
+
+```
+# Current scoring blend (risk_scoring_engine.py)
+rule_score = weighted_sum(7 factors below)
+xgb_score  = calibrated_probability(xgboost_predict(36_features))
+final_score = 0.6 × xgb_score + 0.4 × rule_score
+
+# Percentile calibration anchors (from score_calibration.json):
+#   p50=0.000327 → 50, p75=0.00328 → 75, p90=0.01863 → 90, p95=0.42177 → 95
+```
+
+**7-Factor weights:**
+
 ```
 risk_score = constrain_to_range(
-  calibration_multiplier × 
   (
     0.25 × documentation_score +
     0.20 × corridor_score +
     0.15 × commodity_score +
     0.15 × routing_score +
-    0.15 × party_score +
+    0.10 × party_score +
     0.10 × pattern_score +
-    0.10 × time_score
-  ) +
-  altana_adjustment,
-  0,
-  100
+    0.05 × time_score
+  ),
+  0, 100
 )
-
-where:
-  calibration_multiplier = 1.2
-  altana_adjustment ∈ {+5 if sanctioned, -8 if verified clean, 0 otherwise}
 ```
+
+**⚠️ Zero-factor alert:** Commodity, Party, and Pattern currently default to 0 when reference data is
+missing (no real AD/CVD table, no real company registry, no real trade norms). This is fixed at 15%
+maturity by loading the 3 data pipelines. See `ARCHITECTURE.md § Reference Data Architecture`.
+
+**Score provenance fields (15% target, all currently NULL in DB):**
+- `calculated_risk_score` — model-computed value (replaces synthetic `risk_score`)
+- `model_version` — e.g. "xgb-v1.0-20260624"  
+- `model_maturity` — 15 (scale: 15/30/50/70/90)
+- `scored_at` — ISO timestamp
 
 ### Factor Breakdown Example
 
@@ -716,17 +734,21 @@ else:
 ```
 Risk Score Range      Recommendation              Color   Examination
 ──────────────────────────────────────────────────────────────────────
-80 - 100             HOLD FOR EXAMINATION        Red     Mandatory within 24h
-50 - 79              EXAMINE                     Amber   Officer discretion
-0 - 49               CLEAR                       Green   No examination needed
+70 - 100             HIGH — Hold/Examine         Red     Flag for officer investigation
+50 - 69              MEDIUM — Under Audit        Amber   Officer discretion, targeted review
+0  - 49              LOW — Clear                 Green   Normal processing
 ```
 
+**Score display:** Case cards show `calculated_risk_score` (falls back to `risk_score` if NULL).
+Risk Score tab calls live scoring endpoint `POST /api/risk-scoring/comprehensive`.
+Maturity badge shown alongside score: **"15% | LOW CONFIDENCE"**.
+
 **Officer Workflow:**
-1. See case in dashboard with red/amber/green badge
-2. Click to open case detail
-3. Review all 6 tabs of analysis
-4. If HOLD or EXAMINE: can manually override (feedback loop)
-5. If override: documented in audit trail; contributes to monthly recalibration
+1. See case in dashboard with HIGH/MEDIUM/LOW badge + score + maturity badge
+2. Click to open investigation workspace (6 tabs)
+3. Review Risk Score tab: factor breakdown + SHAP top-5 features + model version + scored_at
+4. If HOLD or EXAMINE: Hold/Examine/Clear button → feedback loop → gate1_outcomes table
+5. All actions logged with timestamp, officer ID, reason (audit trail)
 
 ---
 

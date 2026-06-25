@@ -1,6 +1,6 @@
 # CBP Sentry — System Architecture
 
-**Version:** 2.0 | **Updated:** 2026-05-23 | **Audience:** Engineers, DevOps, Integration Partners
+**Version:** 2.2 | **Updated:** 2026-06-24 | **Audience:** Engineers, DevOps, Integration Partners
 
 ---
 
@@ -8,15 +8,30 @@
 
 CBP Sentry is an AI-powered trade fraud detection system designed to identify transshipment and evasion schemes at the U.S. border. It combines:
 
-- **Real-time manifest analysis** with ML risk scoring (7-factor model)
-- **Entity resolution** via CORD 21M-entity database + Senzing SDK
-- **External intelligence** from Altana Atlas, OFAC/SDN, AIS vessel tracking
-- **Human-in-the-loop AI** generating officer narratives via Gemini Pro
-- **CBP-compliant workflows** for investigation and DHS referral
+- **7-factor risk scoring** — 60% XGBoost + 40% rule engine blend; AUC 0.940 on held-out synthetic data
+- **MLOps lifecycle** — `cbp-risk-engine` MCP service (port 8010): model versioning, training, drift detection, officer feedback
+- **Entity resolution** via CORD 243K-entity database + Senzing SDK (GLEIF, ICIJ Panama/Pandora, OFAC, OpenSanctions)
+- **External intelligence** from VesselFinder AIS, OFAC/SDN, OpenCorporates, UN Comtrade, Federal Register
+- **Human-in-the-loop AI** generating officer EAPA referral narratives via Gemini Pro
+- **CBP-compliant workflows** for investigation workspace and DHS referral packages
 
-**Core Purpose:** Reduce time-to-investigation from weeks to hours; reduce false positives via calibrated ML + human feedback loops.
+**Core Purpose:** Reduce time-to-investigation from weeks to hours; surface EAPA cases with deterministic
+rules + ML scoring; improve model accuracy through closed-loop officer feedback.
 
-**Deployment:** Docker Compose (local), Cloud Run + Cloud Storage (staging), PostgreSQL + Cloud Run (production).
+**Deployment:** Docker Compose (local). See `docs/DEPLOYMENT.md`.
+
+**Current Maturity (June 24, 2026):** ~15% — XGBoost + rule engine operational on synthetic data;
+4 of 7 scoring factors non-zero; score write-back and real reference data pipelines in progress.
+
+### Model Maturity Levels
+
+| Level | Description | Key Gate | ETA |
+|-------|-------------|----------|-----|
+| **15%** | Deterministic rules + XGBoost on real reference data | In progress | Jun 2026 |
+| **30%** | LightGBM on ≥200 Gate 1 outcomes + real EAPA cases | gate1_outcomes ≥ 200 | TBD |
+| **50%** | Full ensemble (XGBoost+LGBM+IF) + BBN uncertainty | gate1_outcomes ≥ 500 | TBD |
+| **70%** | RL closed-loop retraining, weekly calibration | gate1_outcomes ≥ 1000 | TBD |
+| **90%** | 90% PPV @ 5+ referrals/day — SOW end-state | ACE real-time ISF | TBD |
 
 ---
 
@@ -29,37 +44,41 @@ CBP Sentry is an AI-powered trade fraud detection system designed to identify tr
 │                     BROWSER (Web Client)                        │
 │                      Port: 3001 (nginx)                         │
 └──────────────────────────┬──────────────────────────────────────┘
-                           │
+                           │  /api/*
 ┌──────────────────────────▼──────────────────────────────────────┐
 │            sentry-api (Primary API Gateway)                     │
 │             FastAPI/uvicorn — Port 8000                         │
 │  Health: GET /health                                            │
-│  Dependencies: healthy sentry-data + sentry-cord-integration    │
-└──────────┬──────────────────┬──────────────────────┬────────────┘
-           │                  │                      │
-    ┌──────▼────────┐  ┌──────▼────────┐   ┌────────▼──────┐
-    │ sentry-data   │  │ sentry-cord   │   │   External    │
-    │ Port 8005     │  │ integration   │   │   APIs        │
-    │ SQLite DB     │  │ Port 8004     │   │               │
-    │               │  │ CORD index    │   │ • Gemini Pro  │
-    │ Health: /     │  │               │   │ • Altana      │
-    │ health        │  │ Health: /     │   │ • OFAC/SDN    │
-    │               │  │ health        │   │ • Vessel API  │
-    └───────────────┘  └───────────────┘   │ • OpenCorp    │
-                                            │ • Comtrade    │
-                                            │ • ITC Tariffs │
-                                            └───────────────┘
+│  Scoring: risk_scoring_engine.py (XGBoost 60% + rules 40%)     │
+└───┬──────────────────┬──────────────────┬────────────────┬──────┘
+    │                  │                  │                │
+┌───▼────────┐  ┌──────▼────────┐  ┌──────▼──────────┐  ┌▼───────────────────┐
+│sentry-data │  │sentry-cord    │  │cbp-risk-engine  │  │External APIs       │
+│Port 8005   │  │integration    │  │Port 8010        │  │                    │
+│SQLite DB   │  │Port 8004      │  │MLOps MCP Svc    │  │• Gemini Pro        │
+│1396 ships. │  │243K entities  │  │XGBoost+LGBM     │  │• VesselFinder AIS  │
+│limit 5000  │  │GLEIF,ICIJ,    │  │MLflow registry  │  │• OpenCorporates    │
+│            │  │OFAC,OpenSanct │  │/api/predict     │  │• UN Comtrade       │
+│            │  │NOTE: SE Asia  │  │/api/train       │  │• Federal Register  │
+│            │  │coverage sparse│  │/api/models      │  │• USITC             │
+│            │  │               │  │/api/metrics     │  │• Altana (disabled) │
+└────────────┘  └───────────────┘  │/api/feedback    │  └────────────────────┘
+                                    └─────────────────┘
+
+DEPRECATED (pending removal):
+  precise-risk-engine (Port 8007) — redundant with cbp-risk-engine, to be removed
 ```
 
 ### Service Definitions
 
 | Service | Port | Framework | Role | Database |
 |---|---|---|---|---|
-| **sentry-api** | 8000 | FastAPI + uvicorn | Request orchestration, risk scoring, Gemini integration, external API proxying | —(queries data service) |
-| **sentry-data** | 8005 | FastAPI + uvicorn | CRUD operations, shipment persistence, seed data loading | SQLite 3 |
-| **sentry-cord-integration** | 8004 | FastAPI + uvicorn | Entity resolution, CORD search, Senzing SDK wrapper, ownership chain tracing | CORD SQLite index (21M records) |
+| **sentry-api** | 8000 | FastAPI + uvicorn | Request orchestration, risk scoring (XGBoost + rule engine blend), Gemini integration, external API proxying | —(queries data service) |
+| **sentry-data** | 8005 | FastAPI + uvicorn | CRUD operations, shipment persistence, seed data loading. Limit: 5000/page | SQLite 3 (cbp_sentry.db, 1396 shipments) |
+| **sentry-cord-integration** | 8004 | FastAPI + uvicorn | Entity resolution, CORD search, Senzing SDK wrapper, ownership chain tracing | CORD SQLite (243K records: GLEIF, ICIJ, OFAC, OpenSanctions) |
+| **cbp-risk-engine** | 8010 | FastAPI + uvicorn | MLOps MCP service: model inference, training pipeline, MLflow registry, drift detection, officer feedback | MLflow tracking DB + DVC reference data |
 | **sentry-ui** | 3001 (prod) / 5173 (dev) | React 19 + Vite + nginx | Investigation workspace, case management, officer narrative, PDF export | — (queries sentry-api) |
-| **senzing** (optional) | 8250 | Senzing API Server 3.5.2 | Advanced entity resolution sandbox; not used in production | Senzing repository |
+| **precise-risk-engine** (deprecated) | 8007 | Flask + Python | Legacy ML scoring — REDUNDANT with cbp-risk-engine, scheduled for removal | — |
 
 ### Health Checks
 
@@ -68,6 +87,7 @@ All services expose health check endpoints consumed by Docker Compose startup or
 - **sentry-data:** `GET /health` → returns `{"status": "healthy", "records_in_db": <count>}`
 - **sentry-api:** `GET /health` → returns `{"status": "healthy", "mode": "live", "dependencies": {...}}`
 - **sentry-cord-integration:** `GET /health` → returns `{"status": "healthy", "entity_count": 21000000, "ready": true}`
+- **precise-risk-engine:** `GET /health` → returns `{"status": "healthy", "model_loaded": true, "ready": true}`
 - **sentry-ui:** `GET /` → nginx returns 200 + index.html
 
 ### Service Startup Dependencies
@@ -83,10 +103,18 @@ sentry-cord-integration
   ├─ Loads CORD SQLite index
   └─ Ready
 
+precise-risk-engine
+  ├─ Loads trained XGBoost model from disk
+  ├─ Loads configuration (7 factors, 3 gates, rules)
+  ├─ Waits for sentry-data healthy (optional, for enrichment)
+  └─ Ready to accept scoring requests
+
 sentry-api
   ├─ Waits for sentry-data healthy
   ├─ Waits for sentry-cord-integration healthy
-  └─ Ready to accept requests
+  ├─ Waits for precise-risk-engine healthy (required)
+  ├─ Loads feature flag state (USE_PRECISE_RISK_MODEL)
+  └─ Ready to accept requests (routes to legacy or precise-risk-engine)
 
 sentry-ui
   ├─ Waits for sentry-api healthy
@@ -264,102 +292,128 @@ async def startup():
 
 ## 5. Risk Scoring Engine
 
-### 7-Factor ML Model
+### Model Architecture
+
+CBP Sentry uses a blended model: **60% XGBoost (calibrated probability) + 40% 7-factor rule engine**.
 
 ```
-Final Risk Score = (calibration_multiplier × weighted_factors) + altana_adjustment
-Calibration Multiplier = 1.2x (post-score to match synthetic data distribution)
-Altana Adjustment = +5 (if sanctions match) or -8 (if verified clean)
+INPUT: Manifest data (36 normalized features)
+  ├─ XGBoost Classifier (60% weight)
+  │   ├─ Trained on 10,287 records (287 EAPA + 10,000 negatives) — SYNTHETIC
+  │   ├─ 36 clean features (leaky features removed, see models/score_calibration.json)
+  │   ├─ Returns raw probability → calibrate via percentile anchors
+  │   └─ AUC: 0.940 | Precision: 1.0 | Recall: 0.528
+  │
+  ├─ Rule Engine (40% weight)
+  │   ├─ 7 factors with hardcoded weights (see factor table below)
+  │   ├─ Uses live lookups: CORD entity match, VesselFinder dwell, AD/CVD table
+  │   └─ Returns 0-100 rule score
+  │
+  └─ Blend → Final Score = 0.6×XGBoost_calibrated + 0.4×Rule_score
+               → Constrain to 0-100
+
+OUTPUT: {
+  risk_score: 0-100,
+  risk_level: HIGH|MEDIUM|LOW,
+  calculated_risk_score: (same, model-computed),
+  model_version: "xgb-v1.0-YYYYMMDD",
+  model_maturity: 15,   ← current level (scale: 15/30/50/70/90)
+  scored_at: ISO timestamp,
+  scoring_method: "xgb_blend",
+  factor_breakdown: {...},
+  shap_values: {...}    ← top 5 features
+}
 ```
 
-**Factor Breakdown:**
+> **⚠️ Current limitation:** scoring endpoint computes live scores but does NOT write back to DB.
+> All `calculated_risk_score`, `scored_at`, `model_version` fields in DB are NULL.
+> Score write-back is a 15% maturity task (in progress).
 
-| Factor | Weight | Sub-factors | Description |
-|---|---|---|---|
-| **Documentation Risk** | 25% | Element 9 mismatch (50%), ISF amendments (30%), manifest completeness (20%) | ISF Element 9 (country of origin) vs AIS stuffing location; amendment frequency; missing fields |
-| **Corridor Risk** | 20% | Route baseline scores | Pre-computed per corridor: CN→US (8.5), VN→US (7.0), MY→US (6.5), SG→US (5.0), CA→US (4.5) |
-| **Commodity Risk** | 15% | Tariff rate (50%), export control (30%), UFLPA (20%) | Duty rate from ITC tariffs; EAR/ITAR status; forced labor indicators |
-| **Routing Consistency** | 15% | AIS dwell anomaly (40%), port selection (30%), vessel flag (20%) | Port dwell vs baseline (e.g., >10 days flags); port selection logic; Panama-flagged vessels |
-| **Party Profile Risk** | 15% | Shipper age (35%), prior violations (30%), OFAC/sanctions (20%), beneficial ownership opacity (15%) | Company registration age; enforcement history; OFAC SDN list match; opacity score |
-| **Pattern Anomaly** | 10% | Pricing vs benchmark (50%), weight anomaly (25%), trade frequency (25%) | Price per kg deviation; declared weight variance; shipment frequency spikes |
-| **Time Sensitivity** | 10% | Pre-tariff timing (50%), seasonal anomaly (50%) | Filings 30+ days before tariff changes; seasonal import pattern breaks |
+### 7 Scoring Factors
 
-### Three-Horizon Pipeline
+| Factor | Weight | Key Signals | Data Source | Status |
+|--------|--------|-------------|-------------|--------|
+| **Documentation** | 25% | ISF Element 9 mismatch, manifest amendments | ISF data (synthetic) | ⚠️ Synthetic |
+| **Corridor** | 20% | Origin country risk, SE Asia routes | Corridor risk table | ⚠️ Synthetic baselines |
+| **Commodity** | 15% | AD/CVD HS codes, UFLPA, export control | Federal Register (TODO) | ⬜ Zero factor |
+| **Routing** | 15% | AIS dwell anomaly, port selection, vessel flag | VesselFinder API (live) | ✅ Real |
+| **Party** | 10% | Shipper age, prior violations, OFAC match | CORD + OpenCorporates (TODO) | ⬜ Zero factor |
+| **Pattern** | 10% | Price anomaly (declared vs corridor norm), weight | UN Comtrade (TODO) | ⬜ Zero factor |
+| **Time Sensitivity** | 5% | Pre-tariff filing, seasonal anomaly | Derived from manifest dates | ✅ Real |
 
-```
-INPUT: Manifest data (shipper, commodity, route, vessel, declared value)
+> **Zero factors:** Commodity, Party, and Pattern default to 0 when reference data is missing.
+> This is fixed at 15% maturity by loading AD/CVD, Comtrade, and OpenCorporates data.
 
-┌─────────────────────────────────────────────────────────┐
-│ Horizon 1 (H1): Corridor Risk                           │
-│ ─────────────────────────────────────────────────────   │
-│ Analyzes trade corridor patterns                        │
-│ - Country pair, commodity, industry history             │
-│ - Baseline risk (CN→US = 8.5 / 10)                      │
-│ - Result: H1_score (0-100)                              │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│ Horizon 2 (H2): Pre-Intelligence Anomalies              │
-│ ─────────────────────────────────────────────────────   │
-│ Analyzes ISF filings + AIS vessel tracking              │
-│ - Element 9 mismatch (declared vs actual stuffing)      │
-│ - Port dwell anomalies                                  │
-│ - Vessel flag / IMO history                             │
-│ - Result: H2_score (0-100)                              │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│ Horizon 3 (H3): Manifest-Level Signals                  │
-│ ─────────────────────────────────────────────────────   │
-│ Analyzes shipper/consignee profiles + pricing           │
-│ - Party age, prior violations, OFAC match               │
-│ - Price anomaly (declared vs benchmark)                 │
-│ - Weight anomaly                                        │
-│ - Result: H3_score (0-100)                              │
-└─────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────┐
-│ FINAL: Comprehensive Risk Score                         │
-│ ─────────────────────────────────────────────────────   │
-│ Weighted formula: 0.25×H1 + 0.20×H2 + ... (7 factors)   │
-│ Apply calibration: 1.2x multiplier                      │
-│ Add Altana adjustment: ±5/8                             │
-│ Constrain: 0-100 range                                  │
-│ Result: risk_score (integer 0-100)                      │
-│ Map to recommendation: HOLD / EXAMINE / CLEAR           │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Risk Score Interpretation
+### Score Calibration
 
 ```
-Risk Score Range        Recommendation        Color       Action
-─────────────────────────────────────────────────────────────────
-80 - 100               HOLD FOR EXAMINATION   Red         Automatic referral to DHS
-50 - 79                EXAMINE                Amber       Officer discretion, further review
-0 - 49                 CLEAR                  Green       Normal processing
+Raw XGBoost probability → percentile mapping (from score_calibration.json):
+  p50 = 0.000327  → score 50
+  p75 = 0.00328   → score 75
+  p90 = 0.01863   → score 90
+  p95 = 0.42177   → score 95
+  p99 = 1.0       → score 99
+Top 25% of any scored population achieves score ≥ 70.
 ```
 
-### Calibration & Feedback Loop
+### Score Thresholds
 
-- **Analyst feedback:** Officer accepts/rejects a score → stored in `scores.feedback_override` table
-- **Weight recalibration:** Monthly job aggregates feedback → suggests weight adjustments
-- **Recalibration endpoint:** POST `/api/weight-suggestions/{id}/approve` immediately applies new weights to all future scores
-- **Audit trail:** All weight changes logged with timestamp, approval user, reason
+```
+Score Range  Recommendation         Action
+───────────────────────────────────────────────
+70 - 100     HIGH — Hold/Examine    Automatic referral flag; officer investigation
+50 - 69      MEDIUM — Under Audit   Officer discretion; targeted review
+0  - 49      LOW — Clear            Normal processing
+```
+
+### Score Provenance (15% implementation target)
+
+Every scored shipment must carry:
+- `calculated_risk_score` — engine-computed (replaces synthetic `risk_score`)
+- `model_version` — e.g. "xgb-v1.0-20260624"
+- `model_maturity` — integer 15 (scale: 15/30/50/70/90)
+- `scored_at` — ISO 8601 timestamp
+- `scoring_method` — "xgb_blend" | "rule_engine" | "legacy"
+- History preserved in `score_history` table on model promotion
+
+### Reference Data Architecture
+
+```
+15-29% Maturity:
+  cbp-risk-engine/reference/           (DVC-versioned artifacts)
+    adcvd/vn_v1.0.csv                  ← Federal Register AD/CVD orders (VN)
+    corridors/vn_us_v1.0.csv           ← UN Comtrade VN→US baselines
+    entities/vn_v1.0.csv               ← OpenCorporates VN company registry
+
+30%+ Maturity:
+  Reference Data Service (port 8011)   ← extracted from cbp-risk-engine
+  Versioned API: GET /api/reference/{dataset}/{version}
+
+50%+ Maturity:
+  Feature Store                        ← evolved from Reference Data Service
+```
+
+Pipeline pattern:
+```
+fetch_adcvd.py --region VN --version 1.0
+  → ELT (extract from Federal Register, transform to canonical schema)
+  → DVC commit reference/adcvd/vn_v1.0.csv
+  → model card records: adcvd_version=v1.0
+  → both training pipeline AND scoring engine read from same artifact
+```
 
 ---
 
 ## 6. Entity Resolution Architecture
 
-### CORD Index (21M Records)
+### CORD Index (243K Records)
 
-- **Source:** CORD database (public entity records from 195 countries)
+- **Source:** Public entity records from: GLEIF (LEI registry), ICIJ Panama/Pandora Papers, OFAC SDN, Open Sanctions, Open Ownership, US Labor Violations
 - **Storage:** SQLite at `/app/data/cord_index.db` (sentry-cord-integration service)
 - **Indexing:** Fuzzy match on company name + country code; exact match on LEI/tax ID
 - **Usage:** `GET /search?name={query}&country={code}` returns top-K matches with confidence scores
+- **⚠️ Coverage gap:** Mostly Western-focused — search for "Guangzhou" or VN/MY manufacturers returns []. Needs OpenCorporates expansion for SE Asia at 30% maturity.
+- **Senzing mode:** Runs in `API_MODE=fixture` by default — live entity resolution not active.
 
 ### Senzing SDK Integration
 
@@ -414,7 +468,9 @@ OUTPUT: [shipper, parent, owner] with confidence scores and why_linked explanati
 
 ### Altana Atlas (Supply Chain Verification)
 
-- **Trigger:** Automatic when risk_score ≥ 80 (CRITICAL band)
+- **Status:** DISABLED — `ALTANA_ENABLED=false`, `ALTANA_API_KEY=demo-key-12345` (demo)
+- **Enable at 50% maturity** when real Altana subscription is in place
+- **Trigger:** Automatic when risk_score ≥ 75
 - **API Call:** POST `https://api.altanafinance.com/supply-chain-verification`
 - **Input:** Shipper, consignee, commodity, route, declared value
 - **Output:** Opacity score (0-100), sanctions exposure, capacity check, verification confidence
@@ -431,23 +487,84 @@ OUTPUT: [shipper, parent, owner] with confidence scores and why_linked explanati
 
 ### VesselFinder / AIS Data
 
-- **Use:** Port dwell anomaly detection (H2 factor)
-- **API:** VesselFinder or MarineTraffic AIS feed
+- **Status:** ACTIVE — real API key configured (`VESSELAPI_KEY` in .env)
+- **Use:** Port dwell anomaly detection (Routing factor)
+- **API:** VesselFinder AIS feed — fires when `dwell_days=NULL` in manifest
 - **Query:** Vessel IMO + port code → port call history, dwell times
-- **Output:** Actual dwell vs baseline; port sequence verification
-- **Current:** Hardcoded in manifest (future: live API integration)
+- **Output:** Actual dwell vs baseline; port sequence verification; vessel flag, IMO data
 
-### OpenCorporates / Comtrade / ITC (Pre-loaded Models)
+### OpenCorporates / Comtrade / Federal Register (Reference Data Pipelines)
 
-These are not real-time API calls; they're baked into the H1 corridor risk model:
+These are **ELT pipelines** producing DVC-versioned artifacts consumed by the scoring engine:
 
-- **OpenCorporates:** Company registration age, beneficial ownership transparency scores
-- **Comtrade:** Historical bilateral trade flows, tariff product codes, volume benchmarks
-- **ITC Tariffs:** HS code duty rates, trade agreement preferences, anti-dumping cases
+- **fetch_adcvd.py `--region VN`** — Federal Register API + USITC: VN AD/CVD orders for HS 7604/8541
+  - Output: `cbp-risk-engine/reference/adcvd/vn_v1.0.csv`
+  - Fixes: Commodity factor (real duty rates, active EAPA orders)
+- **fetch_comtrade.py `--region VN`** — UN Comtrade API: VN→US bilateral trade baselines (3yr)
+  - Output: `cbp-risk-engine/reference/corridors/vn_us_v1.0.csv`
+  - Fixes: Pattern + Corridor factors (real weight/value norms per HS code)
+- **fetch_entities.py `--region VN`** — OpenCorporates API: VN company registry (~500 exporters)
+  - Output: `cbp-risk-engine/reference/entities/vn_v1.0.csv`
+  - Fixes: Party factor (real shipper incorporation dates, registration status)
+
+**Pipeline scale plan:** Add `--region CN`, `--region MY` at 30% maturity.
 
 ---
 
-## 8. Security Architecture
+## 8. MLOps Architecture (cbp-risk-engine)
+
+### Service Overview
+
+`cbp-risk-engine` (port 8010) is the MLOps MCP service — a standalone FastAPI service
+managing model lifecycle separately from the main `sentry-api`. It exposes 6 route groups:
+
+```
+POST /api/predict           → XGBoost + SHAP inference
+POST /api/train             → Trigger training pipeline (uses reference/ data + DB snapshots)
+GET  /api/models            → MLflow model registry listing
+GET  /api/models/{id}       → Model card (features, training data, maturity level)
+POST /api/models/{id}/approve → 3-voter approval workflow (Lead Analyst, DS Lead, Compliance)
+GET  /api/metrics/performance → AUC, precision, recall per model version
+GET  /api/metrics/gates     → Gate status (gate1/2/3/4 thresholds)
+GET  /api/metrics/drift     → KS test on feature distributions (vs training baseline)
+GET  /api/jobs              → Training job history
+POST /api/feedback          → Officer feedback → gate1_outcomes (training signal for 30%)
+GET  /api/explain/{id}      → SHAP explanation for a specific shipment
+```
+
+### Start Command (manual, not yet in docker-compose)
+
+```bash
+cd /home/rahulvadera/cbp-risk-engine
+MODEL_DIR=/home/rahulvadera/cbp-sentry/models \
+SENTRY_SRC=/home/rahulvadera/cbp-sentry/services/api \
+nohup .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8010 \
+  > /tmp/mcp_server.log 2>&1 &
+```
+
+> **TODO:** Add to docker-compose.yml at 15% maturity completion.
+
+### Model Approval Workflow (3-voter quorum)
+
+1. Training job completes → model staged with status "pending_review"
+2. Lead Analyst reviews performance metrics → approves or rejects
+3. DS Lead reviews drift report → approves or rejects
+4. Compliance reviews model card + data provenance → approves or rejects
+5. All 3 approve → model promoted → `score_history` backup triggered → batch rescore starts
+
+### Officer Feedback Loop (gate1_outcomes table)
+
+Officer actions in the UI feed into the training pipeline at 30%+:
+```
+Hold/Examine/Clear button → POST /api/feedback → gate1_outcomes table
+gate1_outcomes ≥ 200 → enables LightGBM retraining (30% maturity gate)
+gate1_outcomes ≥ 500 → enables full ensemble (50% maturity gate)
+gate1_outcomes ≥ 1000 → enables RL closed-loop (70% maturity gate)
+```
+
+---
+
+## 9. Security Architecture
 
 ### Authentication & Authorization
 
@@ -524,7 +641,11 @@ Browser
 | **Frontend Styling** | Tailwind CSS + USWDS | 3.4 + 2.14 |
 | **Frontend Charts** | Recharts | 2.15 |
 | **Backend API** | FastAPI + uvicorn | 0.115 + 0.30 |
+| **Backend Risk Engine** | Flask | 3.0+ |
 | **Backend Async** | asyncio + aiohttp | stdlib + 3.9 |
+| **ML Framework** | XGBoost | 2.0+ |
+| **ML Anomaly Detection** | Isolation Forest (scikit-learn) | 1.5+ |
+| **ML Explainability** | SHAP | 0.45+ |
 | **Database (Dev)** | SQLite 3 | 3.x |
 | **Database (Prod)** | PostgreSQL | 15+ |
 | **Entity DB** | CORD SQLite | 21M records |
@@ -543,13 +664,27 @@ Browser
 
 All services in one network; SQLite persistent volume; optional Senzing profile.
 
+**Services:**
+- sentry-ui (port 3001)
+- sentry-api (port 8000)
+- sentry-data (port 8005)
+- sentry-cord-integration (port 8004)
+- precise-risk-engine (port 8007 → 8004 internal)
+- senzing (port 8250, optional profile)
+
+**Risk Scoring:** Feature flag `USE_PRECISE_RISK_MODEL=false` (safe default, uses legacy model)
+
 ### Cloud Run Staging (SQLite)
 
-4 separate Cloud Run services; Cloud Storage FUSE bucket for `/app/data`; Workload Identity for service-to-service auth; Secret Manager for API keys.
+5 separate Cloud Run services; Cloud Storage FUSE bucket for `/app/data`; Workload Identity for service-to-service auth; Secret Manager for API keys.
+
+**Risk Scoring:** Feature flag `USE_PRECISE_RISK_MODEL=true` with `TRAFFIC_PERCENTAGE=10` (gradual rollout, 90% legacy / 10% precise-risk)
 
 ### Cloud Run Production (PostgreSQL)
 
-4 separate Cloud Run services; Cloud SQL PostgreSQL; Cloud VPC Connector for SQL connectivity; Secret Manager for all credentials.
+5 separate Cloud Run services; Cloud SQL PostgreSQL; Cloud VPC Connector for SQL connectivity; Secret Manager for all credentials.
+
+**Risk Scoring:** Feature flag `USE_PRECISE_RISK_MODEL=true` with `TRAFFIC_PERCENTAGE=0` initially (100% legacy). Manual traffic increase via API after validation/monitoring period.
 
 ---
 

@@ -1,0 +1,7 @@
+year,hs_code,hs_description,origin,destination,net_weight_kg,trade_value_usd,avg_usd_per_kg,volume_rank
+2021,7604,"Aluminum bars, rods and profiles",VN,US,29099084.934,141018255.622,4.8461,2
+2021,8541,"Photovoltaic cells, modules and related semiconductor devices",VN,US,47419958.801,3602043152.847,75.9605,1
+2022,7604,"Aluminum bars, rods and profiles",VN,US,43799461.514,261302860.652,5.9659,2
+2022,8541,"Photovoltaic cells, modules and related semiconductor devices",VN,US,1749623403.425,10166736081.555,5.8108,1
+2023,7604,"Aluminum bars, rods and profiles",VN,US,31337064.496,179361462.580,5.7236,2
+2023,8541,"Photovoltaic cells, modules and related semiconductor devices",VN,US,1341702932.132,13001625162.776,9.6904,1

@@ -14,8 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Step 2: Copy application code
 COPY services/data/ .
 
-# Step 3: Copy database files
-COPY data/ /app/data/
 
 # Create required directories
 RUN mkdir -p /app/data

@@ -1,0 +1,79 @@
+{
+  "version": "1.0",
+  "method": "percentile_anchored_linear",
+  "anchors": {
+    "neg_95th_pct": 0.03160803020000458,
+    "pos_05th_pct": 0.5614599138498306,
+    "pos_50th_pct": 0.9400499761104584,
+    "low_score": 40.0,
+    "high_score": 75.0
+  },
+  "thresholds": {
+    "LOW": 40,
+    "MEDIUM": 55,
+    "HIGH": 70,
+    "CRITICAL": 85
+  },
+  "clean_features": [
+    "DOCUMENTATION_001_element9_mismatch",
+    "DOCUMENTATION_003_manifest_completeness",
+    "DOCUMENTATION_004_missing_fields_pct",
+    "DOCUMENTATION_006_hs_code_control_level",
+    "DOCUMENTATION_007_shipper_consignee_mismatch",
+    "DOCUMENTATION_012_field_count_ratio",
+    "ROUTING_001_hub_destination",
+    "ROUTING_002_origin_dest_distance",
+    "ROUTING_003_vessel_flag_risk",
+    "ROUTING_006_vessel_condition_score",
+    "ROUTING_007_origin_frequency",
+    "ROUTING_010_destination_mismatch",
+    "COMMODITY_001_hs_control_level",
+    "COMMODITY_002_high_value_flag",
+    "COMMODITY_003_electronics_flag",
+    "COMMODITY_004_precious_materials",
+    "COMMODITY_006_weight_anomaly",
+    "COMMODITY_007_commodity_origin_risk",
+    "COMMODITY_008_dual_use_equipment",
+    "COMMODITY_010_restricted_destination_match",
+    "CORRIDOR_001_origin_risk_score",
+    "CORRIDOR_002_destination_risk_score",
+    "CORRIDOR_005_high_risk_route",
+    "CORRIDOR_007_china_origin_indicator",
+    "CORRIDOR_009_corridor_frequency",
+    "CORRIDOR_010_panama_jurisdiction",
+    "CORRIDOR_011_geographic_distance",
+    "CORRIDOR_012_sanctioned_shipper",
+    "CORRIDOR_013_sanctioned_consignee",
+    "PARTY_001_shipper_age_risk",
+    "PARTY_002_new_shipper_flag",
+    "PARTY_003_very_new_shipper_flag",
+    "PARTY_004_shipper_name_opacity",
+    "PARTY_005_generic_name_score",
+    "PARTY_007_shipper_consignee_match",
+    "PARTY_010_combined_party_risk"
+  ],
+  "feature_count": 36,
+  "neg_prob_stats": {
+    "mean": 0.018689393997192383,
+    "p50": 0.00023139252152759582,
+    "p95": 0.03160803020000458
+  },
+  "pos_prob_stats": {
+    "mean": 0.8859491348266602,
+    "p05": 0.5614599138498306,
+    "p50": 0.9400499761104584,
+    "p95": 1.0291049778461456
+  },
+  "percentile_anchors": {
+    "p50": 0.0003272519097663462,
+    "p75": 0.003279923927038908,
+    "p85": 0.009386511519551277,
+    "p90": 0.018625827506184578,
+    "p95": 0.4217710793018341,
+    "p99": 0.9922288060188293,
+    "pos_p10": 0.8839544057846069,
+    "pos_p50": 0.9796323180198669,
+    "neg_p95": 0.0293120164424181,
+    "neg_p99": 0.7746949195861816
+  }
+}

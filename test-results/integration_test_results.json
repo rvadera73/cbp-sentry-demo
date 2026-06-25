@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-06-12T15:29:36.258572",
+  "tests": {
+    "health_check": true,
+    "single_score": true,
+    "batch_score": true,
+    "cache": true,
+    "model_info": true
+  }
+}

@@ -138,11 +138,38 @@ export default function ReferralDisplayPanel({ referralData, onNarrativeEdit, on
     );
   };
 
-  const formatValue = (value: any): string => {
+  const formatValue = (value: any): string | React.ReactNode => {
     if (value === null || value === undefined) return '—';
     if (typeof value === 'boolean') return value ? 'Yes' : 'No';
-    if (Array.isArray(value)) return value.join(', ');
-    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '—';
+      if (typeof value[0] === 'string' || typeof value[0] === 'number') {
+        return value.join(', ');
+      }
+      return (
+        <div className="nested-list">
+          {value.map((item, idx) => (
+            <div key={idx} className="nested-item">
+              {typeof item === 'object' ? JSON.stringify(item) : String(item)}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    if (typeof value === 'object') {
+      const entries = Object.entries(value);
+      if (entries.length === 0) return '{}';
+      return (
+        <div className="nested-object">
+          {entries.map(([k, v]) => (
+            <div key={k} className="nested-row">
+              <span className="nested-key">{k}:</span>
+              <span className="nested-value">{formatValue(v)}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
     return String(value);
   };
 

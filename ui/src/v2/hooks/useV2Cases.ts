@@ -64,7 +64,7 @@ export function useV2Cases(): UseV2CasesReturn {
       // Fetch all elevated+critical risk shipments (risk >= 50)
       const params = new URLSearchParams({
         risk_min: '50',
-        limit: '10000',
+        limit: '500',
         offset: '0'
       });
 
@@ -157,7 +157,14 @@ export function useV2Cases(): UseV2CasesReturn {
           port_calls: portCalls,
           vessel_name: s.vessel_name,
           vessel_imo: s.vessel_imo,
-          risk_score: s.risk_score || 50,
+          // Canonical score: sentry-api already sets risk_score = canonical (calculated if available, else seed)
+          risk_score: s.risk_score ?? 50,
+          seed_risk_score: s.seed_risk_score ?? undefined,
+          calculated_risk_score: s.calculated_risk_score ?? undefined,
+          model_version: s.model_version ?? undefined,
+          model_maturity: s.model_maturity ?? undefined,
+          risk_score_calculated_at: s.risk_score_calculated_at ?? undefined,
+          score_validation: s.score_validation ?? undefined,
 
           // Risk Breakdown & Audit Trail
           risk_breakdown: s.risk_breakdown,
@@ -183,12 +190,23 @@ export function useV2Cases(): UseV2CasesReturn {
       const mappedCases: Case[] = Object.entries(groupedByManifest).map(([caseId, shipmentList], idx) => {
         const firstShipment = shipmentList[0];
         const riskScore = firstShipment.risk_score || 50;
+        // ai_confidence uses maturity when available, otherwise heuristic
+        const maturity = firstShipment.model_maturity;
+        const aiConfidence = maturity != null
+          ? Math.min(100, Math.round(maturity + (riskScore * 0.1)))
+          : Math.min(100, Math.round(riskScore + 10));
 
         return {
           case_id: `CBP-${2026}-${9000 + idx}`,
           case_name: `${firstShipment.shipper_name || 'Unknown'} → ${firstShipment.manifest_data.consignee || 'Unknown'}`,
           target_entity: firstShipment.shipper_name || 'Unknown Entity',
           risk_score: riskScore,
+          seed_risk_score: (firstShipment as any).seed_risk_score ?? undefined,
+          calculated_risk_score: firstShipment.calculated_risk_score,
+          model_version: firstShipment.model_version,
+          model_maturity: firstShipment.model_maturity,
+          risk_score_calculated_at: firstShipment.risk_score_calculated_at,
+          score_validation: (firstShipment as any).score_validation ?? undefined,
           assigned_officer: 'Unassigned',
           investigation_stage: 'Overview',
           case_status: deriveCaseStatus(riskScore),
@@ -197,7 +215,7 @@ export function useV2Cases(): UseV2CasesReturn {
           opened_date: firstShipment.date,
           sla_timer: '21 Days Remaining',
           product_category: firstShipment.commodity_name || 'Unknown',
-          ai_confidence: Math.min(100, Math.round(riskScore + 10 + Math.random() * 5)),
+          ai_confidence: aiConfidence,
 
           // Commodity & Corridor
           commodity_code: firstShipment.hs_code,

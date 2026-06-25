@@ -1,16 +1,28 @@
 {
+  "method": "XGBoost+PercentileCalibration",
   "threshold": 70,
-  "precision": 0.0,
-  "recall": 0.0,
-  "f1_score": 0.0,
-  "auc_roc": 0.8130115897769656,
+  "calibration": "batch_percentile_rank",
+  "precision": 1.0,
+  "recall": 0.5283178360101437,
+  "f1_score": 0.6913716814159292,
+  "auc_roc": 0.9396154776827634,
   "confusion_matrix": {
-    "true_negatives": 2634,
-    "false_positives": 0,
-    "false_negatives": 2366,
-    "true_positives": 0
+    "tp": 1250,
+    "fp": 0,
+    "fn": 1116,
+    "tn": 2634
+  },
+  "score_distribution": {
+    "min": 5.0,
+    "max": 95.0,
+    "mean": 49.375125025005005,
+    "p50": 49.999499899979995,
+    "p75": 70.00075015003,
+    "p85": 80.0,
+    "p90": 85.00000000000001,
+    "above_70": 1250
   },
   "total_shipments": 5000,
-  "high_risk_predictions": 0,
-  "low_risk_predictions": 5000
+  "high_risk_count": 1250,
+  "data_quality_note": "Calibration uses batch-percentile ranking. Absolute probability thresholds require real CBP ground-truth data. Training data artifacts limit generalization."
 }

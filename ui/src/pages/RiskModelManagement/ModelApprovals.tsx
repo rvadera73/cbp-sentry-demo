@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react'
+import { useModelVersions } from '../../v2/hooks/useMCPEngine'
 
 interface ModelApprovalsProps {
   onVote?: (approvalId: string, vote: 'approve' | 'reject' | 'abstain') => void
@@ -59,92 +60,52 @@ interface ApprovalRequest {
 }
 
 const ModelApprovals: React.FC<ModelApprovalsProps> = ({ onVote, onCompare }) => {
+  const { versions, loading, error, approveModel } = useModelVersions()
   const [approvals, setApprovals] = useState<ApprovalRequest[]>([])
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [votingComments, setVotingComments] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    loadApprovals()
-  }, [])
-
-  const loadApprovals = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // TODO: Replace with actual API calls to /api/risk-models/approvals
-      setApprovals([
-        {
-          id: 'approval-v3.1',
-          modelVersion: 'v3.1',
-          requestedBy: 'Alex Kim',
-          requestedByRole: 'ML Engineer',
-          requestedAt: '2026-06-11 10:30 UTC',
-          reason: '+0.7% accuracy, lower FPR',
-          performanceImprovement: {
-            accuracy: 0.7,
-            aucRoc: 0.007,
-            latency: -0.2,
-            fpr: -0.4,
-          },
-          trainingData: {
-            records: 2500000,
-            dateRange: '2024 full year',
-            validationStatus: 'PASSED',
-          },
-          fairnessAnalysis: {
-            byOrigin: 'All segments within ±1%',
-            byCommodity: 'All segments balanced',
-            fairnessScore: 0.94,
-          },
-          voters: [
-            {
-              name: 'Sarah Chen',
-              role: 'Manager',
-              vote: 'approve',
-              comment: 'Solid improvement. FPR reduction is significant',
-              votedAt: '2026-06-11 14:22 UTC',
-            },
-            {
-              name: 'John Davis',
-              role: 'Tech Lead',
-              vote: 'pending',
-              emailSent: '2026-06-11 10:35 UTC',
-              reminderSent: '2026-06-12 10:35 UTC',
-            },
-          ],
-          status: 'pending',
-          votingDeadline: '2026-06-14 10:30 UTC',
-          historicalApprovals: [
-            {
-              modelVersion: 'v3.0',
-              requestedDate: '2026-06-12 12:00 UTC',
-              approvedDate: '2026-06-12 14:35 UTC',
-              voters: ['Sarah Chen', 'John Davis'],
-              deployedDate: '2026-06-12 14:35 UTC',
-            },
-          ],
-          historicalRejections: [
-            {
-              modelVersion: 'v2.2',
-              requestedDate: '2026-06-10 14:00 UTC',
-              rejectedDate: '2026-06-10 16:30 UTC',
-              reason: 'Test accuracy < 0.90 threshold',
-              rejector: 'Sarah Chen',
-            },
-          ],
+    if (!versions.length) return
+    setApprovals(versions
+      .filter(v => v.status === 'pending_review' || v.status === 'staging')
+      .map(v => ({
+        id: v.version_id,
+        modelVersion: v.version_id,
+        requestedBy: 'Training Pipeline',
+        requestedByRole: 'Automated',
+        requestedAt: v.created_at,
+        reason: `Model version ${v.version_id} ready for review`,
+        performanceImprovement: {
+          accuracy: v.metrics?.accuracy ?? 0,
+          aucRoc: v.metrics?.auc_roc ?? 0,
+          latency: 0,
+          fpr: 0,
         },
-      ])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load approvals')
-    } finally {
-      setLoading(false)
-    }
-  }
+        trainingData: { records: 1396, dateRange: '2026', validationStatus: 'PENDING' },
+        fairnessAnalysis: { byOrigin: '—', byCommodity: '—', fairnessScore: 0 },
+        voters: v.approval_votes?.map(av => ({
+          name: av.voter_id,
+          role: av.voter_id,
+          vote: av.vote as Voter['vote'],
+          comment: av.comment,
+          votedAt: av.voted_at,
+        })) ?? [],
+        status: 'pending' as const,
+        votingDeadline: '',
+        historicalApprovals: [],
+        historicalRejections: [],
+      })))
+  }, [versions])
 
-  const handleVote = (approvalId: string, vote: 'approve' | 'reject' | 'abstain') => {
-    onVote?.(approvalId, vote)
+  const handleVote = async (approvalId: string, vote: 'approve' | 'reject' | 'abstain') => {
+    try {
+      await approveModel(approvalId, 'officer', vote === 'abstain' ? 'approve' : vote,
+        votingComments[approvalId])
+      onVote?.(approvalId, vote)
+    } catch (e) {
+      console.error('Vote failed:', e)
+    }
   }
 
   const filteredApprovals = approvals.filter(a => filter === 'all' || a.status === filter)

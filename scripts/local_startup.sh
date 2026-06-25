@@ -94,7 +94,7 @@ log_header "Step 3: Building Docker Images"
 
 cd "$PROJECT_ROOT"
 
-services=("sentry-data" "sentry-api" "sentry-ui")
+services=("sentry-data" "precise-risk-engine" "sentry-api" "sentry-ui")
 
 for service in "${services[@]}"; do
     log_info "Building $service..."
@@ -137,6 +137,7 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
     STATUS=$($DOCKER_COMPOSE_CMD ps --format "{{.Name}},{{.Status}}" 2>/dev/null || echo "")
 
     if echo "$STATUS" | grep -q "sentry-data.*healthy" && \
+       echo "$STATUS" | grep -q "precise-risk-engine.*healthy" && \
        echo "$STATUS" | grep -q "sentry-api.*healthy" && \
        echo "$STATUS" | grep -q "sentry-ui.*healthy"; then
         log_success "All services are healthy"
@@ -176,6 +177,16 @@ else
 fi
 SMOKE_TESTS=$((SMOKE_TESTS + 1))
 
+# Test precise-risk-engine (Phase 2)
+log_info "Testing precise-risk-engine service..."
+if curl -sf http://localhost:8007/health > /dev/null 2>&1; then
+    log_success "precise-risk-engine responding on port 8007 (Phase 2 enabled)"
+else
+    log_error "precise-risk-engine health check failed"
+    SMOKE_FAILURES=$((SMOKE_FAILURES + 1))
+fi
+SMOKE_TESTS=$((SMOKE_TESTS + 1))
+
 # Test sentry-api
 log_info "Testing sentry-api service..."
 if curl -sf http://localhost:8000/api/shipments > /dev/null 2>&1; then
@@ -206,6 +217,7 @@ log_info "Service URLs:"
 echo "  UI:  http://localhost:3001" | tee -a "$LOG_FILE"
 echo "  API: http://localhost:8000" | tee -a "$LOG_FILE"
 echo "  Data Service: http://localhost:8005" | tee -a "$LOG_FILE"
+echo "  Precise Risk Engine: http://localhost:8007 (Phase 2)" | tee -a "$LOG_FILE"
 
 if [ $SMOKE_FAILURES -eq 0 ]; then
     log_success "All smoke tests passed ($SMOKE_TESTS/$SMOKE_TESTS)"

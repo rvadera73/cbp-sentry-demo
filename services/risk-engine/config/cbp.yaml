@@ -1,0 +1,146 @@
+# CBP Illegal Transshipment Risk Scoring Configuration
+# 7 Factors, 3 Gates, 8 Rules
+
+factors:
+  - name: entity_risk_score
+    description: Base entity risk score from CORD database
+    type: numeric
+    range: [0, 100]
+
+  - name: historical_violation_count
+    description: Number of prior violations or alerts
+    type: numeric
+    range: [0, 100]
+
+  - name: connectivity_score
+    description: Network connectivity to known risk entities
+    type: numeric
+    range: [0, 100]
+
+  - name: trade_frequency_anomaly
+    description: Deviation from normal trade patterns
+    type: numeric
+    range: [0, 100]
+
+  - name: sanctioned_status
+    description: Presence on sanctioned/denied party lists
+    type: numeric
+    range: [0, 100]
+
+  - name: jurisdiction_risk
+    description: High-risk jurisdiction exposure
+    type: numeric
+    range: [0, 100]
+
+  - name: product_sensitivity
+    description: Sensitivity of traded products (dual-use, controlled)
+    type: numeric
+    range: [0, 100]
+
+factor_weights:
+  entity_risk_score: 0.2
+  historical_violation_count: 0.25
+  connectivity_score: 0.15
+  trade_frequency_anomaly: 0.15
+  sanctioned_status: 0.1
+  jurisdiction_risk: 0.1
+  product_sensitivity: 0.05
+
+gates:
+  - name: sanctioned_party_gate
+    description: Automatic HIGH risk if sanctioned
+    factor: sanctioned_status
+    threshold: 50
+    action: escalate_to_human_review
+
+  - name: violation_history_gate
+    description: MEDIUM+ risk if history of violations
+    factor: historical_violation_count
+    threshold: 30
+    action: flag_for_audit
+
+  - name: trade_anomaly_gate
+    description: MEDIUM risk if unusual trading behavior
+    factor: trade_frequency_anomaly
+    threshold: 60
+    action: monitor_closely
+
+rules:
+  - name: rule_01_high_volume_low_history
+    description: Sudden high volume with no trading history
+    condition: "trade_frequency_anomaly > 70 AND historical_violation_count < 10"
+    action: alert_trader_desk
+    severity: medium
+
+  - name: rule_02_connectivity_violation_pattern
+    description: Connected to known violators with own violations
+    condition: "connectivity_score > 60 AND historical_violation_count > 20"
+    action: escalate_to_cbp_investigator
+    severity: high
+
+  - name: rule_03_sanctioned_adjacent
+    description: Trading with sanctioned party adjacent entity
+    condition: "connectivity_score > 50 AND sanctioned_status > 40"
+    action: freeze_and_refer
+    severity: critical
+
+  - name: rule_04_product_jurisdiction_combo
+    description: High-sensitivity products from high-risk jurisdictions
+    condition: "product_sensitivity > 70 AND jurisdiction_risk > 60"
+    action: mandatory_inspection
+    severity: high
+
+  - name: rule_05_entity_network_cluster
+    description: Entity in high-risk network cluster
+    condition: "connectivity_score > 75"
+    action: network_investigation
+    severity: medium
+
+  - name: rule_06_rapid_entity_changes
+    description: Rapid changes in entity ownership/control
+    condition: "historical_violation_count > 50"
+    action: verify_beneficial_ownership
+    severity: high
+
+  - name: rule_07_anomalous_product_mix
+    description: Unusual product category combinations
+    condition: "product_sensitivity > 50 AND trade_frequency_anomaly > 50"
+    action: classify_and_monitor
+    severity: medium
+
+  - name: rule_08_jurisdiction_historical_match
+    description: History of violations in similar jurisdictions
+    condition: "jurisdiction_risk > 70 AND historical_violation_count > 15"
+    action: enhanced_due_diligence
+    severity: high
+
+risk_tiers:
+  - name: low
+    range: [0, 30]
+    description: Minimal risk
+    recommended_action: none
+
+  - name: medium
+    range: [30, 60]
+    description: Moderate risk requiring monitoring
+    recommended_action: flag_and_monitor
+
+  - name: high
+    range: [60, 85]
+    description: Significant risk requiring review
+    recommended_action: escalate_for_review
+
+  - name: critical
+    range: [85, 100]
+    description: Critical risk requiring immediate action
+    recommended_action: escalate_and_restrict
+
+model_metadata:
+  version: "1.0"
+  created: "2026-06-12"
+  updated: "2026-06-12"
+  domain: CBP_Illegal_Transshipment
+  description: Risk scoring model for CBP illegal transshipment detection
+  factors_total: 7
+  gates_total: 3
+  rules_total: 8

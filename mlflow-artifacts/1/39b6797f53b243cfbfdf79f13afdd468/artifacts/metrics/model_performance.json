@@ -1,0 +1,13 @@
+{
+  "model": "xgboost_cbp_v1",
+  "metrics": {
+    "auc": 1.0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1_score": 1.0
+  },
+  "test_samples": 3087,
+  "positive_samples": 86,
+  "negative_samples": 3001,
+  "gate_status": "PASS"
+}

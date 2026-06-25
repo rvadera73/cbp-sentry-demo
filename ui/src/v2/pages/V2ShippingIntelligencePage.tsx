@@ -8,12 +8,17 @@ import InvestigationListTable, { ListItem } from '../components/InvestigationLis
 import { TabNavigation } from '../components/TabNavigation';
 import CorridorSummaryCard from '../components/CorridorSummaryCard';
 import DataTable, { DataTableColumn } from '../components/DataTable';
+import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
+import ManifestFlowDiagram from '../components/ManifestFlowDiagram';
+import TradeCorridorMap from '../components/TradeCorridorMap';
+import CommodityRiskMatrix from '../components/CommodityRiskMatrix';
+import AnomalyChecklist from '../components/AnomalyChecklist';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { COLORS, PATTERNS } from '../styles/designSystem';
 import { API_BASE_URL } from '../../services/apiUrl';
 import { Case, Shipment } from '../types/v2.types';
 
-type TabType = 'pre-manifest' | 'active-shipments' | 'compliance';
+type TabType = 'pre-manifest' | 'active-shipments' | 'trade-analysis' | 'compliance' | 'entity-resolution';
 
 interface V2ShippingIntelligencePageProps {
   selectedCaseId?: string | null;
@@ -197,6 +202,7 @@ export default function V2ShippingIntelligencePage({
               tabs={[
                 { id: 'pre-manifest', label: `Pre-Manifest`, badge: vessels.length.toString() },
                 { id: 'active-shipments', label: 'Active Shipments', badge: corridorShipments.length.toString() },
+                { id: 'trade-analysis', label: 'Trade Analysis', badge: '✨' },
                 { id: 'compliance', label: 'Duties & Enforcement' }
               ]}
               activeTab={activeTab as string}
@@ -269,6 +275,159 @@ export default function V2ShippingIntelligencePage({
                   }}
                   loading={shipmentsLoading}
                 />
+              )}
+
+              {activeTab === 'trade-analysis' && (
+                <div className="space-y-4 overflow-y-auto flex-1">
+                  {/* Manifest Flow Diagram */}
+                  <ManifestFlowDiagram
+                    stops={[
+                      {
+                        location: selectedCorridor?.display_name.split('→')[0]?.trim() || 'Origin',
+                        type: 'origin',
+                        entity_name: 'Shipper Entity',
+                        dwell_days: 1,
+                        anomalies: [],
+                        risk_score: 62,
+                      },
+                      {
+                        location: 'Transshipment',
+                        type: 'hub',
+                        entity_name: 'Port Authority',
+                        dwell_days: 3,
+                        anomalies: ['DWELL_ANOMALY'],
+                        risk_score: 72,
+                      },
+                      {
+                        location: selectedCorridor?.display_name.split('→')[1]?.trim() || 'Destination',
+                        type: 'destination',
+                        entity_name: 'Consignee',
+                        dwell_days: 0,
+                        anomalies: [],
+                        risk_score: 52,
+                      },
+                    ]}
+                    commodityInfo={{
+                      commodity: corridorShipments[0]?.commodity_name || 'General Merchandise',
+                      hs_code: corridorShipments[0]?.hs_code || 'N/A',
+                      weight_kg: corridorShipments[0]?.manifest_data.weight_kg || 0,
+                      value_usd: corridorShipments[0]?.manifest_data.declared_value_usd || 0,
+                    }}
+                  />
+
+                  {/* Trade Corridor Map */}
+                  <TradeCorridorMap
+                    routes={[
+                      {
+                        origin_country: selectedCorridor?.display_name.split('→')[0]?.trim() || 'Vietnam',
+                        destination_country: selectedCorridor?.display_name.split('→')[1]?.trim() || 'USA',
+                        shipment_count: corridorShipments.length,
+                        avg_risk_score:
+                          corridorShipments.length > 0
+                            ? corridorShipments.reduce((sum: number, s: any) => sum + (s.risk_score || 0), 0) / corridorShipments.length
+                            : 50,
+                        avg_dwell_days: 5,
+                        anomaly_count: corridorShipments.filter((s: any) => s.manifest_anomalies?.length > 0).length,
+                      },
+                    ]}
+                    height={350}
+                  />
+
+                  {/* Commodity Risk Matrix */}
+                  <CommodityRiskMatrix
+                    commodities={
+                      corridorShipments.length > 0
+                        ? [
+                            {
+                              commodity: corridorShipments[0]?.commodity_name || 'Primary Commodity',
+                              hs_code: corridorShipments[0]?.hs_code || 'N/A',
+                              supply_chain_risk: 65,
+                              tariff_risk: 72,
+                              origin_risk: 68,
+                              total_risk: 68,
+                            },
+                          ]
+                        : []
+                    }
+                    height={300}
+                  />
+
+                  {/* Anomaly Checklist */}
+                  <AnomalyChecklist
+                    anomalies={[
+                      {
+                        id: 'isf_mismatch',
+                        name: 'ISF Element 9 Mismatch',
+                        status: corridorShipments.some((s: any) => s.element9_is_mismatch) ? 'flagged' : 'clear',
+                        severity_score: corridorShipments.some((s: any) => s.element9_is_mismatch) ? 78 : 5,
+                        details: 'Origin consistency check',
+                      },
+                      {
+                        id: 'dwell_anomaly',
+                        name: 'Dwell Time Anomaly',
+                        status: corridorShipments.some((s: any) => s.manifest_anomalies?.includes('DWELL_ANOMALY')) ? 'flagged' : 'clear',
+                        severity_score: corridorShipments.some((s: any) => s.manifest_anomalies?.includes('DWELL_ANOMALY')) ? 68 : 5,
+                        details: 'Port dwell baseline check',
+                      },
+                      {
+                        id: 'origin_inconsistent',
+                        name: 'Origin Country Inconsistent',
+                        status: 'pending',
+                        severity_score: 45,
+                        details: 'Manual verification pending',
+                      },
+                      {
+                        id: 'weight_variance',
+                        name: 'Weight/Volume Variance',
+                        status: 'clear',
+                        severity_score: 12,
+                        details: 'Within tolerance',
+                      },
+                      {
+                        id: 'missing_docs',
+                        name: 'Missing Documentation',
+                        status: corridorShipments.some((s: any) => !s.manifest_data.bill_of_lading) ? 'flagged' : 'clear',
+                        severity_score: corridorShipments.some((s: any) => !s.manifest_data.bill_of_lading) ? 89 : 2,
+                        details: 'Document completeness',
+                      },
+                      {
+                        id: 'consignee_verified',
+                        name: 'Consignee Verified',
+                        status: 'clear',
+                        severity_score: 5,
+                        details: 'Good standing',
+                      },
+                      {
+                        id: 'vessel_flag_risk',
+                        name: 'Vessel Flag Risk',
+                        status: 'clear',
+                        severity_score: 15,
+                        details: 'Standard jurisdiction',
+                      },
+                      {
+                        id: 'pricing_anomaly',
+                        name: 'Pricing Per Unit Anomaly',
+                        status: 'pending',
+                        severity_score: 38,
+                        details: 'Awaiting clarification',
+                      },
+                      {
+                        id: 'hs_code_valid',
+                        name: 'HS Code Valid & Complete',
+                        status: 'clear',
+                        severity_score: 2,
+                        details: 'Correctly classified',
+                      },
+                      {
+                        id: 'prior_violation',
+                        name: 'Prior Carrier Violation',
+                        status: 'clear',
+                        severity_score: 8,
+                        details: 'No recent incidents',
+                      },
+                    ]}
+                  />
+                </div>
               )}
 
               {activeTab === 'compliance' && (

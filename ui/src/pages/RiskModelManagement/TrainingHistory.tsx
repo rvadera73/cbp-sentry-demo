@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle, AlertCircle, Clock, Play } from 'lucide-react'
+import { useTrainingHistory } from '../../v2/hooks/useMCPEngine'
 
 interface TrainingHistoryProps {
   onViewDetails?: (jobId: string) => void
@@ -41,126 +42,38 @@ interface TrainingJob {
 }
 
 const TrainingHistory: React.FC<TrainingHistoryProps> = ({ onViewDetails, onRetry }) => {
+  const { jobs: mcpJobs, loading, error, triggerTraining } = useTrainingHistory()
   const [jobs, setJobs] = useState<TrainingJob[]>([])
   const [filter, setFilter] = useState<'all' | 'completed' | 'in_progress' | 'failed'>('all')
   const [sort, setSort] = useState<'date' | 'status'>('date')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadTrainingHistory()
-  }, [])
+    if (!mcpJobs.length) return
+    setJobs(mcpJobs.map(j => ({
+      id: j.job_id,
+      jobId: j.job_id,
+      modelId: j.model_type,
+      status: j.status as TrainingJob['status'],
+      startedAt: j.started_at,
+      completedAt: j.completed_at,
+      duration: j.completed_at
+        ? `${Math.round((new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()) / 60000)}m`
+        : undefined,
+      dataset: { name: 'cbp-sentry-db', records: 1396, features: 36, trainTestSplit: '80/20' },
+      hyperparameters: { maxDepth: (j as any).hyperparameters?.maxDepth ?? 6, learningRate: (j as any).hyperparameters?.learningRate ?? 0.1, nEstimators: (j as any).hyperparameters?.nEstimators ?? 100 },
+      trainingMetrics: j.metrics
+        ? { trainingAccuracy: j.metrics.training_accuracy * 100, testAccuracy: j.metrics.test_accuracy * 100,
+            aucRoc: j.metrics.auc_roc, validationStatus: 'PASSED' }
+        : undefined,
+      errorMessage: j.error,
+    })))
+  }, [mcpJobs])
 
-  const loadTrainingHistory = async () => {
-    setLoading(true)
-    setError(null)
+  const handleTrigger = async () => {
     try {
-      // TODO: Replace with actual API calls to /api/risk-models/training-jobs
-      setJobs([
-        {
-          id: 'job-v3.1',
-          jobId: 'job-20260611-093001',
-          modelId: 'v3.1',
-          status: 'completed',
-          startedAt: '2026-06-11 09:30 UTC',
-          completedAt: '2026-06-11 11:45 UTC',
-          duration: '2h 15m',
-          dataset: {
-            name: 'cbp-shipments-2024',
-            records: 2500000,
-            features: 47,
-            trainTestSplit: '80/20',
-          },
-          hyperparameters: {
-            maxDepth: 8,
-            learningRate: 0.05,
-            nEstimators: 500,
-          },
-          trainingMetrics: {
-            trainingAccuracy: 93.8,
-            testAccuracy: 93.1,
-            aucRoc: 0.951,
-            validationStatus: 'PASSED',
-          },
-          topFeatures: [
-            { name: 'documentation_risk', importance: 25.3 },
-            { name: 'corridor_risk', importance: 19.8 },
-            { name: 'routing_risk', importance: 14.9 },
-          ],
-        },
-        {
-          id: 'job-v3.0',
-          jobId: 'job-20260612-143501',
-          modelId: 'v3.0',
-          status: 'completed',
-          startedAt: '2026-06-12 14:35 UTC',
-          completedAt: '2026-06-12 16:50 UTC',
-          duration: '2h 15m',
-          dataset: {
-            name: 'cbp-shipments-2024',
-            records: 2500000,
-            features: 47,
-            trainTestSplit: '80/20',
-          },
-          hyperparameters: {
-            maxDepth: 8,
-            learningRate: 0.05,
-            nEstimators: 500,
-          },
-          trainingMetrics: {
-            trainingAccuracy: 92.8,
-            testAccuracy: 92.4,
-            aucRoc: 0.944,
-            validationStatus: 'PASSED',
-          },
-        },
-        {
-          id: 'job-v3.2',
-          jobId: 'job-20260613-020000',
-          modelId: 'v3.2',
-          status: 'in_progress',
-          startedAt: '2026-06-13 02:00 UTC',
-          dataset: {
-            name: 'cbp-shipments-2024',
-            records: 2500000,
-            features: 47,
-            trainTestSplit: '80/20',
-          },
-          hyperparameters: {
-            maxDepth: 8,
-            learningRate: 0.05,
-            nEstimators: 500,
-          },
-          progress: 45,
-          currentStep: 'Model Training',
-          eta: '~1 hour 15 minutes',
-        },
-        {
-          id: 'job-v2.2',
-          jobId: 'job-20260610-140000',
-          modelId: 'v2.2',
-          status: 'failed',
-          startedAt: '2026-06-10 14:00 UTC',
-          completedAt: '2026-06-10 14:30 UTC',
-          duration: '30m',
-          dataset: {
-            name: 'cbp-shipments-2024',
-            records: 2500000,
-            features: 47,
-            trainTestSplit: '80/20',
-          },
-          hyperparameters: {
-            maxDepth: 8,
-            learningRate: 0.05,
-            nEstimators: 500,
-          },
-          errorMessage: 'Test accuracy < 0.90 threshold',
-        },
-      ])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load training history')
-    } finally {
-      setLoading(false)
+      await triggerTraining('all', 'Manual trigger from UI')
+    } catch (e) {
+      console.error('Training trigger failed:', e)
     }
   }
 

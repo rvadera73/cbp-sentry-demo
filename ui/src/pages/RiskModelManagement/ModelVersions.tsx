@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { CheckCircle, Clock, AlertCircle, Trash2 } from 'lucide-react'
+import { useModelVersions } from '../../v2/hooks/useMCPEngine'
 
 interface ModelVersionsProps {
   onCompare?: (model1: string, model2: string) => void
@@ -39,85 +40,32 @@ interface ModelVersion {
 }
 
 const ModelVersions: React.FC<ModelVersionsProps> = ({ onCompare, onVote }) => {
+  const { versions: mcpVersions, loading, error, approveModel, promoteModel } = useModelVersions()
   const [models, setModels] = useState<ModelVersion[]>([])
   const [filter, setFilter] = useState<'all' | 'production' | 'staging' | 'candidate' | 'deprecated'>('all')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadModelVersions()
-  }, [])
-
-  const loadModelVersions = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // TODO: Replace with actual API calls to /api/risk-models/versions
-      setModels([
-        {
-          id: 'model-v3.0',
-          version: 'v3.0',
-          status: 'production',
-          deployedAt: '2026-06-12 14:35 UTC',
-          trainedOn: 2500000,
-          features: 47,
-          weightsSum: 100.0,
-          performance: {
-            accuracy: 92.4,
-            aucRoc: 0.944,
-            latencyP95: 85,
-            falsePositiveRate: 3.2,
-          },
-          approvedBy: 'Sarah Chen',
-          approvalDate: '2026-06-12 12:00 UTC',
-        },
-        {
-          id: 'model-v3.1',
-          version: 'v3.1',
-          status: 'candidate',
-          deployedAt: '2026-06-11 09:30 UTC',
-          trainedOn: 2500000,
-          features: 47,
-          weightsSum: 100.0,
-          performance: {
-            accuracy: 93.1,
-            aucRoc: 0.951,
-            latencyP95: 87,
-            falsePositiveRate: 2.8,
-          },
-          approvalVotes: [
-            { voter: 'Sarah Chen', status: 'approved' },
-            { voter: 'John Davis', status: 'pending' },
-          ],
-          comparisonMetrics: {
-            accuracyDiff: 0.7,
-            aucRocDiff: 0.007,
-            latencyDiff: 2,
-            fprDiff: -0.4,
-          },
-        },
-        {
-          id: 'model-v2.1',
-          version: 'v2.1',
-          status: 'deprecated',
-          deployedAt: '2026-05-15 10:00 UTC',
-          trainedOn: 2500000,
-          features: 47,
-          weightsSum: 110.0,
-          performance: {
-            accuracy: 91.2,
-            aucRoc: 0.931,
-            latencyP95: 82,
-            falsePositiveRate: 4.1,
-          },
-        },
-      ])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load model versions')
-    } finally {
-      setLoading(false)
-    }
-  }
+    if (!mcpVersions.length) return
+    setModels(mcpVersions.map(v => ({
+      id: v.version_id,
+      version: v.version_id,
+      status: (v.status === 'pending_review' ? 'candidate' : v.status) as ModelVersion['status'],
+      deployedAt: v.deployed_at ?? v.created_at,
+      trainedOn: 0,
+      features: 36,
+      weightsSum: 100,
+      performance: {
+        accuracy: v.metrics?.accuracy ?? 0,
+        aucRoc: v.metrics?.auc_roc ?? 0,
+        latencyP95: 0,
+        falsePositiveRate: 0,
+      },
+      approvalVotes: v.approval_votes?.map(av => ({
+        voter: av.voter_id,
+        status: av.vote as 'approved' | 'pending' | 'rejected',
+      })),
+    })))
+  }, [mcpVersions])
 
   const filteredModels = models.filter(m => filter === 'all' || m.status === filter)
 

@@ -4,6 +4,7 @@ import { useV2Cases } from '../hooks/useV2Cases';
 import { useV2ThreatFeed } from '../hooks/useV2ThreatFeed';
 import { Case, Shipment } from '../types/v2.types';
 import UploadPipelineModal from '../../components/cases/UploadPipelineModal';
+import EntityRiskDashboard from '../components/EntityRiskDashboard';
 
 interface DashboardStats {
   criticalInvestigations: number;
@@ -16,9 +17,10 @@ interface V2DashboardPageProps {
   shipments?: Shipment[];
   selectCaseForDetail?: (caseObj: Case) => void;
   synopsisMap?: Record<string, string>;
+  setActiveTab?: (tab: string) => void;
 }
 
-export default function V2DashboardPage({ cases: propCases, shipments: propShipments, selectCaseForDetail, synopsisMap = {} }: V2DashboardPageProps) {
+export default function V2DashboardPage({ cases: propCases, shipments: propShipments, selectCaseForDetail, synopsisMap = {}, setActiveTab }: V2DashboardPageProps) {
   // Use passed props if available, otherwise fetch locally
   const { cases: localCases, loading: casesLoading } = useV2Cases();
   const { threatFeed: localThreatFeed, loading: threatLoading } = useV2ThreatFeed();
@@ -53,6 +55,11 @@ export default function V2DashboardPage({ cases: propCases, shipments: propShipm
 
   return (
     <div className="flex-1 p-5 flex flex-col space-y-5 overflow-y-auto bg-[#F7F9FC]">
+      {/* Entity Risk Dashboard (NEW) */}
+      <section className="shrink-0">
+        <EntityRiskDashboard onViewWatchlist={() => setActiveTab?.('entities')} />
+      </section>
+
       {/* Summary Cards */}
       <section className="grid grid-cols-2 lg:grid-cols-3 gap-3 shrink-0">
         <div className="bg-white border-l-4 border-[#D83933] border-t border-b border-r border-slate-200 p-3 rounded-sm flex flex-col justify-between shadow-sm">

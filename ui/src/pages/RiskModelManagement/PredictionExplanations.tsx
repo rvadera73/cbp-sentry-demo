@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { Search, ArrowRight, Check, X } from 'lucide-react'
+import { useShapExplanation } from '../../v2/hooks/useMCPEngine'
 
 interface PredictionExplanationsProps {
   onCompare?: (shipmentId: string, model: string) => void
@@ -60,87 +61,49 @@ interface PredictionExplanation {
 }
 
 const PredictionExplanations: React.FC<PredictionExplanationsProps> = ({ onCompare }) => {
-  const [searchTerm, setSearchTerm] = useState('SHP-00142857')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [submittedId, setSubmittedId] = useState<string | null>(null)
+  const { explanation: shapResult, loading, error, explain } = useShapExplanation(submittedId)
   const [explanation, setExplanation] = useState<PredictionExplanation | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [showComparison, setShowComparison] = useState(false)
   const [comparisonLoading, setComparisonLoading] = useState(false)
+  const handleLoadComparison = () => { setComparisonLoading(true); setTimeout(() => { setShowComparison(true); setComparisonLoading(false); }, 800); }
 
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) {
-      setError('Please enter a shipment ID')
-      return
-    }
+  React.useEffect(() => {
+    if (!shapResult) return
+    setExplanation({
+      shipmentId: shapResult.shipment_id,
+      origin: '—',
+      destination: 'US',
+      commodity: '—',
+      declaredValue: 0,
+      containerType: '—',
+      modelVersion: shapResult.model_version ?? 'current',
+      score: shapResult.final_score,
+      classification: shapResult.risk_level ?? 'UNKNOWN',
+      confidence: 0,
+      processingTime: 0,
+      baseScore: 0,
+      positiveFactors: shapResult.shap_values?.filter(s => s.contribution > 0).map(s => ({
+        name: s.feature,
+        value: String(s.value),
+        contribution: s.contribution,
+        direction: 'up' as const,
+      })) ?? [],
+      negativeFactors: shapResult.shap_values?.filter(s => s.contribution < 0).map(s => ({
+        name: s.feature,
+        value: String(s.value),
+        contribution: Math.abs(s.contribution),
+        direction: 'down' as const,
+      })) ?? [],
+      interpretation: [`Risk level: ${shapResult.risk_level}`, `Score: ${shapResult.final_score}`],
+    })
+  }, [shapResult])
 
-    setLoading(true)
-    setError(null)
-    setShowComparison(false)
-    try {
-      // Fetch SHAP explanation from API
-      const explainResponse = await fetch(`/api/risk-models/predictions/${searchTerm}/explain?model_version=v3.0`)
-      if (!explainResponse.ok) {
-        if (explainResponse.status === 404) {
-          throw new Error(`Shipment ${searchTerm} not found`)
-        }
-        throw new Error('Failed to load explanation')
-      }
-      const explainData = await explainResponse.json()
-
-      // Convert to component format
-      setExplanation({
-        shipmentId: searchTerm,
-        origin: explainData.shipment?.origin_country || 'Unknown',
-        destination: explainData.shipment?.destination_country || 'US',
-        commodity: explainData.shipment?.commodity_description || 'Unknown',
-        declaredValue: explainData.shipment?.declared_value || 0,
-        containerType: explainData.shipment?.container_type || 'Unknown',
-        modelVersion: 'v3.0',
-        score: explainData.prediction?.score || 0,
-        classification: explainData.prediction?.classification || 'UNKNOWN',
-        confidence: explainData.prediction?.confidence || 0,
-        processingTime: explainData.prediction?.processing_time_ms || 0,
-        baseScore: explainData.shap_explanation?.base_score || 0,
-        positiveFactors: explainData.shap_explanation?.factors_increasing_risk?.map((f: any) => ({
-          name: f.name,
-          value: String(f.value),
-          contribution: f.contribution,
-          direction: 'up' as const
-        })) || [],
-        negativeFactors: explainData.shap_explanation?.factors_decreasing_risk?.map((f: any) => ({
-          name: f.name,
-          value: String(f.value),
-          contribution: f.contribution,
-          direction: 'down' as const
-        })) || [],
-        interpretation: explainData.interpretation || ['Unable to generate interpretation'],
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load explanation')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleLoadComparison = async () => {
-    if (!explanation) return
-
-    setComparisonLoading(true)
-    try {
-      const compareResponse = await fetch(`/api/risk-models/compare?shipment_id=${explanation.shipmentId}`)
-      if (!compareResponse.ok) {
-        throw new Error('Failed to load model comparison')
-      }
-      const comparisonData = await compareResponse.json()
-
-      // Update explanation with comparison
-      setExplanation(prev => prev ? { ...prev, comparison: comparisonData } : null)
-      setShowComparison(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load comparison')
-    } finally {
-      setComparisonLoading(false)
-    }
+  const handleSearch = () => {
+    if (!searchTerm.trim()) return
+    setSubmittedId(searchTerm.trim())
+    explain(searchTerm.trim())
   }
 
   const getClassificationColor = (classification: string) => {

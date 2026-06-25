@@ -25,20 +25,21 @@ export function useReferralDisplay(shipmentId: string): UseReferralDisplayReturn
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/api/referrals/${shipmentId}`, {
-        method: 'POST'
-      });
+      // Call the analyze endpoint to get Gemini-enriched analysis
+      const response = await fetch(`${API_BASE_URL}/referral/${shipmentId}/analyze`);
 
       if (!response.ok) {
         throw new Error(`Failed to generate referral: ${response.statusText}`);
       }
 
       const data = await response.json();
-      if (data.referral) {
-        setReferral(data.referral);
-      } else if (data.status === 'success') {
-        setReferral(data as ReferralDisplayData);
-      }
+      // Map API response to expected type (API uses risk_tier, code expects risk_level)
+      const mappedData: ReferralDisplayData = {
+        ...data,
+        risk_level: (data.risk_tier || 'MEDIUM') as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        edited_sections: {}
+      };
+      setReferral(mappedData);
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Unknown error');
       setError(error);

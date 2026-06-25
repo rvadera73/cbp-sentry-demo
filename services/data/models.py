@@ -1,6 +1,6 @@
 """Pydantic models for data layer"""
-from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, field_validator
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 
 
@@ -31,8 +31,19 @@ class ShipmentUpdate(BaseModel):
     ofac_match: Optional[bool] = None
     calculated_risk_score: Optional[float] = None
     risk_score_calculated_at: Optional[datetime] = None
-    risk_score_breakdown: Optional[Dict[str, Any]] = None
-    confidence_interval: Optional[Dict[str, Any]] = None
+    risk_score_breakdown: Optional[Union[str, Dict[str, Any]]] = None
+    confidence_interval: Optional[Union[str, Dict[str, Any]]] = None
+    model_version: Optional[str] = None
+    model_maturity: Optional[int] = None
+
+    @field_validator("risk_score_breakdown", "confidence_interval", mode="before")
+    @classmethod
+    def serialize_dicts(cls, v):
+        """Serialize dict fields to JSON strings for SQLite storage"""
+        if isinstance(v, dict):
+            import json
+            return json.dumps(v)
+        return v
 
 
 class Shipment(ShipmentBase):
@@ -73,6 +84,8 @@ class Shipment(ShipmentBase):
     risk_score_calculated_at: Optional[datetime] = None
     risk_score_breakdown: Optional[Dict[str, Any]] = None
     confidence_interval: Optional[Dict[str, Any]] = None
+    model_version: Optional[str] = None
+    model_maturity: Optional[int] = None
     # Manifest data
     manifest_source_id: Optional[str] = None
     h2_signals: Optional[str] = None

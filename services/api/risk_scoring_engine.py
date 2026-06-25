@@ -2,20 +2,79 @@
 ML-Based Risk Scoring Engine
 Calculates comprehensive transshipment risk scores with detailed breakdowns.
 
-Integrates two ML models:
+Integrates three ML models:
 1. Isolation Forest - Detects AIS anomalies (dwell, rerouting, cost spikes)
-2. LightGBM - Classifies transshipment patterns
+2. LightGBM - Classifies transshipment patterns (legacy 8-feature model)
+3. XGBoost - Primary transshipment classifier (36-feature clean model, calibrated)
 """
 
+import json
+import os
 import math
 import pickle
 import logging
 from pathlib import Path
 from typing import Dict, List, Any, Tuple, Optional
 import numpy as np
-from risk_models import RiskModelConfig, RiskComponentScore, RiskScoreBreakdown
+from risk_models import COUNTRY_ENCODING, RiskModelConfig, RiskComponentScore, RiskScoreBreakdown
 
 logger = logging.getLogger(__name__)
+
+# Load reference data at module level (cached by lru_cache)
+try:
+    from reference_loader import get_adcvd_rate, get_corridor_norms, get_entity_age, get_adcvd_order
+    _REF_LOADED = True
+    logger.info("Reference data loaded: AD/CVD, Comtrade corridors, VN entities")
+except Exception as _ref_err:
+    logger.warning(f"Reference data not available: {_ref_err}")
+    _REF_LOADED = False
+    def get_adcvd_rate(hs_code): return None
+    def get_corridor_norms(hs_code): return None
+    def get_entity_age(company_name): return None
+    def get_adcvd_order(hs_code): return None
+
+
+def _calibrate_prob_to_score(prob: float, cal: dict) -> float:
+    """
+    Map XGBoost probability to risk score [5,95].
+
+    Uses percentile anchors from training distribution:
+      prob ≥ p95 of training → score 90-95 (top 5%)
+      prob ≥ p90 of training → score 85-90 (top 10%)
+      prob ≥ p75 of training → score 70-85 (top 25%, high risk)
+      prob ≥ p50 of training → score 50-70 (medium)
+      below p50              → score 5-50  (low)
+    Falls back to anchored linear if percentile anchors absent.
+    """
+    pct = cal.get("percentile_anchors", {})
+    if pct:
+        p50 = pct.get("p50", 0.001)
+        p75 = pct.get("p75", 0.004)
+        p90 = pct.get("p90", 0.021)
+        p95 = pct.get("p95", 0.503)
+
+        if prob >= p95:
+            return float(min(95.0, 90.0 + (prob - p95) / max(1.0 - p95, 1e-9) * 5.0))
+        if prob >= p90:
+            return float(85.0 + (prob - p90) / max(p95 - p90, 1e-9) * 5.0)
+        if prob >= p75:
+            return float(70.0 + (prob - p75) / max(p90 - p75, 1e-9) * 15.0)
+        if prob >= p50:
+            return float(50.0 + (prob - p50) / max(p75 - p50, 1e-9) * 20.0)
+        return float(max(5.0, 5.0 + prob / max(p50, 1e-9) * 45.0))
+
+    # Legacy fallback: anchored linear
+    low_p = cal["anchors"]["neg_95th_pct"]
+    high_p = cal["anchors"]["pos_05th_pct"]
+    low_s = cal["anchors"]["low_score"]
+    high_s = cal["anchors"]["high_score"]
+    if prob <= low_p:
+        score = 5.0 + (prob / max(low_p, 1e-9)) * (low_s - 5.0)
+    elif prob >= high_p:
+        score = high_s + ((prob - high_p) / max(1.0 - high_p, 1e-9)) * (95.0 - high_s)
+    else:
+        score = low_s + ((prob - low_p) / max(high_p - low_p, 1e-9)) * (high_s - low_s)
+    return float(min(95.0, max(5.0, score)))
 
 
 class RiskScoringEngine:
@@ -26,17 +85,28 @@ class RiskScoringEngine:
 
     def __init__(self):
         self.config = RiskModelConfig()
+        # TODO: Switch from static config weights to feedback_engine.get_current_weights()
+        # once the 7-factor DB-backed weight configuration is fully rolled out.
+        self.feedback_weight_provider = None
+        try:
+            from feedback_engine import feedback_engine
+
+            self.feedback_weight_provider = feedback_engine.get_current_weights
+        except Exception:
+            self.feedback_weight_provider = None
         self.factor_weights = self.config.get_factor_weights()
 
         # Load pre-trained ML models
         self.isolation_forest = None
         self.scaler = None
         self.lgbm_classifier = None
+        self.xgboost_model = None
+        self.score_calibration = None
         self._load_ml_models()
 
     def _load_ml_models(self):
         """Load pre-trained ML models for AIS anomaly detection and transshipment classification"""
-        model_dir = Path(__file__).parent / "models"
+        model_dir = Path(os.environ.get("MODEL_DIR", "/home/rahulvadera/cbp-sentry/models"))
 
         # Load Isolation Forest for AIS anomaly detection
         if_path = model_dir / "isolation_forest.pkl"
@@ -53,16 +123,60 @@ class RiskScoringEngine:
                 logger.warning(f"Failed to load Isolation Forest: {e}")
 
         # Load LightGBM for transshipment classification
-        # Note: LightGBM models are loaded at prediction time with lgb.Booster()
         lgbm_path = model_dir / "lgbm_classifier.txt"
         if lgbm_path.exists():
             try:
                 import lightgbm as lgb
-
                 self.lgbm_classifier = lgb.Booster(model_file=str(lgbm_path))
                 logger.info("✓ Loaded LightGBM model for transshipment classification")
             except Exception as e:
                 logger.warning(f"Failed to load LightGBM: {e}")
+
+        # Load XGBoost primary classifier + calibration (36-feature clean model)
+        xgb_path = model_dir / "xgboost_model.json"
+        cal_path = model_dir / "score_calibration.json"
+        if xgb_path.exists() and cal_path.exists():
+            try:
+                import xgboost as xgb
+                self.xgboost_model = xgb.Booster()
+                self.xgboost_model.load_model(str(xgb_path))
+                with open(cal_path) as f:
+                    self.score_calibration = json.load(f)
+                logger.info(
+                    "✓ Loaded XGBoost model (%d features) + calibration",
+                    self.score_calibration.get("feature_count", 0),
+                )
+            except Exception as e:
+                logger.warning(f"Failed to load XGBoost model: {e}")
+
+    def _score_with_xgboost(self, shipment: Dict) -> Tuple[float, float]:
+        """
+        Score shipment using XGBoost primary classifier with calibrated output.
+
+        Returns:
+            (calibrated_score: float [0,100], raw_probability: float [0,1])
+            Returns (0.0, 0.0) if model unavailable — caller falls back to rule engine.
+        """
+        if self.xgboost_model is None or self.score_calibration is None:
+            return 0.0, 0.0
+
+        try:
+            import xgboost as xgb
+            from inference_features import extract_clean_features
+
+            feature_vector = extract_clean_features(
+                shipment, self.score_calibration["clean_features"]
+            )
+            dmatrix = xgb.DMatrix(
+                feature_vector.reshape(1, -1),
+                feature_names=self.score_calibration["clean_features"],
+            )
+            raw_prob = float(self.xgboost_model.predict(dmatrix)[0])
+            calibrated = _calibrate_prob_to_score(raw_prob, self.score_calibration)
+            return calibrated, raw_prob
+        except Exception as e:
+            logger.warning(f"XGBoost scoring failed: {e}")
+            return 0.0, 0.0
 
     def _detect_ais_anomaly_ml(self, shipment: Dict) -> Tuple[bool, float]:
         """
@@ -151,8 +265,7 @@ class RiskScoringEngine:
     @staticmethod
     def _encode_country(country_code: str) -> int:
         """Encode country codes to numeric for model input"""
-        encoding = {"CN": 5, "VN": 6, "MY": 7, "TH": 8, "SG": 3, "US": 1, "CA": 2, "MX": 4, "AE": 9, "HK": 10}
-        return encoding.get(country_code, 0)
+        return COUNTRY_ENCODING.get((country_code or "").upper(), 0)
 
     def score_shipment(self, shipment: Dict[str, Any]) -> RiskScoreBreakdown:
         """
@@ -197,36 +310,48 @@ class RiskScoringEngine:
         # Calculate subtotal (sum of weighted components)
         subtotal = sum(c.weighted_result for c in components)
 
-        # Calculate adjustments
-        corridor_adjustment = self._calculate_corridor_adjustment(shipment, components)
-        additional_adjustments = self._calculate_additional_adjustments(shipment)
+        # XGBoost primary classifier — calibrated score [0,100]
+        xgb_score, xgb_prob = self._score_with_xgboost(shipment)
 
-        # Final score calculation
-        final_score = subtotal
-        if corridor_adjustment:
-            final_score += corridor_adjustment["adjustment_points"]
+        # Blend: if XGBoost available use 60% XGBoost + 40% rule engine
+        # Otherwise fall back to 100% rule engine (backward compat)
+        if xgb_score > 0:
+            blended_score = 0.60 * xgb_score + 0.40 * subtotal
+            scoring_method = "xgb_blend"
+        else:
+            blended_score = subtotal
+            scoring_method = "rule_engine"
+
+        # Additional AIS dwell adjustments
+        additional_adjustments = self._calculate_additional_adjustments(shipment)
+        final_score = blended_score
         for adj in additional_adjustments or []:
             final_score += adj["adjustment_points"]
 
         # Cap at 100
         final_score = min(final_score, 100.0)
 
-        # Calculate confidence interval (±uncertainty)
+        # Confidence interval
         confidence = self._calculate_confidence_interval(components)
 
         breakdown = RiskScoreBreakdown(
             shipment_id=shipment.get("id", "UNKNOWN"),
             components=components,
             subtotal=subtotal,
-            corridor_risk_adjustment=corridor_adjustment,
+            corridor_risk_adjustment=None,
             additional_adjustments=additional_adjustments,
             final_score=final_score,
             confidence_interval=confidence,
         )
 
-        # Generate detailed calculation table for transparency
         breakdown.calculation_table = self._generate_calculation_table(
-            components, corridor_adjustment, additional_adjustments, subtotal, final_score
+            components,
+            additional_adjustments,
+            subtotal,
+            final_score,
+            xgb_score=xgb_score,
+            xgb_prob=xgb_prob,
+            scoring_method=scoring_method,
         )
 
         return breakdown
@@ -234,10 +359,12 @@ class RiskScoringEngine:
     def _generate_calculation_table(
         self,
         components: List[RiskComponentScore],
-        corridor_adj: Dict,
         additional_adj: List[Dict],
         subtotal: float,
         final_score: float,
+        xgb_score: float = 0.0,
+        xgb_prob: float = 0.0,
+        scoring_method: str = "rule_engine",
     ) -> Dict[str, Any]:
         """Generate detailed calculation breakdown table for transparency"""
 
@@ -274,17 +401,6 @@ class RiskScoringEngine:
 
         # Build adjustment summary
         adjustments = []
-        if corridor_adj:
-            adjustments.append(
-                {
-                    "type": corridor_adj.get("reason", "Corridor Adjustment"),
-                    "baseline": round(corridor_adj.get("baseline", 0), 2),
-                    "multiplier": round(corridor_adj.get("multiplier", 1.0), 2),
-                    "points": round(corridor_adj.get("adjustment_points", 0), 2),
-                    "reason": corridor_adj.get("reason", ""),
-                }
-            )
-
         for adj in additional_adj or []:
             adjustments.append(
                 {
@@ -297,6 +413,11 @@ class RiskScoringEngine:
             )
 
         return {
+            "scoring_method": scoring_method,
+            "xgb_probability": round(xgb_prob, 4),
+            "xgb_calibrated_score": round(xgb_score, 2),
+            "rule_engine_subtotal": round(subtotal, 2),
+            "blend_weights": {"xgb": 0.60, "rules": 0.40} if scoring_method == "xgb_blend" else {"xgb": 0.0, "rules": 1.0},
             "component_details": [
                 {"factor": factor_name, "components": by_factor[factor_name]["components"]}
                 for factor_name in ["Documentation", "Commodity", "Routing", "Party", "Corridor", "Pattern", "Time"]
@@ -307,13 +428,10 @@ class RiskScoringEngine:
             "adjustments": adjustments,
             "final_score": round(final_score, 2),
             "calculation_steps": [
-                {"step": 1, "description": "Calculate component scores", "value": round(subtotal, 2)},
-                {
-                    "step": 2,
-                    "description": "Apply adjustments",
-                    "value": round(sum(a.get("points", 0) for a in adjustments), 2),
-                },
-                {"step": 3, "description": "Final score (capped at 100)", "value": round(final_score, 2)},
+                {"step": 1, "description": "Rule engine component scores", "value": round(subtotal, 2)},
+                {"step": 2, "description": "XGBoost calibrated score", "value": round(xgb_score, 2)},
+                {"step": 3, "description": "Blended score (60% XGB + 40% rules)" if scoring_method == "xgb_blend" else "Rule engine score", "value": round(0.60 * xgb_score + 0.40 * subtotal if scoring_method == "xgb_blend" else subtotal, 2)},
+                {"step": 4, "description": "Final score (capped at 100)", "value": round(final_score, 2)},
             ],
         }
 
@@ -385,13 +503,23 @@ class RiskScoringEngine:
         commodity_code = str(commodity_code_val)[:4]
         commodity_name = shipment.get("commodity_name") or "General"
 
-        # Find sensitivity level
+        # Find sensitivity level (config sensitivity_matrix — by commodity name)
         sensitivity = config["sensitivity_matrix"].get(
             (commodity_name or "General").lower(), {"base_risk": 5.0, "export_control": False, "ad_cvd_rate": 0}
         )
 
+        # Real AD/CVD rate lookup from Federal Register reference data (overrides synthetic config)
+        real_rate = get_adcvd_rate(commodity_code_val)
+        if real_rate is not None:
+            tariff_rate = real_rate
+            adcvd_order = get_adcvd_order(commodity_code_val)
+            order_ref = f" (Order {adcvd_order['order_number']})" if adcvd_order else ""
+            tariff_source = f"Federal Register{order_ref}"
+        else:
+            tariff_rate = sensitivity.get("ad_cvd_rate", 0)
+            tariff_source = "config (no Federal Register match)"
+
         # Tariff Rate Risk (50% of commodity risk)
-        tariff_rate = sensitivity.get("ad_cvd_rate", 0)
         tariff_score = min(tariff_rate / 500 * 10, 10.0)
         components.append(
             RiskComponentScore(
@@ -400,7 +528,7 @@ class RiskScoringEngine:
                 score=tariff_score,
                 weight=factor_weight * 0.50,
                 weighted_result=(tariff_score * factor_weight * 0.50) / 10,
-                rationale=f"HS {commodity_code}: {tariff_rate}% tariff rate = {tariff_rate}% evasion incentive",
+                rationale=f"HS {commodity_code}: {tariff_rate}% AD/CVD rate from {tariff_source}",
                 evidence=[f"Commodity: {commodity_name}", f"HS Code: {commodity_code}", f"AD/CVD Rate: {tariff_rate}%"],
             )
         )
@@ -509,7 +637,17 @@ class RiskScoringEngine:
         factor_weight = self.factor_weights["party"]
 
         # Shipper Age (35% of party risk)
+        # Use real VN entity age if available, fall back to DB field
         shipper_age_months = shipment.get("shipper_age_months") or 0
+        shipper_name = shipment.get("shipper_name", "")
+        origin_country = (shipment.get("origin_country") or "").upper()
+
+        if not shipper_age_months and shipper_name and origin_country in ("VN", "VIETNAM"):
+            ref_age = get_entity_age(shipper_name)
+            if ref_age is not None:
+                shipper_age_months = ref_age
+                logger.debug(f"Party: used reference entity age {ref_age}mo for '{shipper_name}'")
+
         if shipper_age_months < 12:
             age_score = 9.0
             age_category = "NEW"
@@ -598,7 +736,8 @@ class RiskScoringEngine:
             corridor_key, {"baseline_risk": 5.0, "tariff_rate": 0, "export_control": False, "multiplier": 1.0}
         )
 
-        baseline_score = corridor_data["baseline_risk"]
+        raw_baseline_score = corridor_data["baseline_risk"] * corridor_data.get("multiplier", 1.0)
+        baseline_score = min(raw_baseline_score, 10.0)
         tariff_points = min(corridor_data["tariff_rate"] / 25 * 5, 5.0)
 
         components.append(
@@ -612,6 +751,8 @@ class RiskScoringEngine:
                 evidence=[
                     f"Route: {corridor_key}",
                     f'Risk Profile: {corridor_data.get("risk_profile", "Unknown")}',
+                    f"Baseline × multiplier: {corridor_data['baseline_risk']:.2f} × {corridor_data.get('multiplier', 1.0):.2f} = {raw_baseline_score:.2f}",
+                    f'Multiplier Applied: {corridor_data.get("multiplier", 1.0):.2f}',
                     f'Tariff Rate: {corridor_data["tariff_rate"]}%',
                 ],
             )
@@ -638,7 +779,20 @@ class RiskScoringEngine:
         factor_weight = self.factor_weights["pattern"]
 
         # Pricing Anomaly (50% of pattern risk)
+        # Try to compute price_variance from Comtrade baseline if not already in shipment
         price_variance = shipment.get("price_variance_percent") or 0
+        hs_code = shipment.get("hs_code") or shipment.get("commodity_code") or ""
+        unit_price = shipment.get("unit_price_per_kg") or 0
+        price_source = "manifest"
+
+        if not price_variance and hs_code and unit_price:
+            corridor_norms = get_corridor_norms(hs_code)
+            if corridor_norms and corridor_norms.get("avg_usd_per_kg"):
+                baseline = corridor_norms["avg_usd_per_kg"]
+                if baseline > 0:
+                    price_variance = ((unit_price - baseline) / baseline) * 100
+                    price_source = f"Comtrade VN→US baseline ${baseline:.2f}/kg"
+
         if price_variance < -50:
             pricing_score = 9.0
             pricing_cat = "SEVERE"
@@ -659,10 +813,10 @@ class RiskScoringEngine:
                 score=pricing_score,
                 weight=factor_weight * 0.50,
                 weighted_result=(pricing_score * factor_weight * 0.50) / 10,
-                rationale=f"Price variance: {price_variance:.1f}% ({pricing_cat})",
+                rationale=f"Price variance: {price_variance:.1f}% ({pricing_cat}) vs {price_source}",
                 evidence=[
                     f"Variance: {price_variance:.1f}%",
-                    f'Unit Price: ${shipment.get("unit_price_per_kg", 0):.2f}/kg',
+                    f'Unit Price: ${unit_price:.2f}/kg',
                 ],
             )
         )

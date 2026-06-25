@@ -18,6 +18,15 @@ export interface Case {
   case_name: string;
   target_entity: string;
   risk_score: number;
+  /** Original seeded/estimated risk score before model scoring */
+  seed_risk_score?: number;
+  /** Canonical score from the 7-factor engine. Prefer over risk_score when present. */
+  calculated_risk_score?: number;
+  model_version?: string;
+  model_maturity?: number;           // e.g. 15 = 15% maturity
+  risk_score_calculated_at?: string;
+  /** Validation note explaining score source and any discrepancy */
+  score_validation?: { status: string; message: string; maturity_note?: string; seed_score?: number; model_score?: number };
   assigned_officer: string;
   investigation_stage: 'Overview' | 'Entities' | 'Shipments' | 'AI Findings' | 'Evidence & Referral';
   case_status: 'Active' | 'Under Audit' | 'Referral Prepared' | 'Enforced' | 'Closed';
@@ -256,6 +265,16 @@ export interface Shipment {
     key_factors: string[];
     altana_validation?: any;
   };
+
+  /** Canonical score from 7-factor engine — prefer over risk_score when present */
+  calculated_risk_score?: number;
+  /** Original seeded/estimated risk score before model scoring */
+  seed_risk_score?: number;
+  model_version?: string;
+  model_maturity?: number;
+  risk_score_calculated_at?: string;
+  /** Validation note explaining score source and any discrepancy */
+  score_validation?: { status: string; message: string; maturity_note?: string; seed_score?: number; model_score?: number };
 }
 
 export interface AIFinding {

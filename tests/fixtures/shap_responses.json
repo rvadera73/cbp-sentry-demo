@@ -1,0 +1,357 @@
+[
+  {
+    "shipment_id": "SHP-000001",
+    "model_version": "v3.0",
+    "score": 0.58,
+    "confidence": 0.92,
+    "base_value": 0.35,
+    "features": {
+      "documentation_risk": {
+        "value": 1.0,
+        "contribution": 0.16,
+        "interpretation": "Complete documentation required but some gaps detected"
+      },
+      "routing_risk": {
+        "value": 0.8,
+        "contribution": 0.14,
+        "interpretation": "Established trade route with moderate frequency"
+      },
+      "shipper_age_months": {
+        "value": 48,
+        "contribution": 0.08,
+        "interpretation": "4-year operating history - moderate tenure"
+      },
+      "vessel_flag": {
+        "value": "PK",
+        "contribution": 0.12,
+        "interpretation": "Flag of convenience increases base risk"
+      },
+      "previous_violations": {
+        "value": 0,
+        "contribution": -0.04,
+        "interpretation": "No prior violations on record"
+      },
+      "trade_volume_usd": {
+        "value": 125000,
+        "contribution": 0.06,
+        "interpretation": "Moderate shipment value - reasonable threshold"
+      },
+      "commodity_hs_code_risk": {
+        "value": 0.65,
+        "contribution": 0.04,
+        "interpretation": "Electronics - moderate duty commodity risk"
+      }
+    },
+    "positive_factors": [
+      {
+        "feature": "documentation_risk",
+        "contribution": 0.16,
+        "severity": "HIGH"
+      },
+      {
+        "feature": "routing_risk",
+        "contribution": 0.14,
+        "severity": "MEDIUM"
+      },
+      {
+        "feature": "vessel_flag",
+        "contribution": 0.12,
+        "severity": "MEDIUM"
+      }
+    ],
+    "negative_factors": [
+      {
+        "feature": "previous_violations",
+        "contribution": -0.04,
+        "severity": "LOW"
+      }
+    ],
+    "risk_level": "MEDIUM",
+    "recommendation": "Route for manual review - documentation gaps require verification",
+    "requires_altana": false
+  },
+  {
+    "shipment_id": "SHP-000003",
+    "model_version": "v3.0",
+    "score": 0.71,
+    "confidence": 0.88,
+    "base_value": 0.35,
+    "features": {
+      "documentation_risk": {
+        "value": 0.95,
+        "contribution": 0.18,
+        "interpretation": "Pharmaceutical shipments require strict documentation compliance"
+      },
+      "commodity_classification_risk": {
+        "value": 0.85,
+        "contribution": 0.16,
+        "interpretation": "Pharma commodities subject to stringent regulatory requirements"
+      },
+      "route_frequency": {
+        "value": 0.72,
+        "contribution": 0.12,
+        "interpretation": "India-US pharma corridor shows increasing frequency"
+      },
+      "shipper_trust_score": {
+        "value": 0.55,
+        "contribution": 0.10,
+        "interpretation": "New supplier with limited compliance history"
+      },
+      "value_to_weight_ratio": {
+        "value": 350,
+        "contribution": 0.08,
+        "interpretation": "High value density typical for pharmaceuticals"
+      },
+      "vessel_inspection_history": {
+        "value": 2,
+        "contribution": 0.05,
+        "interpretation": "Vessel has 2 prior inspections on record"
+      },
+      "previous_seizures": {
+        "value": 0,
+        "contribution": -0.02,
+        "interpretation": "No historical seizures in commodity class"
+      }
+    },
+    "positive_factors": [
+      {
+        "feature": "documentation_risk",
+        "contribution": 0.18,
+        "severity": "HIGH"
+      },
+      {
+        "feature": "commodity_classification_risk",
+        "contribution": 0.16,
+        "severity": "HIGH"
+      },
+      {
+        "feature": "route_frequency",
+        "contribution": 0.12,
+        "severity": "MEDIUM"
+      }
+    ],
+    "negative_factors": [
+      {
+        "feature": "previous_seizures",
+        "contribution": -0.02,
+        "severity": "LOW"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "ESCALATE to Altana intelligence check - pharmaceutical commodities require enhanced scrutiny",
+    "requires_altana": true
+  },
+  {
+    "shipment_id": "SHP-000004",
+    "model_version": "v3.0",
+    "score": 0.31,
+    "confidence": 0.94,
+    "base_value": 0.35,
+    "features": {
+      "shipper_trust_score": {
+        "value": 0.92,
+        "contribution": -0.12,
+        "interpretation": "Established NAFTA/USMCA compliant supplier with long history"
+      },
+      "previous_violations": {
+        "value": 0,
+        "contribution": -0.08,
+        "interpretation": "Exemplary compliance record - zero violations"
+      },
+      "route_frequency": {
+        "value": 0.95,
+        "contribution": 0.06,
+        "interpretation": "Mexico-US auto corridor - very high frequency, established pattern"
+      },
+      "documentation_completeness": {
+        "value": 0.98,
+        "contribution": -0.06,
+        "interpretation": "Auto parts sector benefits from standardized documentation"
+      },
+      "vessel_flag": {
+        "value": "US",
+        "contribution": -0.04,
+        "interpretation": "US flag vessel - lowest risk jurisdiction"
+      },
+      "commodity_classification_risk": {
+        "value": 0.25,
+        "contribution": -0.02,
+        "interpretation": "Auto parts commodity class - well-regulated, low contraband risk"
+      }
+    },
+    "positive_factors": [
+      {
+        "feature": "route_frequency",
+        "contribution": 0.06,
+        "severity": "LOW"
+      }
+    ],
+    "negative_factors": [
+      {
+        "feature": "shipper_trust_score",
+        "contribution": -0.12,
+        "severity": "HIGH"
+      },
+      {
+        "feature": "previous_violations",
+        "contribution": -0.08,
+        "severity": "MEDIUM"
+      },
+      {
+        "feature": "documentation_completeness",
+        "contribution": -0.06,
+        "severity": "MEDIUM"
+      },
+      {
+        "feature": "vessel_flag",
+        "contribution": -0.04,
+        "severity": "LOW"
+      }
+    ],
+    "risk_level": "LOW",
+    "recommendation": "CLEAR - Low-risk USMCA compliant supplier with excellent compliance history",
+    "requires_altana": false
+  },
+  {
+    "shipment_id": "SHP-000017",
+    "model_version": "v3.0",
+    "score": 0.82,
+    "confidence": 0.85,
+    "base_value": 0.35,
+    "features": {
+      "commodity_classification_risk": {
+        "value": 0.95,
+        "contribution": 0.22,
+        "interpretation": "Integrated circuits - critical for national security assessment"
+      },
+      "value_to_weight_ratio": {
+        "value": 880,
+        "contribution": 0.18,
+        "interpretation": "Extremely high value density - contraband/smuggling vector"
+      },
+      "export_control_status": {
+        "value": "RESTRICTED",
+        "contribution": 0.16,
+        "interpretation": "Semiconductors subject to US export control regulations"
+      },
+      "route_frequency": {
+        "value": 0.68,
+        "contribution": 0.10,
+        "interpretation": "Philippines-US semiconductor route moderately established"
+      },
+      "shipper_age_months": {
+        "value": 18,
+        "contribution": 0.08,
+        "interpretation": "Relatively new supplier - limited track record"
+      },
+      "country_bep_score": {
+        "value": 0.55,
+        "contribution": 0.07,
+        "interpretation": "Philippines has moderate rule of law index"
+      },
+      "previous_seizures": {
+        "value": 0,
+        "contribution": -0.02,
+        "interpretation": "No historical semiconductor seizures for this shipper"
+      }
+    },
+    "positive_factors": [
+      {
+        "feature": "commodity_classification_risk",
+        "contribution": 0.22,
+        "severity": "CRITICAL"
+      },
+      {
+        "feature": "value_to_weight_ratio",
+        "contribution": 0.18,
+        "severity": "HIGH"
+      },
+      {
+        "feature": "export_control_status",
+        "contribution": 0.16,
+        "severity": "HIGH"
+      }
+    ],
+    "negative_factors": [
+      {
+        "feature": "previous_seizures",
+        "contribution": -0.02,
+        "severity": "LOW"
+      }
+    ],
+    "risk_level": "CRITICAL",
+    "recommendation": "MANDATORY ESCALATION - Export control compliance check required. Consult BIS/DDTC before release",
+    "requires_altana": true
+  },
+  {
+    "shipment_id": "SHP-000010",
+    "model_version": "v3.0",
+    "score": 0.76,
+    "confidence": 0.89,
+    "base_value": 0.35,
+    "features": {
+      "shipper_concentration": {
+        "value": 0.8,
+        "contribution": 0.14,
+        "interpretation": "Single shipper accounts for high percentage of commodity volume"
+      },
+      "price_anomaly": {
+        "value": 0.85,
+        "contribution": 0.12,
+        "interpretation": "Laptop pricing 12% below market baseline - potential undervaluation"
+      },
+      "documentation_risk": {
+        "value": 0.78,
+        "contribution": 0.11,
+        "interpretation": "Electronics commodities require complete import documentation"
+      },
+      "route_frequency": {
+        "value": 0.82,
+        "contribution": 0.09,
+        "interpretation": "China-US consumer electronics - very high frequency corridor"
+      },
+      "previous_violations": {
+        "value": 1,
+        "contribution": 0.06,
+        "interpretation": "One prior documentation discrepancy on record"
+      },
+      "anti_dumping_status": {
+        "value": "UNDER_REVIEW",
+        "contribution": 0.08,
+        "interpretation": "Laptop commodity under anti-dumping investigation"
+      },
+      "shipper_age_months": {
+        "value": 72,
+        "contribution": -0.06,
+        "interpretation": "6-year history provides modest confidence boost"
+      }
+    },
+    "positive_factors": [
+      {
+        "feature": "shipper_concentration",
+        "contribution": 0.14,
+        "severity": "MEDIUM"
+      },
+      {
+        "feature": "price_anomaly",
+        "contribution": 0.12,
+        "severity": "MEDIUM"
+      },
+      {
+        "feature": "documentation_risk",
+        "contribution": 0.11,
+        "severity": "MEDIUM"
+      }
+    ],
+    "negative_factors": [
+      {
+        "feature": "shipper_age_months",
+        "contribution": -0.06,
+        "severity": "LOW"
+      }
+    ],
+    "risk_level": "HIGH",
+    "recommendation": "COMMERCIAL TARGETING - Price anomaly + anti-dumping status warrant duty review. Consider AD/CVD assessment",
+    "requires_altana": false
+  }
+]

@@ -1,0 +1,5 @@
+outs:
+- md5: 1985dd030c6357597a10c725bd7def48
+  size: 1316953
+  hash: md5
+  path: isolation_forest_model.pkl

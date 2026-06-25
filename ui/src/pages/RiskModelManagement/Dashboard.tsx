@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { AlertTriangle, TrendingUp, CheckCircle, Clock } from 'lucide-react'
+import { useMCPDashboard } from '../../v2/hooks/useMCPEngine'
 
 interface DashboardProps {
   onNavigate?: (screen: string) => void
@@ -37,66 +38,63 @@ interface MonitoringAlert {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+  const { activeModel: mcpModel, gates, recentJob, loading, error } = useMCPDashboard()
   const [activeModel, setActiveModel] = useState<ActiveModelMetrics | null>(null)
   const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null)
   const [alerts, setAlerts] = useState<MonitoringAlert[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    if (!mcpModel && !loading) return
 
-  const loadDashboardData = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      // TODO: Replace with actual API calls
+    if (mcpModel) {
       setActiveModel({
-        version: 'CBP Risk v3.0',
-        status: 'PRODUCTION',
-        deployedAt: '2026-06-12 14:35 UTC',
-        approvedBy: 'Sarah Chen (Manager)',
-        accuracy: 92.4,
-        aucRoc: 0.94,
-        latencyP95: 85,
-        confidenceAvg: 0.87,
-        predictionsProcessed: 15432,
-        dataDriftScore: 0.12,
-        modelDriftScore: 0.08,
+        version: mcpModel.version_id ?? 'Unknown',
+        status: mcpModel.status?.toUpperCase() ?? 'UNKNOWN',
+        deployedAt: mcpModel.deployed_at ?? mcpModel.created_at ?? '',
+        approvedBy: mcpModel.approval_votes?.find(v => v.vote === 'approve')?.voter_id ?? '—',
+        accuracy: mcpModel.metrics?.accuracy ?? 0,
+        aucRoc: mcpModel.metrics?.auc_roc ?? 0,
+        latencyP95: 0,
+        confidenceAvg: 0,
+        predictionsProcessed: 0,
+        dataDriftScore: 0,
+        modelDriftScore: 0,
       })
-
-      setPendingApproval({
-        modelVersion: 'v3.1',
-        requestedBy: 'ML Team',
-        requestedAt: '2026-06-11 10:00 UTC',
-        approvalStatus: '1/2 votes (50%)',
-        newAccuracy: 93.1,
-        accuracyDiff: 0.7,
-      })
-
-      setAlerts([
-        {
-          type: 'warning',
-          title: 'High Data Drift Detected',
-          description: 'Feature: origin_country, Drift Score: 0.34 (Elevated), Detected: 2 hours ago',
-          timestamp: '2 hours ago',
-          actionRequired: true,
-        },
-        {
-          type: 'success',
-          title: 'All Other Metrics Normal',
-          description: 'All performance and drift metrics within acceptable ranges',
-          timestamp: 'Current',
-          actionRequired: false,
-        },
-      ])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data')
-    } finally {
-      setLoading(false)
     }
-  }
+
+    // Build alerts from gate failures
+    const newAlerts: MonitoringAlert[] = gates
+      .filter(g => !g.passed)
+      .map(g => ({
+        type: 'warning' as const,
+        title: `Gate not met: ${g.label}`,
+        description: `Current: ${g.current?.toFixed(2)} — Threshold: ${g.threshold}. ${g.description}`,
+        timestamp: 'Now',
+        actionRequired: true,
+      }))
+    if (newAlerts.length === 0) {
+      newAlerts.push({
+        type: 'success',
+        title: 'All gates passing',
+        description: 'Model performance within acceptable ranges for current maturity level',
+        timestamp: 'Current',
+        actionRequired: false,
+      })
+    }
+    setAlerts(newAlerts)
+
+    // Show pending approval if last job is completed without promotion
+    if (recentJob?.status === 'completed') {
+      setPendingApproval({
+        modelVersion: recentJob.job_id,
+        requestedBy: 'Training Pipeline',
+        requestedAt: recentJob.started_at,
+        approvalStatus: 'Awaiting review',
+        newAccuracy: recentJob.metrics?.test_accuracy ?? 0,
+        accuracyDiff: 0,
+      })
+    }
+  }, [mcpModel, gates, recentJob, loading])
 
   if (loading) {
     return (
