@@ -1,0 +1,43 @@
+{
+  "model_id": "v2.1-rule-based",
+  "version": "2.1",
+  "name": "CBP Risk Model v2.1 (Legacy Rule-Based)",
+  "framework": "rule-based-deterministic",
+  "status": "deprecated",
+  "created_at": "2026-05-23T00:00:00Z",
+  "deprecated_at": "2026-06-13T19:17:14Z",
+  "deployed_at": null,
+  "_note": "Never formally deployed — superseded by gate0-rule-engine-v1.0",
+  "factor_weights": {
+    "corridor_score": 0.40,
+    "vessel_score": 0.35,
+    "manifest_score": 0.35,
+    "_weights_sum": 1.10,
+    "_known_bug": "Weights sum to 1.10 (10% overweighting artifact — not normalized)"
+  },
+  "corridor_scores": {
+    "CN->US": 8.5,
+    "VN->US": 7.0,
+    "MY->US": 6.5,
+    "SG->US": 5.0,
+    "CA->US": 4.5,
+    "MX->US": 3.5,
+    "TH->US": 6.0,
+    "IN->US": 5.5,
+    "JP->US": 3.0,
+    "KR->US": 3.5
+  },
+  "thresholds": {
+    "referral": 65,
+    "critical": 80
+  },
+  "model_maturity_pct": null,
+  "confidence_interval": null,
+  "compound_multiplier": null,
+  "xgboost_delta": false,
+  "factors_count": 3,
+  "feature_count": null,
+  "dataset_version": "pre-enrichment",
+  "dataset_rows": 1396,
+  "restore_instructions": "Load this file, apply corridor_score × 0.40 + vessel_score × 0.35 + manifest_score × 0.35 per shipment. No write-back was ever performed with this model."
+}

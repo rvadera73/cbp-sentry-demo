@@ -1,0 +1,97 @@
+{
+  "model_id": "gate0-rule-engine-v1.0",
+  "version": "1.0",
+  "gate": "gate0",
+  "name": "CBP Sentry Gate 0 Rule Engine v1.0",
+  "framework": "rule-engine-xgboost-delta",
+  "status": "production",
+  "created_at": "2026-06-25T00:00:00Z",
+  "deployed_at": "2026-06-25T00:00:00Z",
+  "deprecated_at": null,
+  "description": "7-factor rule engine with compound risk multiplier and XGBoost calibration delta. Gate 0 production model for CBP EAPA transshipment detection.",
+  "predecessor": "v2.1-rule-based",
+  "maturity_pct": 15,
+  "confidence_interval_pts": 17,
+  "referral_threshold": 65,
+  "critical_threshold": 80,
+  "scoring_method": "rule_engine_xgb_delta",
+  "factor_groups": {
+    "documentation": {
+      "weight": 0.25,
+      "weight_pct": 25.0,
+      "sub_factors": {
+        "element9_mismatch":       {"weight": 0.50, "severity_multiplier": 2.5},
+        "isf_amendments":          {"weight": 0.30, "base_score_per_amendment": 2},
+        "manifest_completeness":   {"weight": 0.20}
+      }
+    },
+    "commodity": {
+      "weight": 0.15,
+      "weight_pct": 15.0,
+      "sub_factors": {
+        "tariff_rate_adcvd":       {"weight": 0.50},
+        "export_control":          {"weight": 0.30},
+        "uflpa_risk":              {"weight": 0.20}
+      }
+    },
+    "routing": {
+      "weight": 0.15,
+      "weight_pct": 15.0,
+      "sub_factors": {
+        "dwell_anomaly":           {"weight": 0.40},
+        "transshipment_hub":       {"weight": 0.30},
+        "vessel_flag":             {"weight": 0.20},
+        "ais_gaps":                {"weight": 0.10}
+      }
+    },
+    "party": {
+      "weight": 0.15,
+      "weight_pct": 15.0,
+      "sub_factors": {
+        "shipper_age":             {"weight": 0.35},
+        "compliance_history":      {"weight": 0.30},
+        "ofac_sanctions":          {"weight": 0.20},
+        "corporate_opacity":       {"weight": 0.15}
+      }
+    },
+    "corridor": {
+      "weight": 0.20,
+      "weight_pct": 20.0,
+      "sub_factors": {
+        "country_of_origin_risk":  {"weight": 0.60},
+        "tariff_evasion_incentive":{"weight": 0.40}
+      }
+    },
+    "pattern": {
+      "weight": 0.10,
+      "weight_pct": 10.0,
+      "sub_factors": {
+        "unit_price_benchmark":    {"weight": 0.50},
+        "ml_transshipment_pattern":{"weight": 0.50}
+      }
+    },
+    "time": {
+      "weight": 0.10,
+      "weight_pct": 10.0,
+      "sub_factors": {
+        "time_sensitivity":        {"weight": 1.0}
+      }
+    }
+  },
+  "compound_multiplier_table": {
+    "1_critical_indicator":  1.0,
+    "2_critical_indicators": 1.10,
+    "3_critical_indicators": 1.20,
+    "4_critical_indicators": 1.35,
+    "5+_critical_indicators":1.50
+  },
+  "xgboost_integration": {
+    "model_file": "models/xgboost_model.json",
+    "calibration_file": "models/score_calibration.json",
+    "delta_formula": "(xgb_score - 50.0) * (maturity / 100.0) * 0.30",
+    "influence_at_15pct_maturity": "~4.5% of final score"
+  },
+  "dataset_version": "gate0-enriched-1396",
+  "dataset_rows": 1396,
+  "restore_instructions": "Load risk_scoring_engine.py with these weights via RiskModelConfig. Run batch_rescore.py --model-version gate0-rule-engine-v1.0 to recompute and write-back scores to shipments table."
+}
