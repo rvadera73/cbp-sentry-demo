@@ -412,183 +412,112 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
     );
   }
 
-  // CASE DETAIL WORKSPACE
+  // REFERRAL PACKAGE VIEW (replaces the previous multi-tab workspace)
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'Timeline' | 'Risk Analysis' | 'Shipment' | 'Entity'>('Risk Analysis');
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Back to Queue Button - Top Left Corner */}
-      <div className="bg-[#F7F9FC] border-b border-[#D0D7DE] px-6 py-2 shrink-0">
+    <div className="flex-1 flex flex-col overflow-hidden relative">
+
+      {/* ── Breadcrumb / top bar ──────────────────────────────────────────── */}
+      <div className="bg-white border-b border-[#D0D7DE] px-4 py-2 flex items-center gap-3 shrink-0 shadow-sm">
         <button
-          onClick={() => {
-            setSelectedCaseId(null);
-          }}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-[#005EA2] hover:text-[#0076D6] text-xs font-bold rounded-sm flex items-center space-x-1 transition-colors"
+          onClick={() => setSelectedCaseId(null)}
+          className="flex items-center gap-1.5 text-[#005EA2] hover:text-[#004A80] text-xs font-bold px-2 py-1 rounded hover:bg-blue-50 transition-colors"
         >
           <span>←</span>
-          <span>BACK TO QUEUE</span>
+          <span>Referral Queue</span>
         </button>
-      </div>
+        <span className="text-slate-300">/</span>
+        <span className="text-[11px] font-mono bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-slate-700">
+          {selectedCase.case_id}
+        </span>
+        <span className="text-[12px] font-bold text-[#0B1F33] truncate max-w-sm">
+          {selectedCase.case_name}
+        </span>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+          selectedCase.priority === 'Critical' ? 'bg-red-100 text-red-700' :
+          selectedCase.priority === 'High' ? 'bg-amber-100 text-amber-700' :
+          'bg-slate-100 text-slate-600'
+        }`}>
+          {selectedCase.priority?.toUpperCase()}
+        </span>
 
-      {/* Header Bar */}
-      <div className="h-20 bg-white border-b border-[#D0D7DE] flex items-center px-6 space-x-6 shrink-0 shadow-sm">
-        <div className="flex flex-col border-r border-[#D0D7DE] pr-6">
-          <h2 className="text-base font-extrabold uppercase text-[#0B1F33]">
-            {selectedCase.case_name}
-          </h2>
-          <div className="flex items-center space-x-2 mt-0.5">
-            <span className="text-xs font-mono font-bold text-slate-800 bg-slate-100 border border-slate-300 px-1 py-0.5 rounded">
-              {selectedCase.case_id}
-            </span>
-            <span className={`px-1.5 py-0.5 text-[10px] font-bold rounded-sm uppercase font-sans ${
-              selectedCase.priority === 'Critical' ? 'bg-[#D83933] text-white' : 'bg-[#FFBE2E] text-slate-950'
-            }`}>
-              {selectedCase.priority} TASK
-            </span>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-[11px] text-slate-500">SLA: <strong className="text-red-600">{selectedCase.sla_timer}</strong></span>
+          {/* Supporting investigation data drawer toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded border text-[11px] font-semibold transition-colors ${
+                drawerOpen
+                  ? 'bg-[#005EA2] text-white border-[#005EA2]'
+                  : 'bg-white text-[#005EA2] border-[#005EA2] hover:bg-blue-50'
+              }`}
+            >
+              📊 Supporting Data {drawerOpen ? '▲' : '▼'}
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Risk Score */}
-        <div className="flex flex-col">
-          <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold">Risk Score</span>
-          <div className="flex items-baseline space-x-1.5 mt-1">
-            <span className={`text-xl font-black font-mono ${(selectedCase.risk_score + riskAdjustment) >= 80 ? 'text-[#D83933]' : 'text-[#FFBE2E]'}`}>
-              {Math.min(100, Math.round((selectedCase.calculated_risk_score ?? selectedCase.risk_score) + riskAdjustment))}
-            </span>
-            <span className="text-[10px]">/ 100</span>
-            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${(selectedCase.risk_score + riskAdjustment) >= 80 ? 'bg-[#D83933]' : 'bg-[#FFBE2E]'}`}
-                style={{ width: `${Math.min(100, (selectedCase.calculated_risk_score ?? selectedCase.risk_score) + riskAdjustment)}%` }}
-              />
-            </div>
+      {/* ── Supporting Data Drawer ─────────────────────────────────────────── */}
+      {drawerOpen && (
+        <div className="bg-white border-b border-[#D0D7DE] shrink-0 shadow-md" style={{ maxHeight: '45vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <div className="flex border-b border-[#D0D7DE] px-4 bg-slate-50">
+            {(['Risk Analysis', 'Shipment', 'Entity', 'Timeline'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setDrawerTab(tab)}
+                className={`px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors ${
+                  drawerTab === tab
+                    ? 'border-[#005EA2] text-[#005EA2]'
+                    : 'border-transparent text-slate-600 hover:text-[#0B1F33]'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+            <button
+              onClick={() => setDrawerOpen(false)}
+              className="ml-auto px-3 py-2 text-slate-400 hover:text-slate-700 text-[11px]"
+            >
+              ✕ Close
+            </button>
           </div>
-          {selectedCase.model_maturity && (
-            <div className="mt-1">
-              <MaturityBadge
-                maturity={selectedCase.model_maturity}
-                modelVersion={selectedCase.model_version}
-                scoredAt={selectedCase.risk_score_calculated_at}
-                seedScore={(selectedCase as any).seed_risk_score ?? undefined}
-                variant="banner"
-              />
-            </div>
-          )}
-          {!selectedCase.model_maturity && (
-            <div className="mt-1 text-[10px] text-amber-600 flex items-center gap-1">
-              <span>⚠</span>
-              <span>Model score pending — showing estimated risk. Run scoring to generate model-validated score.</span>
-            </div>
-          )}
+          <div className="flex-1 overflow-y-auto">
+            {drawerTab === 'Timeline' && (
+              <div className="p-4">
+                <InvestigationTimeline
+                  caseId={selectedCase?.case_id || ''}
+                  events={[
+                    { event_id: 'EVT-001', event_type: 'Risk Escalation', title: `Risk Score ${selectedCase?.risk_score}`, description: selectedCase?.risk_score >= 80 ? 'Critical risk level detected' : 'Elevated risk indicators identified', timestamp: new Date().toISOString(), severity: selectedCase?.risk_score >= 80 ? 'critical' : 'high', details: { corridor: `${selectedCase?.origin_country} → ${selectedCase?.destination_country}` } },
+                    { event_id: 'EVT-002', event_type: 'Review Started', title: 'Investigation Opened', description: `Case opened for ${selectedCase?.target_entity}`, timestamp: selectedCase?.opened_date || new Date().toISOString(), severity: 'low', details: { opened_by: selectedCase?.assigned_officer || 'System' } },
+                  ]}
+                />
+              </div>
+            )}
+            {drawerTab === 'Risk Analysis' && selectedCaseShipments && (
+              <RiskExplainabilityTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />
+            )}
+            {drawerTab === 'Shipment' && (
+              <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+            )}
+            {drawerTab === 'Entity' && (
+              <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+            )}
+          </div>
         </div>
+      )}
 
-        {/* SLA */}
-        <div className="flex flex-col">
-          <span className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold">SLA Clock</span>
-          <span className="text-xs font-mono font-bold text-red-600 mt-1">{selectedCase.sla_timer}</span>
-        </div>
+      {/* ── CSOP Referral Package — primary workspace ────────────────────── */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        <ReferralPackageV2
+          selectedCase={selectedCase}
+          selectedCaseShipments={selectedCaseShipments}
+        />
       </div>
 
-      {/* Tab Navigation - Horizontal tabs at top */}
-      <TabNavigation
-        tabs={[
-          { id: 'Timeline', label: 'Timeline' },
-          { id: 'Risk Analysis', label: '🔍 Risk Analysis' },
-          { id: 'Shipment', label: 'Shipment' },
-          { id: 'Entity', label: 'Entity' },
-          { id: 'Evidence', label: 'Evidence' },
-          { id: 'Referral', label: 'Referral' },
-          { id: 'Referral (New)', label: 'Referral (New)' },
-          { id: 'CSOP Package', label: '📄 CSOP Package' },
-        ]}
-        activeTab={activeSubTab === 'Risk Profile' || activeSubTab === 'Risk Score' ? 'Risk Analysis' : activeSubTab}
-        onTabChange={(tabId) => {
-          const validTabs = ['Timeline', 'Risk Analysis', 'Shipment', 'Entity', 'Evidence', 'Referral', 'Referral (New)', 'CSOP Package'];
-          if (validTabs.includes(tabId)) {
-            setActiveSubTab(tabId as any);
-          }
-        }}
-        orientation="horizontal"
-      />
-
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto">
-          {activeSubTab === 'Timeline' && (
-            <div className="p-6 bg-[#F7F9FC] overflow-y-auto">
-              <InvestigationTimeline
-                caseId={selectedCase?.case_id || ''}
-                events={[
-                  {
-                    event_id: 'EVT-001',
-                    event_type: 'Risk Escalation',
-                    title: `Risk Score at ${selectedCase?.risk_score}%`,
-                    description: selectedCase?.risk_score ? (selectedCase.risk_score >= 80 ? 'Critical risk level detected' : 'Elevated risk indicators identified') : 'Risk assessment complete',
-                    timestamp: new Date().toISOString(),
-                    severity: selectedCase?.risk_score && selectedCase.risk_score >= 80 ? 'critical' : 'high',
-                    details: { reason: 'Automated risk scoring', corridor: `${selectedCase?.origin_country || 'N/A'} → ${selectedCase?.destination_country || 'N/A'}` },
-                  },
-                  {
-                    event_id: 'EVT-002',
-                    event_type: 'Review Started',
-                    title: 'Investigation Opened',
-                    description: `Case opened for detailed analysis of ${selectedCase?.target_entity || 'target entity'}`,
-                    timestamp: selectedCase?.opened_date || new Date().toISOString(),
-                    severity: 'low',
-                    details: { opened_by: selectedCase?.assigned_officer || 'System', reason: 'Automated screening' },
-                  },
-                ]}
-              />
-            </div>
-          )}
-          {(activeSubTab as string) === 'Risk Analysis' && selectedCaseShipments && (
-            <RiskExplainabilityTab
-              selectedCase={selectedCase}
-              selectedCaseShipments={selectedCaseShipments}
-            />
-          )}
-          {activeSubTab === 'Shipment' && (
-            <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
-          )}
-          {activeSubTab === 'Entity' && (
-            <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
-          )}
-          {activeSubTab === 'Evidence' && selectedCaseShipments && (
-            <EvidenceTab
-              selectedCase={selectedCase}
-              selectedCaseShipments={selectedCaseShipments}
-              onGenerateReferral={() => setActiveSubTab('CSOP Package' as any)}
-            />
-          )}
-          {activeSubTab === 'Referral' && selectedReferral && (
-            <div className="flex-1 overflow-hidden">
-              <ComprehensiveReferralViewer
-                referral={selectedReferral}
-              />
-            </div>
-          )}
-          {activeSubTab === 'Referral (New)' && selectedCaseShipments && selectedCaseShipments.length > 0 && (
-            <div className="flex-1 overflow-hidden">
-              <ReferralPackageGenerationTab
-                shipmentId={selectedCaseShipments[0].shipment_id}
-                caseContext={{
-                  caseNumber: selectedCase?.case_id,
-                  caseTitle: selectedCase?.case_name,
-                  riskScore: selectedCase?.risk_score,
-                  riskLevel: selectedCase?.priority,
-                  hsCode: selectedCaseShipments[0]?.hs_code,
-                  shipperName: selectedCaseShipments[0]?.shipper_name,
-                  consigneeName: selectedCaseShipments[0]?.manifest_data?.consignee,
-                }}
-              />
-            </div>
-          )}
-          {(activeSubTab as string) === 'CSOP Package' && (
-            <div className="flex-1 overflow-hidden flex flex-col">
-              <ReferralPackageV2
-                selectedCase={selectedCase}
-                selectedCaseShipments={selectedCaseShipments}
-              />
-            </div>
-          )}
-      </div>
     </div>
   );
 }

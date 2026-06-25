@@ -418,7 +418,46 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
     await fetch(`${API_BASE_URL}/feedback/override?${params}`, { method: 'POST' });
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = async () => {
+    try {
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const element = printRef.current;
+      if (!element) return;
+
+      // Temporarily expand all sections for capture
+      const allExpanded = document.querySelectorAll('[data-collapsed="true"]');
+
+      const canvas = await html2canvas(element, {
+        scale: 1.5,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+      });
+
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const imgData = canvas.toDataURL('image/png');
+      const pageW = 210;
+      const pageH = 297;
+      const imgH = (canvas.height * pageW) / canvas.width;
+
+      let posY = 0;
+      while (posY < imgH) {
+        pdf.addImage(imgData, 'PNG', 0, -posY, pageW, imgH);
+        posY += pageH;
+        if (posY < imgH) pdf.addPage();
+      }
+
+      const filename = `CBP-EAPA-${packageData?.referral_id?.substring(0, 8).toUpperCase() || 'PACKAGE'}-${new Date().toISOString().split('T')[0]}.pdf`;
+      pdf.save(filename);
+    } catch (err) {
+      console.error('PDF export failed:', err);
+      alert('PDF export failed. Please try again.');
+    }
+  };
 
   // ── Loading / error states
   if (!shipment) {
@@ -488,49 +527,76 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
 
   return (
     <div className="flex flex-col flex-1 overflow-hidden bg-[#F7F9FC]" ref={printRef}>
-      {/* ── PACKAGE HEADER ──────────────────────────────────────────────── */}
-      <div className="bg-[#0B1F33] text-white px-6 py-4 flex-shrink-0">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <span className="text-[10px] font-bold bg-[#005EA2] px-2 py-0.5 rounded uppercase tracking-wider">
-                ILLEGAL TRANSSHIPMENT REFERRAL PACKAGE
-              </span>
-              <span className="text-[10px] text-slate-400">CSOP-BP-GS-26-0001</span>
-            </div>
-            <h2 className="text-base font-bold mt-1">
-              {packageData.shipper_name} → {packageData.consignee_name}
-            </h2>
-            <p className="text-[11px] text-slate-300 mt-0.5">
-              HS {packageData.hs_code} · {hsFamily(packageData.hs_code) || packageData.commodity_name} · Origin: {countryName(packageData.origin_country)}
-            </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">
-              Package ID: {packageData.referral_id.substring(0, 12).toUpperCase()} ·
-              Generated: {new Date(packageData.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })} ·
-              Shipment: {packageData.shipment_id}
-            </p>
+      {/* ── PACKAGE HEADER — 508/WCAG AA compliant, white bg, dark text ── */}
+      <div className="bg-white border-b-2 border-[#005EA2] px-6 py-4 flex-shrink-0">
+        {/* Top line: package type + controls */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] font-bold bg-[#005EA2] text-white px-2.5 py-1 rounded uppercase tracking-wider">
+              ILLEGAL TRANSSHIPMENT REFERRAL PACKAGE
+            </span>
+            <span className="text-[10px] text-slate-500 font-mono">CSOP-BP-GS-26-0001</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              Package ID: {packageData.referral_id.substring(0, 12).toUpperCase()}
+            </span>
           </div>
-          <div className="flex-shrink-0 text-center">
-            <div
-              className="rounded px-4 py-2 text-center"
-              style={{ background: rc.bg, border: `1px solid ${rc.border}` }}
-            >
-              <p className="text-2xl font-black" style={{ color: rc.text }}>{packageData.risk_score.toFixed(0)}</p>
-              <p className="text-[10px] font-bold" style={{ color: rc.text }}>/100 · {rc.label}</p>
-              <p className="text-[9px] text-slate-500 mt-0.5">CI: ±{calcTable.confidence_interval?.replace('±', '') || 17} pts</p>
-            </div>
-            <p className="text-[11px] font-bold mt-2 text-amber-300">{packageData.recommendation}</p>
-            <p className="text-[10px] text-slate-400">Confidence: {packageData.confidence}</p>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] text-slate-600">
+              {new Date(packageData.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </span>
+            <span className="text-[10px] text-slate-400 font-mono">· {packageData.shipment_id}</span>
           </div>
         </div>
 
-        {/* Key findings summary */}
+        {/* Main identity + risk score row */}
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg font-black text-[#0B1F33] truncate">
+              {packageData.shipper_name}
+              <span className="mx-2 text-slate-400 font-normal">→</span>
+              {packageData.consignee_name}
+            </h2>
+            <p className="text-[12px] text-slate-600 mt-0.5">
+              HS {packageData.hs_code} &nbsp;·&nbsp; {hsFamily(packageData.hs_code) || packageData.commodity_name} &nbsp;·&nbsp; Origin: <strong>{countryName(packageData.origin_country)}</strong>
+            </p>
+          </div>
+
+          {/* Risk score badge — WCAG AA: colored bg with dark text */}
+          <div className="flex-shrink-0 flex items-center gap-4">
+            <div className="text-center">
+              <div
+                className="rounded-lg px-5 py-2 border-2 text-center inline-block"
+                style={{ background: rc.bg, borderColor: rc.border }}
+              >
+                <p className="text-3xl font-black leading-none" style={{ color: rc.text }}>
+                  {packageData.risk_score.toFixed(0)}
+                </p>
+                <p className="text-[10px] font-bold mt-0.5" style={{ color: rc.text }}>
+                  /100 — {rc.label}
+                </p>
+                <p className="text-[9px] text-slate-600 mt-0.5">
+                  CI: ±{calcTable.confidence_interval?.replace('±', '') || 17} pts
+                </p>
+              </div>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold mb-1">Recommendation</p>
+              <p className="text-[13px] font-black text-[#0B1F33]">{packageData.recommendation}</p>
+              <p className="text-[10px] text-slate-500">Confidence: {packageData.confidence}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Key findings — dark text on light backgrounds (508 compliant) */}
         {activeIndicators.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-slate-700">
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-1.5">Key Findings:</p>
+          <div className="mt-3 pt-3 border-t border-slate-200">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide font-bold mb-1.5">Key Risk Findings:</p>
             <div className="flex flex-wrap gap-2">
               {activeIndicators.map((ind: any, i: number) => (
-                <span key={i} className="text-[10px] bg-amber-900/50 text-amber-200 border border-amber-700 rounded px-2 py-0.5">
+                <span
+                  key={i}
+                  className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 rounded px-2 py-0.5"
+                >
                   ⚠ {ind.indicator}
                 </span>
               ))}
@@ -960,15 +1026,6 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
         )}
 
       </div>
-
-      {/* Print styles */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .print-area, .print-area * { visibility: visible; }
-          .print-area { position: absolute; left: 0; top: 0; width: 100%; }
-        }
-      `}</style>
     </div>
   );
 }
