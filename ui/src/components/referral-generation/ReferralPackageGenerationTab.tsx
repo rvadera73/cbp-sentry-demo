@@ -20,7 +20,7 @@ interface TabState {
   error: string | null;
 }
 
-export default function ReferralPackageGenerationTab({ shipmentId, onClose }: ReferralPackageGenerationTabProps) {
+export default function ReferralPackageGenerationTab({ shipmentId, onClose, caseContext }: ReferralPackageGenerationTabProps) {
   const [tabState, setTabState] = useState<TabState>({
     activeTab: 'display',
     referralData: null,
@@ -125,6 +125,21 @@ export default function ReferralPackageGenerationTab({ shipmentId, onClose }: Re
 
   return (
     <div className="referral-gen-tab">
+      {/* Case Context Banner — pre-populated from Evidence tab */}
+      {caseContext && (
+        <div className="referral-gen-tab__context-banner" style={{ background: '#1e293b', borderBottom: '1px solid #334155', padding: '12px 20px', display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'center' }}>
+          {caseContext.caseNumber && <span style={{ color: '#94a3b8', fontSize: 13 }}><strong style={{ color: '#e2e8f0' }}>Case:</strong> {caseContext.caseNumber}</span>}
+          {caseContext.hsCode && <span style={{ color: '#94a3b8', fontSize: 13 }}><strong style={{ color: '#e2e8f0' }}>HS:</strong> {caseContext.hsCode}</span>}
+          {caseContext.shipperName && <span style={{ color: '#94a3b8', fontSize: 13 }}><strong style={{ color: '#e2e8f0' }}>Shipper:</strong> {caseContext.shipperName}</span>}
+          {caseContext.consigneeName && <span style={{ color: '#94a3b8', fontSize: 13 }}><strong style={{ color: '#e2e8f0' }}>Consignee:</strong> {caseContext.consigneeName}</span>}
+          {caseContext.riskScore != null && (
+            <span style={{ marginLeft: 'auto', background: '#dc2626', color: '#fff', borderRadius: 6, padding: '2px 10px', fontWeight: 700, fontSize: 14 }}>
+              Risk Score: {caseContext.riskScore} — {caseContext.riskLevel || 'HIGH'}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Header */}
       <div className="referral-gen-tab__header">
         <div className="referral-gen-tab__title">

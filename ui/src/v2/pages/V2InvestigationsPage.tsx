@@ -16,6 +16,7 @@ import InvestigationTimeline from '../components/InvestigationTimeline';
 import RiskHeatmap from '../components/RiskHeatmap';
 import MaturityBadge from '../components/MaturityBadge';
 import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
+import EvidenceTab from '../components/EvidenceTab';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -540,8 +541,12 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           {activeSubTab === 'Entity' && (
             <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
           )}
-          {activeSubTab === 'Evidence' && (
-            <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
+          {activeSubTab === 'Evidence' && selectedCaseShipments && (
+            <EvidenceTab
+              selectedCase={selectedCase}
+              selectedCaseShipments={selectedCaseShipments}
+              onGenerateReferral={() => setActiveSubTab('Referral (New)' as any)}
+            />
           )}
           {activeSubTab === 'Referral' && selectedReferral && (
             <div className="flex-1 overflow-hidden">
@@ -552,7 +557,18 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           )}
           {activeSubTab === 'Referral (New)' && selectedCaseShipments && selectedCaseShipments.length > 0 && (
             <div className="flex-1 overflow-hidden">
-              <ReferralPackageGenerationTab shipmentId={selectedCaseShipments[0].shipment_id} />
+              <ReferralPackageGenerationTab
+                shipmentId={selectedCaseShipments[0].shipment_id}
+                caseContext={{
+                  caseNumber: selectedCase?.case_id,
+                  caseTitle: selectedCase?.case_name,
+                  riskScore: selectedCase?.risk_score,
+                  riskLevel: selectedCase?.priority,
+                  hsCode: selectedCaseShipments[0]?.hs_code,
+                  shipperName: selectedCaseShipments[0]?.shipper_name,
+                  consigneeName: selectedCaseShipments[0]?.manifest_data?.consignee,
+                }}
+              />
             </div>
           )}
       </div>

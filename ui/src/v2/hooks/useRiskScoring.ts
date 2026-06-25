@@ -4,6 +4,8 @@ import { API_BASE_URL } from '../../services/apiUrl';
 export interface RiskScoringBreakdown {
   shipment_id?: string;
   risk_score?: number;
+  confidence_interval?: string;
+  model_maturity?: number;
   components: Array<{
     component: string;
     factor: string;
@@ -28,10 +30,12 @@ export interface RiskScoringBreakdown {
     reason: string;
   }>;
   final_score: number;
-  confidence_interval?: string;
   h1_level?: string;
   h2_signals?: string[];
   h3_recommendation?: string;
+  critical_indicators?: string[];
+  compound_multiplier?: number;
+  rule_engine_subtotal?: number;
 }
 
 export function useRiskScoring(shipmentId: string | null) {
@@ -66,14 +70,18 @@ export function useRiskScoring(shipmentId: string | null) {
           shipment_id: apiResponse.shipment_id,
           risk_score: apiResponse.risk_score,
           confidence_interval: apiResponse.confidence_interval,
+          model_maturity: apiResponse.model_maturity,
           components: apiResponse.risk_breakdown?.components || [],
           subtotal: apiResponse.risk_breakdown?.subtotal || 0,
           corridor_risk_adjustment: apiResponse.risk_breakdown?.corridor_risk_adjustment,
           additional_adjustments: apiResponse.risk_breakdown?.additional_adjustments,
           final_score: apiResponse.risk_breakdown?.final_score || apiResponse.risk_score || 0,
-          // Compute h1_level, h2_signals, h3_recommendation from components if available
           h1_level: apiResponse.risk_breakdown?.final_score >= 80 ? 'HIGH' : apiResponse.risk_breakdown?.final_score >= 50 ? 'MEDIUM' : 'LOW',
           h3_recommendation: apiResponse.risk_breakdown?.final_score >= 80 ? 'HOLD' : apiResponse.risk_breakdown?.final_score >= 50 ? 'EXAMINE' : 'CLEAR',
+          // Compound indicator data from v2 rule engine
+          critical_indicators: apiResponse.risk_breakdown?.calculation_table?.critical_indicators || [],
+          compound_multiplier: apiResponse.risk_breakdown?.calculation_table?.compound_multiplier,
+          rule_engine_subtotal: apiResponse.risk_breakdown?.calculation_table?.rule_engine_subtotal,
         };
 
         setScoreData(scoreData);

@@ -153,6 +153,17 @@ export interface OfficerAnalysisFormData {
 export interface ReferralPackageGenerationTabProps {
   shipmentId: string;
   onClose?: () => void;
+  /** Pre-populated context from the Evidence tab via onGenerateReferral callback */
+  caseContext?: {
+    caseNumber?: string;
+    caseTitle?: string;
+    riskScore?: number;
+    riskLevel?: string;
+    hsCode?: string;
+    shipperName?: string;
+    consigneeName?: string;
+    criticalIndicators?: string[];
+  };
 }
 
 export interface ReferralDisplayPanelProps {
