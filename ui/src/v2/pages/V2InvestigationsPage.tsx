@@ -88,16 +88,23 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
   const selectedCase = cases.find(c => c.case_id === selectedCaseId);
 
-  // Get shipments for selected case
+  // Get shipments for selected case — try caseShipments map first (keyed by shipper-origin-dest),
+  // then fall back to filtering the full shipments list
   const selectedCaseShipments = useMemo(() => {
     if (!selectedCase) return [];
-    // Find shipments matching the case's origin/destination/target_entity
-    return (propShipments || []).filter(s =>
+
+    // Primary: look up from caseShipments map (keyed by manifest_data.shipper-origin-dest)
+    const caseKey = `${selectedCase.target_entity}-${selectedCase.origin_country}-${selectedCase.destination_country}`;
+    const fromMap = caseShipments[caseKey];
+    if (fromMap && fromMap.length > 0) return fromMap;
+
+    // Fallback: filter from all loaded shipments (includes localShipments)
+    return shipments.filter(s =>
       s.origin_country === selectedCase.origin_country &&
       s.destination_country === selectedCase.destination_country &&
       s.shipper_name?.includes(selectedCase.target_entity.split(' /')[0]?.trim() || '')
     );
-  }, [selectedCase, propShipments]);
+  }, [selectedCase, shipments, caseShipments]);
 
   // Filter & Search
   const [searchQuery, setSearchQuery] = useState('');
