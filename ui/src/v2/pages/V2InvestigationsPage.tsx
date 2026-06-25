@@ -15,6 +15,7 @@ import InvestigationQueueCard from '../components/InvestigationQueueCard';
 import InvestigationTimeline from '../components/InvestigationTimeline';
 import RiskHeatmap from '../components/RiskHeatmap';
 import MaturityBadge from '../components/MaturityBadge';
+import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -481,19 +482,18 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
       <TabNavigation
         tabs={[
           { id: 'Timeline', label: 'Timeline' },
-          { id: 'Risk Profile', label: 'Risk Profile' },
+          { id: 'Risk Analysis', label: '🔍 Risk Analysis' },
           { id: 'Shipment', label: 'Shipment' },
           { id: 'Entity', label: 'Entity' },
-          { id: 'Risk Score', label: 'Risk Score' },
           { id: 'Evidence', label: 'Evidence' },
           { id: 'Referral', label: 'Referral' },
           { id: 'Referral (New)', label: 'Referral (New)' },
         ]}
-        activeTab={activeSubTab}
+        activeTab={activeSubTab === 'Risk Profile' || activeSubTab === 'Risk Score' ? 'Risk Analysis' : activeSubTab}
         onTabChange={(tabId) => {
-          const validTabs = ['Timeline', 'Risk Profile', 'Shipment', 'Entity', 'Risk Score', 'Evidence', 'Referral', 'Referral (New)'];
+          const validTabs = ['Timeline', 'Risk Analysis', 'Shipment', 'Entity', 'Evidence', 'Referral', 'Referral (New)'];
           if (validTabs.includes(tabId)) {
-            setActiveSubTab(tabId as 'Shipment' | 'Entity' | 'Risk Score' | 'Evidence' | 'Referral' | 'Referral (New)' | 'Timeline' | 'Risk Profile');
+            setActiveSubTab(tabId as any);
           }
         }}
         orientation="horizontal"
@@ -528,30 +528,17 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
               />
             </div>
           )}
-          {activeSubTab === 'Risk Profile' && (
-            <div className="p-6 bg-[#F7F9FC] overflow-y-auto">
-              <RiskHeatmap
-                dimensions={[
-                  { dimension: 'Supply Chain', score: Math.max(20, Math.min(100, (selectedCase?.h1_score || 25) * 2.5)) },
-                  { dimension: 'Origin Risk', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.9)) },
-                  { dimension: 'Entity History', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.8)) },
-                  { dimension: 'Financial', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.7)) },
-                  { dimension: 'Regulatory', score: Math.max(20, Math.min(100, (selectedCase?.risk_score || 50) * 0.95)) },
-                  { dimension: 'Documentation', score: Math.max(20, Math.min(100, (selectedCase?.h1_score || 25) * 2.2)) },
-                ]}
-                title="Risk Profile Matrix"
-                height={400}
-              />
-            </div>
+          {(activeSubTab as string) === 'Risk Analysis' && selectedCaseShipments && (
+            <RiskExplainabilityTab
+              selectedCase={selectedCase}
+              selectedCaseShipments={selectedCaseShipments}
+            />
           )}
           {activeSubTab === 'Shipment' && (
             <ShipmentsTab selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
           )}
           {activeSubTab === 'Entity' && (
             <EntitiesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />
-          )}
-          {activeSubTab === 'Risk Score' && (
-            <SynopsisTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} />
           )}
           {activeSubTab === 'Evidence' && (
             <DataTablesTab selectedCase={selectedCase} selectedCaseShipments={selectedCaseShipments} selectedReferral={selectedReferral} />

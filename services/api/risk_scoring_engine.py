@@ -310,16 +310,35 @@ class RiskScoringEngine:
         # Calculate subtotal (sum of weighted components)
         subtotal = sum(c.weighted_result for c in components)
 
-        # XGBoost primary classifier — calibrated score [0,100]
-        xgb_score, xgb_prob = self._score_with_xgboost(shipment)
-
-        # Blend: if XGBoost available use 60% XGBoost + 40% rule engine
-        # Otherwise fall back to 100% rule engine (backward compat)
-        if xgb_score > 0:
-            blended_score = 0.60 * xgb_score + 0.40 * subtotal
-            scoring_method = "xgb_blend"
+        # ── Compound Risk Multiplier ────────────────────────────────────
+        # When multiple critical indicators fire simultaneously, the risk
+        # is non-additive — apply a compound multiplier to the rule score.
+        critical_indicators = self._check_critical_indicators(shipment)
+        n = len(critical_indicators)
+        if n >= 5:
+            compound_multiplier = 1.50
+        elif n >= 4:
+            compound_multiplier = 1.35
+        elif n >= 3:
+            compound_multiplier = 1.20
+        elif n >= 2:
+            compound_multiplier = 1.10
         else:
-            blended_score = subtotal
+            compound_multiplier = 1.0
+        rule_engine_score = min(subtotal * compound_multiplier, 100.0)
+
+        # ── XGBoost as ADJUSTMENT DELTA (not primary score) ─────────────
+        # Model maturity controls how much influence the ML model has.
+        # At 15% maturity: small ±delta. At 90%+: larger, more confident delta.
+        # This preserves the full 0-100 rule-engine range at all maturities.
+        xgb_score, xgb_prob = self._score_with_xgboost(shipment)
+        maturity = float(shipment.get("model_maturity") or 15) / 100.0
+        if xgb_score > 0:
+            xgb_delta = (xgb_score - 50.0) * maturity * 0.30
+            blended_score = rule_engine_score + xgb_delta
+            scoring_method = "rule_engine_ml_adjusted"
+        else:
+            blended_score = rule_engine_score
             scoring_method = "rule_engine"
 
         # Additional AIS dwell adjustments
@@ -329,10 +348,13 @@ class RiskScoringEngine:
             final_score += adj["adjustment_points"]
 
         # Cap at 100
-        final_score = min(final_score, 100.0)
+        final_score = min(max(final_score, 0.0), 100.0)
 
-        # Confidence interval
-        confidence = self._calculate_confidence_interval(components)
+        # ── Maturity-aware Confidence Interval ──────────────────────────
+        # At 15% maturity → ±17 pts. At 90% maturity → ±2 pts.
+        raw_maturity = float(shipment.get("model_maturity") or 15)
+        ci_pts = round(20.0 * (1.0 - raw_maturity / 100.0))
+        confidence = f"±{ci_pts}"
 
         breakdown = RiskScoreBreakdown(
             shipment_id=shipment.get("id", "UNKNOWN"),
@@ -352,9 +374,41 @@ class RiskScoringEngine:
             xgb_score=xgb_score,
             xgb_prob=xgb_prob,
             scoring_method=scoring_method,
+            compound_multiplier=compound_multiplier,
+            critical_indicators=critical_indicators,
+            rule_engine_score=rule_engine_score,
         )
 
         return breakdown
+
+    def _check_critical_indicators(self, shipment: Dict) -> List[str]:
+        """Return list of triggered critical risk indicators for compound scoring."""
+        indicators = []
+
+        if shipment.get("element9_is_mismatch") or shipment.get("isf_element_mismatch"):
+            declared = shipment.get("element9_declared_country", "?")
+            actual   = shipment.get("element9_actual_country", "?")
+            indicators.append(f"ISF Element 9 origin mismatch ({declared} declared → {actual} actual)")
+
+        ad_cvd = float(shipment.get("ad_cvd_rate") or 0)
+        if ad_cvd >= 1.0:
+            indicators.append(f"High AD/CVD tariff exposure ({ad_cvd * 100:.0f}%)")
+
+        dwell = float(shipment.get("dwell_days") or 0)
+        if dwell >= 10:
+            indicators.append(f"Excessive dwell time ({dwell:.0f} days — transshipment window)")
+
+        age = int(shipment.get("shipper_age_months") or 99)
+        if age < 6:
+            indicators.append(f"Newly established shipper ({age} months — evasion risk)")
+
+        price_var = float(shipment.get("price_variance_percent") or 0)
+        if price_var <= -40:
+            indicators.append(f"Severely undervalued pricing ({price_var:.0f}% below benchmark)")
+        elif price_var <= -20:
+            indicators.append(f"Undervalued pricing ({price_var:.0f}% below benchmark)")
+
+        return indicators
 
     def _generate_calculation_table(
         self,
@@ -365,6 +419,9 @@ class RiskScoringEngine:
         xgb_score: float = 0.0,
         xgb_prob: float = 0.0,
         scoring_method: str = "rule_engine",
+        compound_multiplier: float = 1.0,
+        critical_indicators: Optional[List[str]] = None,
+        rule_engine_score: float = 0.0,
     ) -> Dict[str, Any]:
         """Generate detailed calculation breakdown table for transparency"""
 
@@ -417,7 +474,14 @@ class RiskScoringEngine:
             "xgb_probability": round(xgb_prob, 4),
             "xgb_calibrated_score": round(xgb_score, 2),
             "rule_engine_subtotal": round(subtotal, 2),
-            "blend_weights": {"xgb": 0.60, "rules": 0.40} if scoring_method == "xgb_blend" else {"xgb": 0.0, "rules": 1.0},
+            "compound_multiplier": round(compound_multiplier, 2),
+            "rule_engine_score_after_multiplier": round(rule_engine_score, 2),
+            "critical_indicators": critical_indicators or [],
+            "critical_indicator_count": len(critical_indicators or []),
+            "blend_weights": {
+                "rules": 1.0,
+                "xgb_delta": round(1.0 - 1.0 / compound_multiplier, 2) if compound_multiplier > 1 else 0.0,
+            },
             "component_details": [
                 {"factor": factor_name, "components": by_factor[factor_name]["components"]}
                 for factor_name in ["Documentation", "Commodity", "Routing", "Party", "Corridor", "Pattern", "Time"]
@@ -428,9 +492,9 @@ class RiskScoringEngine:
             "adjustments": adjustments,
             "final_score": round(final_score, 2),
             "calculation_steps": [
-                {"step": 1, "description": "Rule engine component scores", "value": round(subtotal, 2)},
-                {"step": 2, "description": "XGBoost calibrated score", "value": round(xgb_score, 2)},
-                {"step": 3, "description": "Blended score (60% XGB + 40% rules)" if scoring_method == "xgb_blend" else "Rule engine score", "value": round(0.60 * xgb_score + 0.40 * subtotal if scoring_method == "xgb_blend" else subtotal, 2)},
+                {"step": 1, "description": "Rule engine component scores (18 factors)", "value": round(subtotal, 2)},
+                {"step": 2, "description": f"Compound risk multiplier (×{compound_multiplier:.2f}, {len(critical_indicators or [])} critical indicators)", "value": round(rule_engine_score, 2)},
+                {"step": 3, "description": "ML adjustment delta (XGBoost, maturity-weighted)", "value": round(xgb_score, 2)},
                 {"step": 4, "description": "Final score (capped at 100)", "value": round(final_score, 2)},
             ],
         }
@@ -508,19 +572,26 @@ class RiskScoringEngine:
             (commodity_name or "General").lower(), {"base_risk": 5.0, "export_control": False, "ad_cvd_rate": 0}
         )
 
-        # Real AD/CVD rate lookup from Federal Register reference data (overrides synthetic config)
-        real_rate = get_adcvd_rate(commodity_code_val)
-        if real_rate is not None:
-            tariff_rate = real_rate
-            adcvd_order = get_adcvd_order(commodity_code_val)
-            order_ref = f" (Order {adcvd_order['order_number']})" if adcvd_order else ""
-            tariff_source = f"Federal Register{order_ref}"
+        # AD/CVD rate: prefer case data (DB column) → Federal Register → config fallback
+        db_adcvd = shipment.get("ad_cvd_rate")
+        if db_adcvd is not None and float(db_adcvd) > 0:
+            # DB stores as decimal: 1.76 = 176%
+            tariff_rate = float(db_adcvd) * 100
+            tariff_source = "case data"
         else:
-            tariff_rate = sensitivity.get("ad_cvd_rate", 0)
-            tariff_source = "config (no Federal Register match)"
+            real_rate = get_adcvd_rate(commodity_code_val)
+            if real_rate is not None:
+                tariff_rate = real_rate
+                adcvd_order = get_adcvd_order(commodity_code_val)
+                order_ref = f" (Order {adcvd_order['order_number']})" if adcvd_order else ""
+                tariff_source = f"Federal Register{order_ref}"
+            else:
+                tariff_rate = sensitivity.get("ad_cvd_rate", 0)
+                tariff_source = "config (no Federal Register match)"
 
         # Tariff Rate Risk (50% of commodity risk)
-        tariff_score = min(tariff_rate / 500 * 10, 10.0)
+        # Calibrated: 200% AD/CVD → 10/10 (linear, capped)
+        tariff_score = min(tariff_rate / 20.0, 10.0)
         components.append(
             RiskComponentScore(
                 component="Tariff Rate / AD-CVD Exposure",
@@ -573,11 +644,31 @@ class RiskScoringEngine:
         config = self.config.ROUTING_RISK
         factor_weight = self.factor_weights["routing"]
 
-        # AIS Dwell Anomaly (40% of routing risk) - USE ML MODEL
+        # AIS Dwell Anomaly (40% of routing risk)
+        # Primary: threshold-based direct scoring from dwell_days DB column
+        # Secondary: Isolation Forest adds signal if it detects anomaly
+        dwell_days = float(shipment.get("dwell_days") or 0)
+        if dwell_days >= 18:
+            dwell_score = 9.5
+            dwell_category = "CRITICAL"
+        elif dwell_days >= 12:
+            dwell_score = 7.5
+            dwell_category = "SEVERE"
+        elif dwell_days >= 8:
+            dwell_score = 5.5
+            dwell_category = "ELEVATED"
+        elif dwell_days >= 4:
+            dwell_score = 2.5
+            dwell_category = "MODERATE"
+        else:
+            dwell_score = 1.0
+            dwell_category = "NORMAL"
+
+        # Isolation Forest provides corroborating signal
         is_ais_anomaly, anomaly_score = self._detect_ais_anomaly_ml(shipment)
-        # Convert ML anomaly score [-1, 1] to risk score [0, 10]
-        dwell_score = 9.0 if is_ais_anomaly else (max(0, (anomaly_score + 1) / 2 * 3))  # Map to 0-3 range for normal
-        dwell_days = shipment.get("dwell_days", 0)
+        if is_ais_anomaly and dwell_score < 9.5:
+            dwell_score = min(dwell_score * 1.20, 10.0)
+            dwell_category += "+ML"
 
         components.append(
             RiskComponentScore(
@@ -586,11 +677,11 @@ class RiskScoringEngine:
                 score=dwell_score,
                 weight=factor_weight * 0.40,
                 weighted_result=(dwell_score * factor_weight * 0.40) / 10,
-                rationale="Isolation Forest ML model detects vessel idle time anomalies",
+                rationale=f"Vessel idle time: {dwell_days:.0f} days ({dwell_category})",
                 evidence=[
-                    f"Dwell: {dwell_days} days",
-                    f"ML anomaly score: {anomaly_score:.3f}",
-                    f'Prediction: {"ANOMALY" if is_ais_anomaly else "NORMAL"}',
+                    f"Dwell: {dwell_days:.0f} days",
+                    f"Category: {dwell_category}",
+                    f'ML corroboration: {"ANOMALY" if is_ais_anomaly else "NORMAL"}',
                 ],
             )
         )
@@ -772,6 +863,22 @@ class RiskScoringEngine:
 
         return components
 
+    # HS-family price benchmarks ($/kg) — fallback when Comtrade data unavailable
+    _HS_PRICE_BASELINES = {
+        "7604": 4.50,   # Aluminum extrusions
+        "7610": 5.20,   # Aluminum structures
+        "7611": 4.80,   # Aluminum reservoirs
+        "7210": 0.85,   # Flat-rolled steel (coated)
+        "7225": 0.90,   # Other flat-rolled steel
+        "8541": 0.45,   # Solar panels / photovoltaic
+        "8471": 8.00,   # Computers / ADP
+        "8517": 12.00,  # Phones / telecom
+        "6203": 15.00,  # Men's garments
+        "6204": 13.00,  # Women's garments
+        "3004": 50.00,  # Pharmaceuticals
+        "2709": 0.40,   # Petroleum oils
+    }
+
     def _score_pattern_risk(self, shipment: Dict) -> List[RiskComponentScore]:
         """Score historical pattern anomalies with ML corroboration"""
         components = []
@@ -779,19 +886,26 @@ class RiskScoringEngine:
         factor_weight = self.factor_weights["pattern"]
 
         # Pricing Anomaly (50% of pattern risk)
-        # Try to compute price_variance from Comtrade baseline if not already in shipment
         price_variance = shipment.get("price_variance_percent") or 0
         hs_code = shipment.get("hs_code") or shipment.get("commodity_code") or ""
         unit_price = shipment.get("unit_price_per_kg") or 0
         price_source = "manifest"
 
         if not price_variance and hs_code and unit_price:
+            # Try Comtrade first
             corridor_norms = get_corridor_norms(hs_code)
             if corridor_norms and corridor_norms.get("avg_usd_per_kg"):
                 baseline = corridor_norms["avg_usd_per_kg"]
                 if baseline > 0:
                     price_variance = ((unit_price - baseline) / baseline) * 100
                     price_source = f"Comtrade VN→US baseline ${baseline:.2f}/kg"
+            # Fallback: HS-family internal benchmark table
+            if not price_variance:
+                hs4 = str(hs_code)[:4]
+                baseline = self._HS_PRICE_BASELINES.get(hs4)
+                if baseline and baseline > 0:
+                    price_variance = ((unit_price - baseline) / baseline) * 100
+                    price_source = f"HS-{hs4} benchmark ${baseline:.2f}/kg"
 
         if price_variance < -50:
             pricing_score = 9.0
@@ -927,8 +1041,7 @@ class RiskScoringEngine:
 
         return adjustments if adjustments else None
 
-    def _calculate_confidence_interval(self, components: List[RiskComponentScore]) -> str:
-        """Calculate confidence interval for score"""
-        # Simplified: ±2.5 for high confidence, ±5 for lower
-        uncertainty = 2.5 if len(components) >= 15 else 5.0
-        return f"±{uncertainty:.1f}"
+    def _calculate_confidence_interval(self, components: List[RiskComponentScore], maturity: float = 15.0) -> str:
+        """Confidence interval widens at lower model maturity. At 15% → ±17 pts, at 90% → ±2 pts."""
+        ci_pts = round(20.0 * (1.0 - maturity / 100.0))
+        return f"±{ci_pts}"

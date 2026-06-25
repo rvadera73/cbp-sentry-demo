@@ -189,19 +189,22 @@ export function useV2Cases(): UseV2CasesReturn {
       // Map cases with corridor & commodity context
       const mappedCases: Case[] = Object.entries(groupedByManifest).map(([caseId, shipmentList], idx) => {
         const firstShipment = shipmentList[0];
-        const riskScore = firstShipment.risk_score || 50;
-        // ai_confidence uses maturity when available, otherwise heuristic
+        const modelScore = firstShipment.risk_score || 50;  // canonical (model if available)
+        const seedScore = (firstShipment as any).seed_risk_score ?? modelScore;
+        // Priority/status driven by seed_risk_score (investigator-estimated, why case entered queue)
+        // as model at 15% maturity has compressed range (30-52) that doesn't discriminate well yet
+        const priorityScore = seedScore;
         const maturity = firstShipment.model_maturity;
         const aiConfidence = maturity != null
-          ? Math.min(100, Math.round(maturity + (riskScore * 0.1)))
-          : Math.min(100, Math.round(riskScore + 10));
+          ? Math.min(100, Math.round(maturity + (priorityScore * 0.1)))
+          : Math.min(100, Math.round(priorityScore * 0.85));
 
         return {
           case_id: `CBP-${2026}-${9000 + idx}`,
           case_name: `${firstShipment.shipper_name || 'Unknown'} → ${firstShipment.manifest_data.consignee || 'Unknown'}`,
           target_entity: firstShipment.shipper_name || 'Unknown Entity',
-          risk_score: riskScore,
-          seed_risk_score: (firstShipment as any).seed_risk_score ?? undefined,
+          risk_score: modelScore,
+          seed_risk_score: seedScore,
           calculated_risk_score: firstShipment.calculated_risk_score,
           model_version: firstShipment.model_version,
           model_maturity: firstShipment.model_maturity,
@@ -209,9 +212,9 @@ export function useV2Cases(): UseV2CasesReturn {
           score_validation: (firstShipment as any).score_validation ?? undefined,
           assigned_officer: 'Unassigned',
           investigation_stage: 'Overview',
-          case_status: deriveCaseStatus(riskScore),
+          case_status: deriveCaseStatus(priorityScore),
           referral_status: 'Not Initiated',
-          priority: derivePriority(riskScore),
+          priority: derivePriority(priorityScore),
           opened_date: firstShipment.date,
           sla_timer: '21 Days Remaining',
           product_category: firstShipment.commodity_name || 'Unknown',

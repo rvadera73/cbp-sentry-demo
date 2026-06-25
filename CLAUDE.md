@@ -196,15 +196,14 @@ All pipelines accept `--region` and `--version` params — scale to new corridor
 
 | File | Purpose |
 |------|---------|
-| `services/api/risk_scoring_engine.py` | Primary scorer — 7-factor rules + XGBoost 60/40 blend |
+| `docs/RISK_SCORING_ARCHITECTURE.md` | **Canonical reference** — v2 scoring design, maturity model, CI, thresholds |
+| `services/api/risk_scoring_engine.py` | Rule engine + compound multiplier + ML delta (v2) |
+| `scripts/enrich_shipment_features.py` | One-time feature enrichment for existing shipments |
 | `services/api/inference_features.py` | Single-shipment 36-feature extractor |
 | `services/api/main.py` | API routes (4200+ lines) |
 | `services/data/main.py` | Data service routes |
-| `train_models_phase1.py` | XGBoost training pipeline |
-| `models/xgboost_model.json` | Primary model (36 features) |
+| `models/xgboost_model.json` | XGBoost model (adjustment delta role in v2) |
 | `models/score_calibration.json` | Percentile anchors + clean_features list |
-| `models/inference_ref_stats.json` | Normalization stats for single-shipment scoring |
-| `cbp-risk-engine/api/main.py` | MLOps MCP service entry point |
 | `ui/src/v2/hooks/useV2Cases.ts` | Canonical shipment data hook (all tabs use this) |
 | `ui/src/App.tsx` | V2AppWrapper — URL→tab sync, all page routing |
 
@@ -224,25 +223,29 @@ App.tsx → V2AppWrapper
 ```
 
 **Score display:** Case card shows `calculated_risk_score` (fallback: `risk_score`).  
-Risk Score tab calls `POST /api/risk-scoring/comprehensive` for live breakdown.
+Risk Analysis tab calls `POST /api/risk-scoring/comprehensive` for live breakdown with compound indicator evidence.
+
+**Scoring architecture (v2):** Rule engine (full 0–100 range) + compound risk multiplier (×1.0–1.5) + ML delta (maturity-weighted, ±small adjustment). Confidence interval = ±round(20 × (1 − maturity/100)). See `docs/RISK_SCORING_ARCHITECTURE.md`.
+
+**Referral threshold:** score ≥ 65 OR h1_level = CRITICAL (NOT 90 — that was synthetic test data).
 
 ---
 
 ## Known Issues & TODOs
 
-### Immediate (15% maturity execution)
-- [ ] Score write-back: scoring endpoint must persist `calculated_risk_score` + provenance
-- [ ] DB migration: add `model_version`, `model_maturity`, `scored_at` columns
-- [ ] score_history table for audit trail across model versions
-- [ ] Batch rescore all 1396 shipments
-- [ ] Build 3 data pipelines (AD/CVD, Comtrade, OpenCorporates VN)
-- [ ] Wire 4 zero-scoring factors with real reference data
+### Resolved (v2 scoring)
+- ✅ Score write-back: comprehensive endpoint persists `calculated_risk_score` + provenance
+- ✅ Batch rescore all 1399 shipments (range 26–89, avg 35)
+- ✅ Rule engine reads enriched features from DB (AD/CVD, dwell, unit price)
+- ✅ Compound risk multiplier for co-occurring indicators
+- ✅ Maturity-aware confidence interval (±17 at 15%, ±2 at 90%)
+- ✅ Referral threshold corrected to score ≥ 65 (not 90 — synthetic data assumption)
 
-### Short term
-- [ ] Add cbp-risk-engine to docker-compose.yml
-- [ ] Remove precise-risk-engine (redundant)
-- [ ] Wire Risk Model Management tab (8 components → MCP endpoints)
-- [ ] Officer feedback loop: Hold/Examine/Clear → gate1_outcomes table
+### Immediate next
+- [ ] Wire `critical_indicators` list from rule engine into referral package (sections 3-11, 3-12)
+- [ ] Populate `element9_is_mismatch` from CORD entity resolution for live shipments
+- [ ] Populate `dwell_days` from AIS vessel tracking API
+- [ ] score_history table for audit trail across model versions
 
 ### Architecture debt
 - `precise-risk-engine` container is redundant with `cbp-risk-engine` — remove
