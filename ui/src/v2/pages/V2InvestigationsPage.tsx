@@ -141,6 +141,9 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   // Finding verification state
   const [findingStatuses, setFindingStatuses] = useState<Record<string, 'Accepted' | 'Rejected' | 'Needs Review'>>({});
 
+  // Supporting-data drawer (must be declared before any conditional return)
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'Timeline' | 'Risk Analysis' | 'Shipment' | 'Entity'>('Risk Analysis');
 
   // Auto-fetch referral package when case is selected
   React.useEffect(() => {
@@ -413,9 +416,6 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   }
 
   // REFERRAL PACKAGE VIEW (replaces the previous multi-tab workspace)
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'Timeline' | 'Risk Analysis' | 'Shipment' | 'Entity'>('Risk Analysis');
-
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
 

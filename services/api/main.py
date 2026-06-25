@@ -1864,6 +1864,127 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
         return {"error": str(e), "status": "failed"}
 
 
+@app.get("/api/referral/{shipment_id}/pdf")
+async def get_referral_pdf(shipment_id: str) -> StreamingResponse:
+    """
+    Generate and return a fully-formatted CSOP-BP-GS-26-0001 referral package PDF.
+
+    Self-contained: fetches shipment + sections from DB/referral engine, then
+    uses CBPReferralPDFGenerator (reportlab) to produce a multi-page document.
+    Returns application/pdf as an inline/attachment stream — no client-side rendering.
+    """
+    try:
+        from referral_pdf_generator import CBPReferralPDFGenerator
+
+        logger.info(f"[PDF] Generating referral PDF for shipment: {shipment_id}")
+
+        # ── 1. Fetch shipment row from data service ──────────────────────────
+        actual_shipment: Dict[str, Any] = {}
+        try:
+            async with await get_data_service_client() as client:
+                resp = await client.get(f"/shipments/{shipment_id}")
+                if resp.status_code == 200:
+                    actual_shipment = resp.json() if isinstance(resp.json(), dict) else {}
+        except Exception as fetch_err:
+            logger.warning(f"[PDF] Could not fetch shipment row: {fetch_err}")
+
+        # ── 2. Fetch full 14-section referral package ────────────────────────
+        referral_pkg = await get_referral_package(shipment_id)
+        sections = referral_pkg.get("sections", {})
+
+        # ── 3. Derive display values (DB → sections → fallback) ──────────────
+        shipper  = actual_shipment.get("shipper_name") or referral_pkg.get("shipper_name", "Unknown Shipper")
+        consignee = (actual_shipment.get("consignee_name")
+                     or sections.get("section_3_4_parties_and_roles", {}).get("parties", [{}])[-1].get("entity", "Unknown Consignee"))
+        origin   = actual_shipment.get("origin_country") or referral_pkg.get("origin_country", "—")
+        dest     = actual_shipment.get("destination_country") or "United States"
+        hs_code  = (actual_shipment.get("hs_code")
+                    or sections.get("section_3_1_shipment_identification", {}).get("hs_code", "9999"))
+        commodity = (actual_shipment.get("commodity_name")
+                     or actual_shipment.get("commodity")
+                     or sections.get("section_3_1_shipment_identification", {}).get("commodity", "General Merchandise"))
+        risk_score = int(referral_pkg.get("risk_score", actual_shipment.get("risk_score", 0)))
+        recommendation = referral_pkg.get("recommendation", "EXAMINE")
+        case_id = referral_pkg.get("referral_id") or f"CBP-2026-{shipment_id[-4:].upper()}"
+
+        # ── 4. Build referral_data in the format CBPReferralPDFGenerator expects ─
+        referral_data = {
+            "case_id":       case_id,
+            "shipment_id":   shipment_id,
+            "risk_score":    risk_score,
+            "recommendation": recommendation,
+            "shipment": {
+                "shipper_name":       shipper,
+                "consignee_name":     consignee,
+                "commodity_name":     commodity,
+                "hs_code":            hs_code,
+                "origin_country":     origin,
+                "destination_country": dest,
+                "declared_value":     (actual_shipment.get("declared_value_usd")
+                                       or actual_shipment.get("declared_value")
+                                       or sections.get("section_3_1_shipment_identification", {}).get("value_usd", 0)),
+                "quantity":           actual_shipment.get("quantity", 1),
+                "unit":               "shipment",
+                "weight_kg":          (actual_shipment.get("declared_weight_kg")
+                                       or actual_shipment.get("weight_kg")
+                                       or sections.get("section_3_1_shipment_identification", {}).get("weight_kg", 0)),
+            },
+            "line_items":  sections.get("section_3_2_line_items", {}).get("items", []) or [
+                {"hs_code": hs_code, "description": commodity, "quantity": 1, "unit": "shipment",
+                 "value": actual_shipment.get("declared_value_usd", 0)}
+            ],
+            "routing": sections.get("section_3_3_routing_history", {}) or {
+                "vessel_name":    actual_shipment.get("vessel_name", "Unknown Vessel"),
+                "vessel_imo":     actual_shipment.get("vessel_imo", ""),
+                "port_of_lading": origin,
+                "port_of_unlading": dest,
+                "dwell_days":     actual_shipment.get("dwell_days", 0),
+                "dwell_baseline": 2.5,
+                "dwell_anomaly":  "NORMAL",
+                "ais_gaps":       0,
+                "transit_days":   14,
+            },
+            "parties":  sections.get("section_3_4_parties_and_roles", {}).get("parties", []) or [
+                {"name": shipper,   "role": "SHIPPER",   "country": origin, "risk_note": ""},
+                {"name": consignee, "role": "CONSIGNEE", "country": dest,   "risk_note": ""},
+            ],
+            "entity_chain": sections.get("section_3_5_entity_ownership_chain", {}).get("chain", []),
+            "section_3_6":  sections.get("section_3_6_historical_import_pattern", {}),
+            "section_3_7":  sections.get("section_3_7_trade_flow_intelligence", {}),
+            "section_3_8":  sections.get("section_3_8_document_review", {}),
+            "section_3_9":  sections.get("section_3_9_document_consistency", {}),
+            "section_3_10": sections.get("section_3_10_supplier_verification", {}),
+            "section_3_11": sections.get("section_3_11_risk_indicators", {}),
+            "risk_scoring": {
+                "components":        sections.get("section_3_12_score_breakdown", {}).get("components", []),
+                "calculation_table": sections.get("section_3_12_score_breakdown", {}).get("calculation_table"),
+            },
+            "what_if_scenarios": sections.get("section_3_13_what_if_scenarios", {}).get("scenarios", []),
+            "documents":  sections.get("section_3_8_document_review", {}).get("documents", []),
+            "narrative":  "",
+        }
+
+        # ── 5. Generate PDF via reportlab ────────────────────────────────────
+        generator = CBPReferralPDFGenerator()
+        pdf_buffer = generator.generate_pdf(referral_data)
+
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        filename = f"CBP-EAPA-Referral-{case_id}-{date_str}.pdf"
+        logger.info(f"[PDF] Successfully generated: {filename}")
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+
+    except Exception as e:
+        import traceback
+        logger.error(f"[PDF] Generation failed for {shipment_id}: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
+
+
 @app.get("/api/referral/{shipment_id}/analyze")
 async def analyze_referral_package(shipment_id: str) -> Dict[str, Any]:
     """

@@ -418,44 +418,32 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
     await fetch(`${API_BASE_URL}/feedback/override?${params}`, { method: 'POST' });
   };
 
+  const [pdfLoading, setPdfLoading] = useState(false);
+
   const handlePrint = async () => {
+    if (!shipment?.shipment_id) return;
+    setPdfLoading(true);
     try {
-      const html2canvas = (await import('html2canvas')).default;
-      const { jsPDF } = await import('jspdf');
-
-      const element = printRef.current;
-      if (!element) return;
-
-      // Temporarily expand all sections for capture
-      const allExpanded = document.querySelectorAll('[data-collapsed="true"]');
-
-      const canvas = await html2canvas(element, {
-        scale: 1.5,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        logging: false,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-      });
-
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const imgData = canvas.toDataURL('image/png');
-      const pageW = 210;
-      const pageH = 297;
-      const imgH = (canvas.height * pageW) / canvas.width;
-
-      let posY = 0;
-      while (posY < imgH) {
-        pdf.addImage(imgData, 'PNG', 0, -posY, pageW, imgH);
-        posY += pageH;
-        if (posY < imgH) pdf.addPage();
-      }
-
-      const filename = `CBP-EAPA-${packageData?.referral_id?.substring(0, 8).toUpperCase() || 'PACKAGE'}-${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(filename);
+      // PDF is generated server-side via the API layer — not a browser screenshot.
+      // The API fetches all 14 referral sections, builds a proper reportlab document,
+      // and streams it back as application/pdf.
+      const response = await fetch(`${API_BASE_URL}/referral/${shipment.shipment_id}/pdf`);
+      if (!response.ok) throw new Error(`PDF generation failed: HTTP ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const caseId = packageData?.referral_id?.substring(0, 8).toUpperCase() || shipment.shipment_id.substring(0, 8).toUpperCase();
+      a.download = `CBP-EAPA-${caseId}-${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
       console.error('PDF export failed:', err);
       alert('PDF export failed. Please try again.');
+    } finally {
+      setPdfLoading(false);
     }
   };
 
@@ -623,9 +611,17 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
         ))}
         <button
           onClick={handlePrint}
-          className="flex items-center gap-1.5 px-4 py-2.5 text-[11px] text-slate-500 hover:text-[#0B1F33] border-b-2 border-transparent"
+          disabled={pdfLoading}
+          className={`flex items-center gap-1.5 px-4 py-2.5 text-[11px] border-b-2 border-transparent transition-colors ${
+            pdfLoading
+              ? 'text-slate-400 cursor-wait'
+              : 'text-slate-500 hover:text-[#0B1F33]'
+          }`}
         >
-          <Download size={12} /> Export PDF
+          {pdfLoading
+            ? <><Loader size={12} className="animate-spin" /> Generating PDF…</>
+            : <><Download size={12} /> Export PDF</>
+          }
         </button>
       </div>
 
