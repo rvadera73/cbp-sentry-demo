@@ -17,6 +17,7 @@ import RiskHeatmap from '../components/RiskHeatmap';
 import MaturityBadge from '../components/MaturityBadge';
 import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
 import EvidenceTab from '../components/EvidenceTab';
+import ReferralPackageV2 from '../components/ReferralPackageV2';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -496,10 +497,11 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
           { id: 'Evidence', label: 'Evidence' },
           { id: 'Referral', label: 'Referral' },
           { id: 'Referral (New)', label: 'Referral (New)' },
+          { id: 'CSOP Package', label: '📄 CSOP Package' },
         ]}
         activeTab={activeSubTab === 'Risk Profile' || activeSubTab === 'Risk Score' ? 'Risk Analysis' : activeSubTab}
         onTabChange={(tabId) => {
-          const validTabs = ['Timeline', 'Risk Analysis', 'Shipment', 'Entity', 'Evidence', 'Referral', 'Referral (New)'];
+          const validTabs = ['Timeline', 'Risk Analysis', 'Shipment', 'Entity', 'Evidence', 'Referral', 'Referral (New)', 'CSOP Package'];
           if (validTabs.includes(tabId)) {
             setActiveSubTab(tabId as any);
           }
@@ -552,7 +554,7 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
             <EvidenceTab
               selectedCase={selectedCase}
               selectedCaseShipments={selectedCaseShipments}
-              onGenerateReferral={() => setActiveSubTab('Referral (New)' as any)}
+              onGenerateReferral={() => setActiveSubTab('CSOP Package' as any)}
             />
           )}
           {activeSubTab === 'Referral' && selectedReferral && (
@@ -575,6 +577,14 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
                   shipperName: selectedCaseShipments[0]?.shipper_name,
                   consigneeName: selectedCaseShipments[0]?.manifest_data?.consignee,
                 }}
+              />
+            </div>
+          )}
+          {(activeSubTab as string) === 'CSOP Package' && (
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <ReferralPackageV2
+                selectedCase={selectedCase}
+                selectedCaseShipments={selectedCaseShipments}
               />
             </div>
           )}
