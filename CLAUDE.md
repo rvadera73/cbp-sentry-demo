@@ -251,3 +251,60 @@ Risk Analysis tab calls `POST /api/risk-scoring/comprehensive` for live breakdow
 - `precise-risk-engine` container is redundant with `cbp-risk-engine` — remove
 - Senzing runs in fixture mode by default — enable live resolution for VN entities
 - CORD entity coverage sparse for SE Asia — needs OpenCorporates expansion at 30%
+
+---
+
+## WORK IN PROGRESS: Risk Model Management (2026-06-25)
+
+**Status:** Incomplete — attempted full rewire of Risk Model Management tabs to use cbp-risk-engine API. **Session ended with partial integration; needs cleanup.**
+
+### What was attempted
+1. UI tabs (OverviewTab, PerformanceTab, ModelRegistryTab, TrainingDataTab, MonitoringTab) rewritten to fetch from cbp-risk-engine APIs instead of hardcoded data
+2. cbp-risk-engine API endpoints verified to call postgres.py complete functions
+3. Database layer (postgres.py) already had all needed "_complete()" functions for PostgreSQL queries
+4. Feedback route fixed to use PostgreSQL instead of non-existent feedback_connection()
+
+### Current Problems
+1. **UI/API routing conflict:** sentry-ui (port 3001) proxies /api to sentry-api (port 8000), but new tabs try to call cbp-risk-engine (port 8001 or 8010). This breaks the entire sentry-api middleware layer.
+2. **Services diverged:** 
+   - sentry-api (orchestration) expects risk scoring at `/api/risk-scoring/*`
+   - cbp-risk-engine (MLOps registry) exposes `/api/models`, `/api/metrics/gates`, etc.
+   - Two different API surfaces, not reconciled
+3. **Changes made but not integrated:** All UI files modified, API routes wired, but the architectural mismatch wasn't resolved before session ended.
+
+### Files modified (do NOT merge yet)
+- `/home/rahulvadera/cbp-sentry/ui/src/pages/RiskModelManagement/tabs/OverviewTab.tsx` → fetches `/metrics/gates` + `/models/production`
+- `/home/rahulvadera/cbp-sentry/ui/src/pages/RiskModelManagement/tabs/PerformanceTab.tsx` → fetches `/metrics/performance` + `/features/importance`
+- `/home/rahulvadera/cbp-sentry/ui/src/pages/RiskModelManagement/tabs/ModelRegistryTab.tsx` → fetches `/models` + approval voting
+- `/home/rahulvadera/cbp-sentry/ui/src/pages/RiskModelManagement/tabs/TrainingDataTab.tsx` → fetches `/jobs`
+- `/home/rahulvadera/cbp-sentry/ui/src/pages/RiskModelManagement/tabs/MonitoringTab.tsx` → fetches `/metrics/drift` + `/feedback/summary`
+- `/home/rahulvadera/cbp-risk-engine/api/routes/models.py` → uses postgres.get_model_complete(), record_approval_vote(), promote_model()
+- `/home/rahulvadera/cbp-risk-engine/api/routes/metrics.py` → uses postgres.get_performance_complete(), count_scored_shipments()
+- `/home/rahulvadera/cbp-risk-engine/api/routes/feedback.py` → fixed to use PostgreSQL (was broken)
+- `/home/rahulvadera/cbp-sentry/ui/src/services/apiUrl.ts` → pointed localhost to http://localhost:8001 (cbp-risk-engine)
+
+### What needs to happen next session
+**Option A: Revert & redesign** (recommended)
+1. Revert all UI tab changes to previous state (git checkout)
+2. Decide: Should Risk Model Management consume cbp-risk-engine directly, or should sentry-api proxy requests to cbp-risk-engine internally?
+3. If option 2: Add proxy layer in sentry-api/main.py to forward /api/models/* → cbp-risk-engine:8010/api/models/*
+4. Then rewire tabs to call sentry-api unchanged, and let sentry-api route to cbp-risk-engine
+
+**Option B: Full decoupling** (riskier)
+1. Accept that Risk Model Management is a separate service (cbp-risk-engine only)
+2. Route ALL Risk Model Management traffic directly to port 8001 (skip sentry-api)
+3. This breaks the unified API assumption — two separate backend services exposed
+
+**Recommendation:** Option A (revert, add proxy layer, re-integrate). Maintains architectural unity where sentry-api is the single gateway.
+
+### Data state (PostgreSQL risk_scoring schema)
+- ✅ 3 models registered: gate0-rule-engine-v1.0 (production), gate1-lgbm-v1.0 (candidate), v2.1-xgboost (deprecated)
+- ✅ 1 approval transition: v2.1 → gate0 transition recorded
+- ✅ 11 baseline metrics for gate0
+- ✅ prediction_log, feedback tables created but empty (need live data)
+- ✅ postgres.py has all query functions ready
+
+### Avoid next time
+- Don't rewrite UI tabs without resolving service routing first
+- Don't assume cbp-risk-engine can be called directly from UI without going through sentry-api gateway
+- Document API surface mapping (which routes go to which backend) before implementation
