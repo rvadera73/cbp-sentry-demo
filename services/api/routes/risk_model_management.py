@@ -1,744 +1,400 @@
-"""Risk Model Management API Routes (FastAPI)
+"""Risk Model Management API Routes - Proxies to cbp-risk-engine MLOps Registry
 
-Provides endpoints for the Risk Model Management tab with REAL v3.0 model data:
-- Model versioning and metadata from database
-- Training job history from risk_model_training_jobs table
-- Performance metrics from actual predictions (risk_model_metrics)
-- Data drift detection on real feature distributions
-- Prediction explanations (SHAP) from precise-risk-engine service
-- Model approval workflow from risk_model_approvals table
-- Retraining configuration from risk_retraining_config table
-
-All data comes from real sources:
-  - Shipments database
-  - Risk model tables (v4_0_risk_model_management.py)
-  - precise-risk-engine service (http://localhost:8004)
+All endpoints proxy to cbp-risk-engine which is the single source of truth for:
+- Model versions (MLflow registry)
+- Approvals workflow
+- Training jobs
+- Performance metrics
+- Gate progression
 """
 
-from fastapi import APIRouter, Query, HTTPException, Body, Depends
-from pydantic import BaseModel, ValidationError
-from typing import Optional, Dict, List, Any
-from datetime import datetime, timedelta
+import httpx
 import logging
+from fastapi import APIRouter, Query, HTTPException
+from typing import Optional
+from datetime import datetime
 
 router = APIRouter(prefix="/api/risk-models", tags=["risk-models"])
 logger = logging.getLogger(__name__)
 
-# Import real data service
-from services.risk_model_data_service import RiskModelDataService, get_data_service
+# cbp-risk-engine service URL (real MLOps registry)
+# Inside Docker container, use service name; from host, use localhost:8010
+CBP_RISK_ENGINE_URL = "http://cbp-risk-engine:8010"
 
 
-# ============================================================================
-# PYDANTIC MODELS (Request/Response Schemas)
-# ============================================================================
+@router.get("/dashboard")
+async def get_dashboard():
+    """Get dashboard summary from cbp-risk-engine.
 
-class ModelMetrics(BaseModel):
-    accuracy: float
-    auc_roc: float
-    latency_p95_ms: int
-    confidence_avg: float
-    predictions_24h: int
-
-
-class ActiveModel(BaseModel):
-    model_id: str
-    version: str
-    status: str
-    deployed_at: str
-    approved_by: str
-    metrics: ModelMetrics
-
-
-class Alert(BaseModel):
-    type: str
-    severity: str
-    feature: Optional[str] = None
-    drift_score: Optional[float] = None
-    detected_at: str
-    recommendation: str
-
-
-class KeyMetrics(BaseModel):
-    accuracy: float
-    latency_p95: int
-    confidence_avg: float
-    data_drift_score: float
-    model_drift_score: float
-
-
-class DashboardResponse(BaseModel):
-    active_model: ActiveModel
-    pending_approvals: List[Dict[str, Any]]
-    alerts: List[Alert]
-    key_metrics: KeyMetrics
-
-
-# ============================================================================
-# DASHBOARD
-# ============================================================================
-
-@router.get("/dashboard", response_model=DashboardResponse)
-async def get_dashboard(data_service: RiskModelDataService = Depends(get_data_service)):
-    """Get dashboard summary with active model health, metrics, and alerts.
-
-    This endpoint provides an at-a-glance view of:
-    - Current production model (v3.0) performance from database
-    - Key metrics from last 24 hours (accuracy, latency, confidence)
-    - Pending model approvals awaiting review
-    - Active data/model drift alerts
-
-    Returns:
-        Dashboard with REAL v3.0 metrics, pending approvals, and drift alerts
+    Aggregates:
+    - Production model from /api/models/production
+    - Performance metrics from /api/metrics/performance
+    - Drift alerts from /api/metrics/drift
+    - Gate progression from /api/metrics/gates
     """
     try:
-        logger.info("Fetching risk model dashboard")
+        logger.info("Fetching risk model dashboard from cbp-risk-engine")
 
-        # Get REAL data from database via data service
-        dashboard_data = await data_service.get_dashboard()
+        async with httpx.AsyncClient() as client:
+            # Fetch all models
+            models_response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/models")
+            models_response.raise_for_status()
+            models_data = models_response.json()
 
-        logger.info("Dashboard data retrieved successfully from database")
+            # Find production model
+            production_model = None
+            for model_info in models_data.get('versions', []):
+                if model_info.get('is_production'):
+                    production_model = model_info
+                    break
+
+            # If no production model, use the first/latest
+            if not production_model and models_data.get('versions'):
+                production_model = models_data['versions'][0]
+
+            # Fetch metrics
+            metrics_response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/performance")
+            if metrics_response.status_code == 200:
+                metrics = metrics_response.json()
+            else:
+                metrics = {}
+
+            # Fetch drift alerts if available
+            drift_response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/drift")
+            if drift_response.status_code == 200:
+                drift_data = drift_response.json()
+            else:
+                drift_data = {'alerts': []}
+
+            # Fetch gates if available
+            gates_response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/gates")
+            if gates_response.status_code == 200:
+                gates = gates_response.json()
+            else:
+                gates = {}
+
+        # Transform to dashboard format
+        dashboard_data = {
+            'active_model': production_model,
+            'pending_approvals': [m for m in models_data.get('versions', []) if not m.get('is_production')],
+            'alerts': drift_data.get('alerts', []),
+            'gates': gates,
+            'key_metrics': metrics.get('key_metrics', {}) if metrics else {},
+            'timestamp': datetime.utcnow().isoformat()
+        }
+
+        logger.info("Dashboard data retrieved successfully from cbp-risk-engine")
         return dashboard_data
 
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching dashboard from cbp-risk-engine: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch dashboard: {str(e)}")
     except Exception as e:
-        logger.error(f"Error fetching dashboard: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Dashboard error: {str(e)}")
+        logger.error(f"Unexpected error in dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-
-# ============================================================================
-# MODEL VERSIONS
-# ============================================================================
 
 @router.get("/versions")
-async def get_model_versions(
-    status: Optional[str] = Query(None, description="Filter by status: production|staging|candidate|deprecated"),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get all model versions with status filtering.
-
-    Query Parameters:
-        status: Filter by model status
-
-    Returns:
-        List of model versions with metrics
-    """
+async def get_model_versions(status: Optional[str] = Query(None)):
+    """Get all model versions from cbp-risk-engine MLflow registry."""
     try:
         logger.info(f"Fetching model versions (status filter: {status})")
 
-        # Get REAL versions from data service
-        versions = await data_service.get_all_versions()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/models")
+            response.raise_for_status()
+            models = response.json()
+
+        # Return all versions
+        versions = models.get('versions', [])
 
         # Filter by status if provided
         if status:
-            versions = [v for v in versions if v.get('status') == status]
-            logger.info(f"Filtered to {len(versions)} versions with status={status}")
+            versions = [v for v in versions if v.get('is_production') == (status == 'production')]
 
+        logger.info(f"Retrieved {len(versions)} model versions")
         return versions
 
-    except Exception as e:
-        logger.error(f"Error fetching model versions: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Model versions error: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching versions from cbp-risk-engine: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch model versions: {str(e)}")
 
-
-# ============================================================================
-# TRAINING JOBS
-# ============================================================================
 
 @router.get("/training-jobs")
 async def get_training_jobs(
-    status: Optional[str] = Query(None, description="Filter by status"),
-    limit: int = Query(20, description="Max results"),
-    data_service: RiskModelDataService = Depends(get_data_service)
+    status: Optional[str] = Query(None),
+    limit: int = Query(20)
 ):
-    """Get training job history with filtering.
-
-    Query Parameters:
-        status: completed|running|queued|failed
-        limit: Maximum results (default: 20)
-
-    Returns:
-        List of training jobs with metadata
-    """
+    """Get training job history from cbp-risk-engine."""
     try:
         logger.info(f"Fetching training jobs (status={status}, limit={limit})")
 
-        # Get REAL training jobs from data service
-        jobs = await data_service.get_training_jobs(status=status)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/jobs")
+            if response.status_code == 200:
+                jobs = response.json()
+            else:
+                jobs = {'jobs': []}
 
-        # Limit results
-        jobs = jobs[:limit]
-
-        logger.info(f"Retrieved {len(jobs)} training jobs")
-        return jobs
-
-    except Exception as e:
-        logger.error(f"Error fetching training jobs: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Training jobs error: {str(e)}")
-
-
-@router.get("/training-jobs/{job_id}")
-async def get_training_job_details(
-    job_id: str,
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get detailed training job status.
-
-    Path Parameters:
-        job_id: Training job ID
-
-    Returns:
-        Detailed job information with progress
-    """
-    try:
-        logger.info(f"Fetching training job details for {job_id}")
-
-        # Get REAL training job details from data service
-        job = await data_service.get_training_job_details(job_id)
-
-        if not job:
-            logger.warning(f"Training job {job_id} not found")
-            raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
-
-        logger.info(f"Retrieved training job details for {job_id}")
-        return job
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error fetching training job details: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Training job details error: {str(e)}")
-
-
-# ============================================================================
-# PERFORMANCE METRICS
-# ============================================================================
-
-@router.get("/{model_id}/metrics")
-async def get_model_metrics(
-    model_id: str,
-    time_range: str = Query("24h", description="24h|7d|30d"),
-    metric: Optional[str] = Query(None, description="accuracy|latency|confidence"),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get time-series performance metrics for a model.
-
-    Path Parameters:
-        model_id: Model ID (e.g., v3.0)
-
-    Query Parameters:
-        time_range: 24h, 7d, or 30d
-        metric: Specific metric to retrieve
-
-    Returns:
-        Time-series data points
-    """
-    try:
-        logger.info(f"Fetching metrics for {model_id} (time_range={time_range}, metric={metric})")
-
-        # Parse time_range to hours
-        hours_map = {'24h': 24, '7d': 168, '30d': 720}
-        hours = hours_map.get(time_range, 24)
-
-        # Default to accuracy if not specified
-        metric_name = metric or 'accuracy'
-
-        # Get REAL time-series metrics from data service
-        metrics = await data_service.get_metrics_timeseries(
-            model_id=model_id,
-            metric=metric_name,
-            hours=hours
-        )
-
-        logger.info(f"Retrieved {len(metrics)} metric data points for {model_id}")
-        return metrics
-
-    except Exception as e:
-        logger.error(f"Error fetching model metrics: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Model metrics error: {str(e)}")
-
-
-# ============================================================================
-# DATA DRIFT MONITORING
-# ============================================================================
-
-@router.get("/{model_id}/drift")
-async def get_data_drift(
-    model_id: str = "v3.0",
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get current data drift status and alerts.
-
-    Returns:
-        Drift analysis with elevated features
-    """
-    try:
-        logger.info(f"Detecting data drift for {model_id}")
-
-        # Get REAL drift detection from data service
-        drift_result = await data_service.detect_data_drift(model_id=model_id)
-
-        # Determine overall status
-        overall_score = drift_result.get('overall_drift_score', 0.0)
-        status = 'critical' if overall_score > 0.50 else 'elevated' if overall_score > 0.30 else 'normal'
-
-        logger.info(f"Data drift analysis complete: score={overall_score:.3f}, status={status}")
-
-        return {
-            'overall_drift_score': overall_score,
-            'status': status,
-            'elevated_features': drift_result.get('elevated_features', []),
-            'normal_features': drift_result.get('normal_features', [])
-        }
-
-    except Exception as e:
-        logger.error(f"Error detecting data drift: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Data drift error: {str(e)}")
-
-
-# ============================================================================
-# PREDICTION EXPLANATIONS (SHAP)
-# ============================================================================
-
-@router.get("/predictions/{shipment_id}/explain")
-async def explain_prediction(
-    shipment_id: str,
-    model_version: str = Query("v3.0", description="Model version"),
-    compare_to: Optional[str] = Query(None, description="Compare with another version"),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get SHAP explanation for a shipment prediction.
-
-    Path Parameters:
-        shipment_id: Shipment ID (e.g., SHP-00142857)
-
-    Query Parameters:
-        model_version: v3.0 (default)
-        compare_to: Optional comparison model (e.g., v2.1)
-
-    Returns:
-        SHAP explanation with feature contributions
-    """
-    try:
-        logger.info(f"Fetching SHAP explanation for shipment {shipment_id} (model={model_version}, compare_to={compare_to})")
-
-        # Get REAL SHAP explanation from data service
-        explanation = await data_service.explain_prediction(
-            shipment_id=shipment_id,
-            model_version=model_version,
-            compare_to=compare_to
-        )
-
-        logger.info(f"Retrieved SHAP explanation for shipment {shipment_id}")
-        return explanation
-
-    except ValueError as e:
-        logger.warning(f"Shipment not found: {str(e)}")
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error fetching SHAP explanation: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"SHAP explanation error: {str(e)}")
-
-
-# ============================================================================
-# MODEL APPROVALS
-# ============================================================================
-
-@router.get("/approvals")
-async def get_approvals(
-    status: Optional[str] = Query(None),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get approval requests.
-
-    Query Parameters:
-        status: pending|approved|rejected
-
-    Returns:
-        List of approval requests with voter status
-    """
-    try:
-        logger.info(f"Fetching approval requests (status={status})")
-
-        # Get REAL approval requests from data service
-        approvals = await data_service.get_pending_approvals()
+        job_list = jobs.get('jobs', []) if isinstance(jobs, dict) else jobs
 
         # Filter by status if provided
         if status:
-            approvals = [a for a in approvals if a.get('status') == status]
-            logger.info(f"Filtered to {len(approvals)} approvals with status={status}")
+            job_list = [j for j in job_list if j.get('status') == status]
 
-        logger.info(f"Retrieved {len(approvals)} approval requests")
-        return approvals
+        # Limit results
+        job_list = job_list[:limit]
 
-    except Exception as e:
-        logger.error(f"Error fetching approvals: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Approvals error: {str(e)}")
+        logger.info(f"Retrieved {len(job_list)} training jobs")
+        return job_list
+
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching training jobs: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch training jobs: {str(e)}")
 
 
-@router.post("/approvals/{approval_id}/vote")
-async def vote_approval(
-    approval_id: str,
-    payload: Dict[str, Any] = Body(...),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Cast approval vote.
-
-    Path Parameters:
-        approval_id: Approval request ID
-
-    Body:
-        {vote: 'approve'|'reject'|'abstain', voter: 'name', comment: '...'}
-
-    Returns:
-        Updated approval status
-    """
+@router.get("/training-jobs/{job_id}")
+async def get_training_job_details(job_id: str):
+    """Get detailed training job status."""
     try:
-        # Validate payload
-        vote = payload.get('vote')
-        voter = payload.get('voter', 'unknown')
-        comment = payload.get('comment')
+        logger.info(f"Fetching training job details for {job_id}")
 
-        if vote not in ['approve', 'reject', 'abstain']:
-            raise ValueError(f"Invalid vote: {vote}. Must be approve, reject, or abstain")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/jobs/{job_id}")
+            response.raise_for_status()
+            job = response.json()
 
-        logger.info(f"Recording vote from {voter}: {vote} on approval {approval_id}")
+        logger.info(f"Training job {job_id} retrieved")
+        return job
 
-        # Record REAL vote using data service
-        approval = await data_service.cast_approval_vote(
-            approval_id=approval_id,
-            voter=voter,
-            vote=vote,
-            comment=comment
-        )
-
-        if not approval:
-            logger.warning(f"Approval {approval_id} not found")
-            raise HTTPException(status_code=404, detail=f"Approval {approval_id} not found")
-
-        logger.info(f"Vote recorded for approval {approval_id}")
-        return {
-            'approval_id': approval_id,
-            'vote_recorded': True,
-            'timestamp': datetime.utcnow().isoformat(),
-            'approval_status': approval.get('status', 'pending')
-        }
-
-    except ValueError as e:
-        logger.warning(f"Vote validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error recording approval vote: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Vote recording error: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching training job {job_id}: {str(e)}")
+        if '404' in str(e):
+            raise HTTPException(status_code=404, detail=f"Training job {job_id} not found")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch job: {str(e)}")
 
 
-# ============================================================================
-# RETRAINING CONFIGURATION
-# ============================================================================
-
-@router.get("/retraining-config")
-async def get_retraining_config(
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Get retraining configuration.
-
-    Returns:
-        Current retraining settings and trigger status
-    """
+@router.post("/train")
+async def trigger_training(data: Optional[dict] = None):
+    """Trigger a new training job."""
     try:
-        logger.info("Fetching retraining configuration")
+        logger.info("Triggering training job")
 
-        # Get REAL retraining config from data service
-        config = await data_service.get_retraining_config()
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{CBP_RISK_ENGINE_URL}/api/train",
+                json=data or {}
+            )
+            response.raise_for_status()
+            result = response.json()
 
-        logger.info("Retraining configuration retrieved")
-        return config
-
-    except Exception as e:
-        logger.error(f"Error fetching retraining config: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Retraining config error: {str(e)}")
-
-
-@router.put("/retraining-config")
-async def update_retraining_config(
-    config: Dict[str, Any] = Body(...),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Update retraining configuration.
-
-    Body:
-        {scheduled: {...}, drift_triggered: {...}, ...}
-
-    Returns:
-        Updated configuration
-    """
-    try:
-        logger.info(f"Updating retraining configuration: {config}")
-
-        # Update REAL retraining config using data service
-        result = await data_service.update_retraining_config(config)
-
-        if not result.get('success'):
-            raise HTTPException(status_code=400, detail=result.get('error', 'Configuration update failed'))
-
-        logger.info("Retraining configuration updated successfully")
+        logger.info("Training job triggered")
         return result
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating retraining config: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Retraining config update error: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error triggering training: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to trigger training: {str(e)}")
 
 
-# ============================================================================
-# MODEL ROLLBACK
-# ============================================================================
-
-@router.post("/{model_id}/rollback")
-async def rollback_model(
-    model_id: str,
-    payload: Dict[str, Any] = Body(...),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Rollback to previous model version.
-
-    Path Parameters:
-        model_id: Model to rollback from
-
-    Body:
-        {reason: 'string'}
-
-    Returns:
-        Rollback confirmation
-    """
+@router.get("/{model_id}")
+async def get_model(model_id: str):
+    """Get specific model version details."""
     try:
-        reason = payload.get('reason', 'no reason provided')
+        logger.info(f"Fetching model {model_id}")
 
-        logger.warning(f"ROLLBACK initiated for {model_id}: {reason}")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/models/{model_id}")
+            response.raise_for_status()
+            model = response.json()
 
-        # Execute REAL rollback using data service
-        result = await data_service.rollback_model(reason=reason)
+        logger.info(f"Model {model_id} retrieved")
+        return model
 
-        if not result.get('success'):
-            raise HTTPException(status_code=500, detail=result.get('error', 'Rollback failed'))
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching model {model_id}: {str(e)}")
+        if '404' in str(e):
+            raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch model: {str(e)}")
 
-        logger.warning(f"Rollback completed: {model_id} → {result.get('current_model')}")
+
+@router.post("/{model_id}/approve")
+async def approve_model(model_id: str, data: dict):
+    """Submit approval vote for a model version."""
+    try:
+        logger.info(f"Approving model {model_id}")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{CBP_RISK_ENGINE_URL}/api/models/{model_id}/approve",
+                json=data
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        logger.info(f"Model {model_id} approval recorded")
         return result
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error rolling back model: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Rollback error: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error approving model {model_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve model: {str(e)}")
 
 
-# ============================================================================
-# MODEL COMPARISON
-# ============================================================================
-
-@router.get("/compare")
-async def compare_models(
-    shipment_id: str = Query(..., description="Shipment ID to compare"),
-    models: str = Query("v2.1,v3.0", description="Comma-separated model versions to compare"),
-    data_service: RiskModelDataService = Depends(get_data_service)
-):
-    """Compare predictions from multiple model versions on the same shipment.
-
-    This endpoint scores the same shipment with different models and returns
-    a comparison showing differences in scoring, confidence, and recommendations.
-
-    Query Parameters:
-        shipment_id: Shipment ID (e.g., SHP-XXXXX)
-        models: Comma-separated model versions (default: v2.1,v3.0)
-
-    Returns:
-        Comparison with scores from both models, differences, and analysis
-    """
+@router.post("/{model_id}/promote")
+async def promote_model(model_id: str, data: Optional[dict] = None):
+    """Promote model version to production."""
     try:
-        logger.info(f"Comparing models for shipment {shipment_id}: {models}")
+        logger.info(f"Promoting model {model_id}")
 
-        # Parse model list
-        model_list = [m.strip() for m in models.split(',')]
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{CBP_RISK_ENGINE_URL}/api/models/{model_id}/promote",
+                json=data or {}
+            )
+            response.raise_for_status()
+            result = response.json()
 
-        # Get comparison from data service
-        comparison = await data_service.compare_models(
-            shipment_id=shipment_id,
-            models=model_list
-        )
+        logger.info(f"Model {model_id} promoted")
+        return result
 
-        if not comparison:
-            logger.warning(f"Shipment {shipment_id} not found")
-            raise HTTPException(status_code=404, detail=f"Shipment {shipment_id} not found")
-
-        logger.info(f"Model comparison complete for shipment {shipment_id}")
-        return comparison
-
-    except HTTPException:
-        raise
-    except ValueError as e:
-        logger.warning(f"Validation error: {str(e)}")
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Error comparing models: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Model comparison error: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error promoting model {model_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to promote model: {str(e)}")
 
 
-# ============================================================================
-# PERFORMANCE MEASURES (CBP Contract Gates)
-# ============================================================================
+@router.get("/metrics/performance")
+async def get_performance_metrics():
+    """Get model performance metrics."""
+    try:
+        logger.info("Fetching performance metrics")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/performance")
+            response.raise_for_status()
+            metrics = response.json()
+
+        return metrics
+
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching performance metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch metrics: {str(e)}")
+
+
+@router.get("/metrics/gates")
+async def get_gate_metrics():
+    """Get gate progression metrics."""
+    try:
+        logger.info("Fetching gate metrics")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/gates")
+            response.raise_for_status()
+            gates = response.json()
+
+        return gates
+
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching gate metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch gates: {str(e)}")
+
+
+@router.get("/metrics/drift")
+async def get_drift_metrics():
+    """Get data drift detection results."""
+    try:
+        logger.info("Fetching drift metrics")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/drift")
+            response.raise_for_status()
+            drift = response.json()
+
+        return drift
+
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching drift metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch drift: {str(e)}")
+
 
 @router.get("/performance/current-gate")
-async def get_current_gate(model_id: str = Query("v3.0", description="Model version ID")):
-    """Get current applicable performance gate for a model.
-
-    Query Parameters:
-        model_id: Model version ID (default: v3.0)
-
-    Returns:
-        {
-            "status": "active",
-            "days_since_award": 154,
-            "current_gate": {
-                "gate_id": "3",
-                "gate_name": "Optimization & Refinement",
-                "timeline_days": [121, 180],
-                "description": "Performance optimization and model refinement phase"
-            },
-            "days_until_next_gate": 26,
-            "metrics_count": 4
-        }
-    """
+async def get_current_performance_gate(model_id: str = Query("v3.0")):
+    """Get the current applicable performance gate for a risk model."""
     try:
-        from services.performance_api import PerformanceMetricsAPI
-
         logger.info(f"Fetching current gate for model {model_id}")
 
-        api = PerformanceMetricsAPI()
-        result = api.get_current_gate(model_id=model_id)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/gates")
+            response.raise_for_status()
+            gates = response.json()
 
-        return result
+        return gates
 
-    except Exception as e:
-        logger.error(f"Error getting current gate: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get current gate: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching current gate: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch gate: {str(e)}")
 
 
 @router.get("/performance/metrics")
-async def get_performance_metrics(
-    model_id: str = Query("v3.0", description="Model version ID"),
-    period_start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    period_end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+async def get_perf_metrics(
+    model_id: str = Query("v3.0"),
+    period_days: int = Query(30)
 ):
-    """Get calculated performance metrics for current gate.
-
-    Query Parameters:
-        model_id: Model version ID (default: v3.0)
-        period_start: Start date (YYYY-MM-DD, optional - defaults to 30 days ago)
-        period_end: End date (YYYY-MM-DD, optional - defaults to today)
-
-    Returns:
-        List of metric results with status
-    """
+    """Calculate current performance metrics for a risk model."""
     try:
-        from services.performance_api import PerformanceMetricsAPI
-        from datetime import datetime as dt, date
+        logger.info(f"Fetching performance metrics for model {model_id}, period {period_days} days")
 
-        # Parse dates
-        start_date = None
-        end_date = None
-        if period_start:
-            start_date = dt.strptime(period_start, '%Y-%m-%d').date()
-        if period_end:
-            end_date = dt.strptime(period_end, '%Y-%m-%d').date()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/performance")
+            response.raise_for_status()
+            metrics = response.json()
 
-        logger.info(f"Fetching performance metrics for {model_id} from {period_start} to {period_end}")
+        return metrics
 
-        api = PerformanceMetricsAPI()
-        results = api.get_performance_metrics(
-            model_id=model_id,
-            period_start=start_date,
-            period_end=end_date
-        )
-
-        return results
-
-    except Exception as e:
-        logger.error(f"Error getting performance metrics: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get performance metrics: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching performance metrics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch metrics: {str(e)}")
 
 
 @router.get("/performance/gate/{gate_id}")
-async def get_gate_status(
+async def get_gate_detailed_status(
     gate_id: str,
-    model_id: str = Query("v3.0", description="Model version ID"),
-    period_start: Optional[str] = Query(None, description="Start date (YYYY-MM-DD)"),
-    period_end: Optional[str] = Query(None, description="End date (YYYY-MM-DD)")
+    model_id: str = Query("v3.0"),
+    period_days: int = Query(30)
 ):
-    """Get detailed status of a specific performance gate.
-
-    Path Parameters:
-        gate_id: Gate ID (1, 2, 3, option_1, option_2)
-
-    Query Parameters:
-        model_id: Model version ID (default: v3.0)
-        period_start: Evaluation period start (YYYY-MM-DD, optional)
-        period_end: Evaluation period end (YYYY-MM-DD, optional)
-
-    Returns:
-        Gate status with all metrics and pass/fail details
-    """
+    """Get detailed status of a specific performance gate."""
     try:
-        from services.performance_api import PerformanceMetricsAPI
-        from datetime import datetime as dt
+        logger.info(f"Fetching gate status for gate {gate_id}, model {model_id}")
 
-        # Parse dates
-        start_date = None
-        end_date = None
-        if period_start:
-            start_date = dt.strptime(period_start, '%Y-%m-%d').date()
-        if period_end:
-            end_date = dt.strptime(period_end, '%Y-%m-%d').date()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/metrics/gates")
+            response.raise_for_status()
+            gates = response.json()
 
-        logger.info(f"Fetching gate status for gate {gate_id} (model {model_id})")
+        # Find the specific gate
+        if isinstance(gates, dict):
+            gate_data = gates.get(gate_id, {})
+        else:
+            gate_data = {}
 
-        api = PerformanceMetricsAPI()
-        result = api.get_gate_status(
-            model_id=model_id,
-            gate_id=gate_id,
-            period_start=start_date,
-            period_end=end_date
-        )
+        return gate_data
 
-        return result
-
-    except Exception as e:
-        logger.error(f"Error getting gate status: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get gate status: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching gate status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch gate: {str(e)}")
 
 
 @router.get("/performance/mlflow-config")
-async def get_mlflow_performance_config(
-    model_id: str = Query("v3.0", description="Model version ID")
-):
-    """Get performance configuration from MLflow model tags.
-
-    Query Parameters:
-        model_id: Model version ID (default: v3.0)
-
-    Returns:
-        Performance configuration from MLflow artifacts
-    """
+async def get_mlflow_performance_config(model_id: str = Query("v3.0")):
+    """Retrieve performance configuration from MLflow for a model."""
     try:
-        from services.performance_api import PerformanceMetricsAPI
+        logger.info(f"Fetching MLflow config for model {model_id}")
 
-        logger.info(f"Fetching MLflow performance config for {model_id}")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{CBP_RISK_ENGINE_URL}/api/models/{model_id}")
+            response.raise_for_status()
+            model = response.json()
 
-        api = PerformanceMetricsAPI()
-        result = api.get_mlflow_performance_config(model_id=model_id)
+        return model
 
-        return result
-
-    except Exception as e:
-        logger.error(f"Error getting MLflow config: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get MLflow performance config: {str(e)}")
+    except httpx.HTTPError as e:
+        logger.error(f"Error fetching MLflow config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch config: {str(e)}")

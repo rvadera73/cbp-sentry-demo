@@ -137,3 +137,49 @@ def get_adcvd_order(hs_code: str) -> Optional[dict]:
         if key in table:
             return table[key]
     return None
+
+
+@lru_cache(maxsize=1)
+def _adcvd_orders_by_country() -> Dict[tuple, dict]:
+    """(origin_country, hs_prefix) → active AD/CVD order, from the live Federal
+    Register pipeline output (reference/adcvd/<region>_<version>.csv written by
+    scripts/fetch_adcvd.py)."""
+    table: Dict[tuple, dict] = {}
+    adcvd_dir = _REF_DIR / "adcvd"
+    if not adcvd_dir.exists():
+        return table
+    for path in sorted(adcvd_dir.glob("*.csv")):
+        try:
+            with open(path, newline="", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    country = (row.get("origin_country") or "").strip().upper()
+                    hs = str(row.get("hs_prefix") or "").replace(".", "").strip()
+                    if not country or not hs:
+                        continue
+                    table[(country, hs)] = {
+                        "order_type": (row.get("order_type") or "AD").strip(),
+                        "case_number": row.get("case_number", ""),
+                        "commodity": row.get("commodity", ""),
+                        "source_doc": row.get("source_doc", ""),
+                        "source_url": row.get("source_url", ""),
+                        "publication_date": row.get("publication_date", ""),
+                    }
+        except OSError as exc:
+            logger.warning(f"Could not read AD/CVD order file {path}: {exc}")
+    logger.info(f"Loaded {len(table)} (country, HS) AD/CVD active orders from Federal Register pipeline")
+    return table
+
+
+def get_adcvd_order_by_country(origin_country: str, hs_code: str) -> Optional[dict]:
+    """Return an active AD/CVD order for a (origin_country, HS) pair from the
+    Federal Register pipeline, matching on HS prefix (longest first)."""
+    if not origin_country:
+        return None
+    country = str(origin_country).strip().upper()
+    hs = str(hs_code or "").replace(".", "")
+    table = _adcvd_orders_by_country()
+    for prefix_len in (6, 4, 2):
+        key = (country, hs[:prefix_len])
+        if key in table:
+            return table[key]
+    return None

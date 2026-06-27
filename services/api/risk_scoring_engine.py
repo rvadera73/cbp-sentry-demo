@@ -22,7 +22,10 @@ logger = logging.getLogger(__name__)
 
 # Load reference data at module level (cached by lru_cache)
 try:
-    from reference_loader import get_adcvd_rate, get_corridor_norms, get_entity_age, get_adcvd_order
+    from reference_loader import (
+        get_adcvd_rate, get_corridor_norms, get_entity_age, get_adcvd_order,
+        get_adcvd_order_by_country,
+    )
     _REF_LOADED = True
     logger.info("Reference data loaded: AD/CVD, Comtrade corridors, VN entities")
 except Exception as _ref_err:
@@ -32,6 +35,7 @@ except Exception as _ref_err:
     def get_corridor_norms(hs_code): return None
     def get_entity_age(company_name): return None
     def get_adcvd_order(hs_code): return None
+    def get_adcvd_order_by_country(origin_country, hs_code): return None
 
 
 def _calibrate_prob_to_score(prob: float, cal: dict) -> float:
@@ -592,6 +596,29 @@ class RiskScoringEngine:
         # Tariff Rate Risk (50% of commodity risk)
         # Calibrated: 200% AD/CVD → 10/10 (linear, capped)
         tariff_score = min(tariff_rate / 20.0, 10.0)
+        tariff_evidence = [f"Commodity: {commodity_name}", f"HS Code: {commodity_code}", f"AD/CVD Rate: {tariff_rate}%"]
+        tariff_rationale = f"HS {commodity_code}: {tariff_rate}% AD/CVD rate from {tariff_source}"
+
+        # Real active-order signal: an active AD/CVD order for this (origin
+        # country, HS) is a strong commodity-risk signal on its own, even when a
+        # precise rate is unavailable. Source: live Federal Register pipeline.
+        active_order = get_adcvd_order_by_country(shipment.get("origin_country"), commodity_code_val)
+        if active_order:
+            order_floor = {"AD/CVD": 8.0, "AD": 6.5, "CVD": 6.5}.get(active_order.get("order_type"), 6.0)
+            tariff_score = max(tariff_score, order_floor)
+            case_ref = active_order.get("case_number") or active_order.get("source_doc") or "Federal Register"
+            tariff_rationale = (
+                f"Active {active_order.get('order_type', 'AD/CVD')} order for "
+                f"{shipment.get('origin_country')} {active_order.get('commodity') or commodity_name} "
+                f"(HS {commodity_code}) — {case_ref}"
+            )
+            tariff_evidence.append(
+                f"Active AD/CVD order ({active_order.get('order_type')}) — {case_ref}, "
+                f"published {active_order.get('publication_date', 'n/a')}"
+            )
+            if active_order.get("source_url"):
+                tariff_evidence.append(f"Source: {active_order['source_url']}")
+
         components.append(
             RiskComponentScore(
                 component="Tariff Rate / AD-CVD Exposure",
@@ -599,8 +626,8 @@ class RiskScoringEngine:
                 score=tariff_score,
                 weight=factor_weight * 0.50,
                 weighted_result=(tariff_score * factor_weight * 0.50) / 10,
-                rationale=f"HS {commodity_code}: {tariff_rate}% AD/CVD rate from {tariff_source}",
-                evidence=[f"Commodity: {commodity_name}", f"HS Code: {commodity_code}", f"AD/CVD Rate: {tariff_rate}%"],
+                rationale=tariff_rationale,
+                evidence=tariff_evidence,
             )
         )
 

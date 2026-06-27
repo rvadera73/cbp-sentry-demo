@@ -1091,6 +1091,19 @@ async def _calculate_comprehensive_risk(shipment_id: str, shipment: Dict = None)
         except Exception as wb_err:
             logger.warning(f"Score write-back failed for {shipment_id}: {wb_err}")
 
+        # MLOps: log this scoring event to the engine's prediction_log so the
+        # scalability gate (shipments scored / week) and drift detection have
+        # real data. Best-effort; never blocks or fails the scoring response.
+        try:
+            import httpx as _httpx
+            engine_url = os.getenv("MCP_ENGINE_URL", "http://cbp-risk-engine:8010")
+            predict_payload = dict(shipment)
+            predict_payload["shipment_id"] = shipment_id
+            async with _httpx.AsyncClient(timeout=4.0) as _eng:
+                await _eng.post(f"{engine_url}/api/predict", json=predict_payload)
+        except Exception as pl_err:
+            logger.debug(f"prediction_log hook skipped for {shipment_id}: {pl_err}")
+
         # Prepare response with full transparency
         return {
             "shipment_id": shipment_id,
@@ -1756,12 +1769,20 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
                             },
                         ]
                     ),
+                    "critical_indicators": (
+                        risk_scoring_engine._check_critical_indicators(shipment)
+                        if risk_breakdown else []
+                    ),
                     "llm_generated": bool(vertex_ai_evidence),
                 },
                 "section_3_12_score_breakdown": {
                     "title": "Table 3-12: Risk Score Breakdown (ML Model)",
                     "total_score": risk_score,
                     "max_score": 100,
+                    "critical_indicators": (
+                        risk_scoring_engine._check_critical_indicators(shipment)
+                        if risk_breakdown else []
+                    ),
                     "calculation_table": risk_breakdown.calculation_table if risk_breakdown else None,
                     "components": (
                         [
@@ -3287,6 +3308,24 @@ async def record_override(
             notes=notes,
         )
 
+        # MLOps: forward the analyst's agree/reject feedback to the engine so it
+        # lands in risk_scoring.feedback (single training-signal store).
+        # Best-effort; the local override is already persisted regardless.
+        try:
+            import httpx as _httpx
+            engine_url = os.getenv("MCP_ENGINE_URL", "http://cbp-risk-engine:8010")
+            note_parts = [p for p in (feedback_type, notes) if p]
+            async with _httpx.AsyncClient(timeout=4.0) as _eng:
+                await _eng.post(f"{engine_url}/api/feedback", json={
+                    "shipment_id": shipment_id,
+                    "predicted_risk": original_score,
+                    "actual_outcome": str(override_decision).lower(),
+                    "analyst_id": analyst_id,
+                    "notes": "; ".join(note_parts) or None,
+                })
+        except Exception as fwd_err:
+            logger.debug(f"feedback forward to engine skipped for {shipment_id}: {fwd_err}")
+
         return {
             "override_id": override_id,
             "shipment_id": shipment_id,
@@ -3296,6 +3335,39 @@ async def record_override(
 
     except Exception as e:
         logger.error(f"Error recording override: {e}")
+        return {"error": str(e), "status": "failed"}
+
+
+@app.post("/api/feedback/outcome")
+async def record_gate1_outcome(
+    shipment_id: str = Query(...),
+    officer_action: str = Query(...),       # HOLD | EXAMINE | CLEAR
+    outcome: Optional[str] = Query(None),   # confirmed | cleared | pending
+    predicted_risk: Optional[float] = Query(None),
+    analyst_id: str = Query("officer"),
+    notes: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    """Record a Gate-1 investigation outcome (officer triage disposition).
+
+    Forwards to the engine's gate1_outcomes store — the real Gate-2 training
+    signal that advances model maturity once enough confirmed outcomes exist.
+    """
+    import httpx as _httpx
+    engine_url = os.getenv("MCP_ENGINE_URL", "http://cbp-risk-engine:8010")
+    try:
+        async with _httpx.AsyncClient(timeout=5.0) as _eng:
+            resp = await _eng.post(f"{engine_url}/api/feedback/outcome", json={
+                "shipment_id": shipment_id,
+                "officer_action": officer_action,
+                "outcome": outcome,
+                "predicted_risk": predicted_risk,
+                "analyst_id": analyst_id,
+                "notes": notes,
+            })
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as e:
+        logger.error(f"Error recording gate1 outcome for {shipment_id}: {e}")
         return {"error": str(e), "status": "failed"}
 
 

@@ -126,6 +126,7 @@ def register_models(conn, dry_run=False):
         "artifact_path": f"models/v21_legacy_weights.json",
         "metadata": json.dumps(v21_weights),
         "created_at": "2026-05-23T00:00:00Z",
+        "deployed_at": "2026-06-13T19:17:14Z",
         "deprecated_at": "2026-06-13T19:17:14Z",
         "updated_at": datetime.now().isoformat(),
     }

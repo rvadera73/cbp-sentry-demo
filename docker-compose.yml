@@ -116,7 +116,10 @@ services:
       MODEL_DIR: /models
       SENTRY_SRC: /sentry_src
       DATA_DIR: /app/data
-      MLFLOW_TRACKING_URI: sqlite:////app/data/mlflow.db
+      # PostgreSQL is the single MLOps source of truth (risk_scoring schema +
+      # postgres-backed MLflow). DATABASE_URL drives postgres.py registry reads.
+      DATABASE_URL: ${MCP_DATABASE_URL:-postgresql://sentry:sentry-secret@sentry-db:5432/sentry}
+      MLFLOW_TRACKING_URI: ${MCP_DATABASE_URL:-postgresql://sentry:sentry-secret@sentry-db:5432/sentry}
       PYTHONUNBUFFERED: "1"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
@@ -125,6 +128,9 @@ services:
       - ./models:/models:ro
       - ./services/api:/sentry_src:ro
       - cbp_risk_engine_data:/app/data
+    depends_on:
+      sentry-db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8010/health')"]
       interval: 15s

@@ -352,11 +352,54 @@ class ComprehensiveReferralGenerator:
             "suppliers": suppliers,
         }
 
+    def _critical_indicators(self, shipment: Dict) -> List[str]:
+        """Triggered critical risk indicators — mirrors the rule engine's
+        risk_scoring_engine.RiskScoringEngine._check_critical_indicators so the
+        referral package surfaces the same compound-risk signals that drove the
+        score. Kept dependency-light (no ML model load) for PDF generation.
+        """
+        indicators: List[str] = []
+
+        if shipment.get("element9_is_mismatch") or shipment.get("isf_element_mismatch"):
+            declared = shipment.get("element9_declared_country", "?")
+            actual = shipment.get("element9_actual_country", "?")
+            indicators.append(f"ISF Element 9 origin mismatch ({declared} declared → {actual} actual)")
+
+        ad_cvd = float(shipment.get("ad_cvd_rate") or 0)
+        if ad_cvd >= 1.0:
+            indicators.append(f"High AD/CVD tariff exposure ({ad_cvd * 100:.0f}%)")
+
+        dwell = float(shipment.get("dwell_days") or 0)
+        if dwell >= 10:
+            indicators.append(f"Excessive dwell time ({dwell:.0f} days — transshipment window)")
+
+        age = int(shipment.get("shipper_age_months") or 99)
+        if age < 6:
+            indicators.append(f"Newly established shipper ({age} months — evasion risk)")
+
+        price_var = float(shipment.get("price_variance_percent") or 0)
+        if price_var <= -40:
+            indicators.append(f"Severely undervalued pricing ({price_var:.0f}% below benchmark)")
+        elif price_var <= -20:
+            indicators.append(f"Undervalued pricing ({price_var:.0f}% below benchmark)")
+
+        return indicators
+
     def _section_3_11(self, shipment: Dict) -> Dict[str, Any]:
-        """Section 3-11: Risk Indicator Summary - AI placeholder"""
+        """Section 3-11: Risk Indicator Summary (from rule-engine indicators)"""
+        indicators = self._critical_indicators(shipment)
+        if indicators:
+            summary = (
+                f"{len(indicators)} critical risk indicator(s) triggered: "
+                + "; ".join(indicators) + "."
+            )
+        else:
+            summary = "No critical compound-risk indicators triggered for this shipment."
         return {
             "title": "SECTION 3-11: RISK INDICATOR SUMMARY",
-            "summary": "[AI-generated risk narrative will be added by Gemini service]",
+            "summary": summary,
+            "critical_indicators": indicators,
+            "indicator_count": len(indicators),
             "risk_score": shipment.get("risk_score", 0),
         }
 
@@ -365,6 +408,7 @@ class ComprehensiveReferralGenerator:
         ad_cvd_rate = shipment.get('ad_cvd_rate') or 0
         return {
             "title": "SECTION 3-12: PATTERN ANALYSIS & BEHAVIORAL INDICATORS",
+            "critical_indicators": self._critical_indicators(shipment),
             "patterns": [
                 f"Shipper age: {shipment.get('shipper_age_months')} months",
                 f"Dwell time: {shipment.get('dwell_days')} days",
