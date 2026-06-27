@@ -18,6 +18,7 @@ import MaturityBadge from '../components/MaturityBadge';
 import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
 import EvidenceTab from '../components/EvidenceTab';
 import ReferralPackageV2 from '../components/ReferralPackageV2';
+import OfficerDispositionBar from '../components/OfficerDispositionBar';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -897,6 +898,9 @@ function OverviewTab({ selectedCase, selectedCaseShipments, synopsisMap, synopsi
           </div>
         </div>
       </div>
+
+      {/* Officer disposition → recorded as a Gate-1 outcome (Gate-2 training signal) */}
+      <OfficerDispositionBar shipmentId={shipment?.shipment_id} predictedRisk={selectedCase.risk_score} />
 
       {/* Risk Synopsis */}
       <div className="bg-white border border-[#D0D7DE] rounded-sm p-4">

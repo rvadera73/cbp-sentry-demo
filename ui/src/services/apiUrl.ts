@@ -58,3 +58,19 @@ export const getAPIEndpoint = (path: string): string => {
   // Otherwise, baseUrl is relative (like /api), append to it
   return `${baseUrl}${cleanPath}`;
 };
+
+/**
+ * MLOps endpoint resolver — Risk Model Management tabs only.
+ *
+ * Always routes through the UI nginx `/api/mcp/` passthrough, which rewrites
+ * `/api/mcp/<path>` → `/api/<path>` and proxies to cbp-risk-engine:8010 (the
+ * single MLOps source of truth: MLflow registry, gates, metrics, jobs,
+ * feedback). Intentionally relative so it works identically in local Docker
+ * and Cloud Run without bypassing the gateway or tripping CORS.
+ *
+ * @param path engine-native path, e.g. '/metrics/gates', '/models', '/jobs'
+ */
+export const getMLOpsEndpoint = (path: string): string => {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `/api/mcp${cleanPath}`;
+};

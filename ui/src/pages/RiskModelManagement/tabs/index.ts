@@ -1,0 +1,5 @@
+export { default as OverviewTab } from './OverviewTab'
+export { default as ModelRegistryTab } from './ModelRegistryTab'
+export { default as PerformanceTab } from './PerformanceTab'
+export { default as TrainingDataTab } from './TrainingDataTab'
+export { default as MonitoringTab } from './MonitoringTab'
