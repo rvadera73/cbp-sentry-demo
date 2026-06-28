@@ -19,6 +19,7 @@ import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
 import EvidenceTab from '../components/EvidenceTab';
 import ReferralPackageV2 from '../components/ReferralPackageV2';
 import OfficerDispositionBar from '../components/OfficerDispositionBar';
+import { StatStrip } from '../../components/ui';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -357,6 +358,17 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
             <option value="critical">CRITICAL (≥80)</option>
             <option value="elevated">ELEVATED (50-79)</option>
           </select>
+        </div>
+
+        {/* KPI strip */}
+        <div className="mb-4">
+          <StatStrip items={[
+            { label: 'Total Cases', value: filteredCases.length },
+            { label: 'Critical', value: filteredCases.filter(c => c.priority === 'Critical').length, color: '#D83933' },
+            { label: 'High Risk ≥80', value: filteredCases.filter(c => c.risk_score >= 80).length, color: '#C7791B' },
+            { label: 'Active', value: filteredCases.filter(c => c.case_status === 'Active').length },
+            { label: 'Closed', value: filteredCases.filter(c => c.case_status === 'Closed').length },
+          ]} />
         </div>
 
         {/* Kanban-Style Queue View */}
