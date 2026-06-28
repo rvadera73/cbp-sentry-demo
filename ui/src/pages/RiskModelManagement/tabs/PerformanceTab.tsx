@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { TrendingUp, BarChart3 } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatCard, LoadingState, ErrorState } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, LoadingState, ErrorState } from '../components/ui'
 
 interface Metrics {
   auc: number | null; precision: number | null; recall: number | null; f1_score: number | null
@@ -59,18 +59,16 @@ const PerformanceTab: React.FC = () => {
     <div className="space-y-5">
       <Panel>
         <SectionHeader title="Key Performance Metrics" subtitle="XGBoost evaluation from the latest training run" icon={<TrendingUp className="w-4 h-4" />} />
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <StatCard label="AUC-ROC" value={fixed(metrics.auc)} hint="Discrimination ability" />
-          <StatCard label="Accuracy" value={pct(metrics.accuracy)} hint="Correct predictions" />
-          <StatCard label="F1 Score" value={pct(metrics.f1_score)} hint="Precision/recall balance" />
-          <StatCard label="Precision" value={pct(metrics.precision)} hint="True positive rate" />
-          <StatCard label="Recall" value={pct(metrics.recall)} hint="Coverage of positives" />
-          <StatCard label="Features" value={num(metrics.feature_count)} hint="Model input features" />
-        </div>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <StatCard label="Training Samples" value={num(metrics.training_samples)} />
-          <StatCard label="Test Samples" value={num(metrics.test_samples)} />
-        </div>
+        <StatStrip items={[
+          { label: 'AUC-ROC', value: fixed(metrics.auc) },
+          { label: 'Accuracy', value: pct(metrics.accuracy) },
+          { label: 'F1 Score', value: pct(metrics.f1_score) },
+          { label: 'Precision', value: pct(metrics.precision) },
+          { label: 'Recall', value: pct(metrics.recall) },
+          { label: 'Features', value: num(metrics.feature_count) },
+          { label: 'Train Samples', value: num(metrics.training_samples) },
+          { label: 'Test Samples', value: num(metrics.test_samples) },
+        ]} />
       </Panel>
 
       <Panel>

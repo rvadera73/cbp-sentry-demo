@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { Database, Activity } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatCard, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
 
 interface TrainingJob {
   job_id: string; model_type?: string; status: string
@@ -59,11 +59,11 @@ const TrainingDataTab: React.FC = () => {
       {latest && (
         <Panel>
           <SectionHeader title="Latest Training Dataset" subtitle={`From job ${latest.job_id}`} icon={<Database className="w-4 h-4" />} />
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard label="Training Samples" value={n(ds.training_samples)} />
-            <StatCard label="Test Samples" value={n(ds.test_samples)} />
-            <StatCard label="Feature Count" value={n(ds.feature_count)} />
-          </div>
+          <StatStrip items={[
+            { label: 'Training Samples', value: n(ds.training_samples) },
+            { label: 'Test Samples', value: n(ds.test_samples) },
+            { label: 'Feature Count', value: n(ds.feature_count) },
+          ]} />
         </Panel>
       )}
 

@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { CheckCircle2, Lock, ShieldCheck } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatCard, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
 
 interface GateMetric { name: string; measured_value: number | null; threshold: number; unit?: string | null; passed: boolean; description?: string | null }
 interface Gate { gate_id: number | string; gate_name: string; passed: boolean; metrics?: GateMetric[]; exit_criteria?: GateMetric[] }
@@ -75,12 +75,12 @@ const OverviewTab: React.FC = () => {
           icon={<ShieldCheck className="w-4 h-4" />}
           action={model ? <StatusPill status={isProd ? 'production' : (model.status || 'registered')} /> : undefined}
         />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="AUC" value={auc != null ? auc.toFixed(3) : '—'} hint="Discrimination" />
-          <StatCard label="F1 Score" value={f1 != null ? f1.toFixed(3) : '—'} hint="Balanced performance" />
-          <StatCard label="Days Since Award" value={gatesData.days_since_award} hint="Program timeline" />
-          <StatCard label="Current Gate" value={current ? current.gate_id : '—'} hint={current?.gate_name || ''} />
-        </div>
+        <StatStrip items={[
+          { label: 'AUC', value: auc != null ? auc.toFixed(3) : '—' },
+          { label: 'F1 Score', value: f1 != null ? f1.toFixed(3) : '—' },
+          { label: 'Days Since Award', value: gatesData.days_since_award },
+          { label: 'Current Gate', value: current ? current.gate_id : '—', hint: current?.gate_name || '' },
+        ]} />
       </Panel>
 
       {/* Gate progression */}

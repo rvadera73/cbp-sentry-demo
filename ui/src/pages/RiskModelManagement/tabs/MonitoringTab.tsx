@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { MessageSquare, TrendingUp } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatCard, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
 
 interface DriftFeature {
   feature: string; drift_score: number; alert_level: 'critical' | 'warning' | 'normal'
@@ -58,13 +58,12 @@ const MonitoringTab: React.FC = () => {
     <div className="space-y-5">
       <Panel>
         <SectionHeader title="Analyst Feedback" subtitle="Officer agree/reject signals routed to the training store" icon={<MessageSquare className="w-4 h-4" />} />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Total Feedback" value={feedback ? feedback.total_feedback.toLocaleString() : '—'} />
-          {feedback?.factor_summary.slice(0, 3).map(f => (
-            <StatCard key={f.factor} label={f.factor} value={f.override_count}
-              hint={`+${f.positive_overrides} / -${f.negative_overrides}`} />
-          ))}
-        </div>
+        <StatStrip items={[
+          { label: 'Total Feedback', value: feedback ? feedback.total_feedback.toLocaleString() : '—' },
+          ...((feedback?.factor_summary || []).slice(0, 3).map(f => ({
+            label: f.factor, value: f.override_count, hint: `+${f.positive_overrides} / -${f.negative_overrides}`,
+          }))),
+        ]} />
         {feedback && feedback.factor_summary.length === 0 && (
           <p className="text-[11px] text-[#5C5C5C] mt-2">No analyst dispositions recorded yet.</p>
         )}
@@ -76,10 +75,12 @@ const MonitoringTab: React.FC = () => {
           subtitle={`${drift.sample_source} · ${drift.sample_size.toLocaleString()} records · ${new Date(drift.generated_at).toLocaleString()}`}
           icon={<TrendingUp className="w-4 h-4" />}
         />
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <StatCard label="Critical" value={drift.summary.critical} color="#DC2626" />
-          <StatCard label="Warning" value={drift.summary.warning} color="#B45309" />
-          <StatCard label="Normal" value={drift.summary.normal} color="#15803D" />
+        <div className="mb-3">
+          <StatStrip items={[
+            { label: 'Critical', value: drift.summary.critical, color: '#DC2626' },
+            { label: 'Warning', value: drift.summary.warning, color: '#B45309' },
+            { label: 'Normal', value: drift.summary.normal, color: '#15803D' },
+          ]} />
         </div>
         <DataTable columns={driftColumns} rows={drift.features} caption="Per-feature drift (two-sample KS over prediction_log)"
           empty="No drift computed — needs more scored shipments in prediction_log." />
