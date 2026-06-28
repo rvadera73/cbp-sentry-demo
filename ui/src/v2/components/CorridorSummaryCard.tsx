@@ -83,9 +83,9 @@ export default function CorridorSummaryCard({
 
       {/* Col 2: Avg Risk Score with mini bar */}
       <div className="border-r border-[#D0D7DE] px-6 shrink-0">
-        <div className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold mb-0.5">Avg Risk</div>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">Avg Risk</div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xl font-black font-mono" style={{ color: riskScoreColor }}>
+          <span className="text-[15px] font-bold font-mono" style={{ color: riskScoreColor }}>
             {avgRiskScore.toFixed(0)}
           </span>
           <span className="text-[10px] text-[#5C5C5C]">/100</span>
@@ -97,27 +97,27 @@ export default function CorridorSummaryCard({
 
       {/* Col 3: Shipments */}
       <div className="border-r border-[#D0D7DE] px-6 shrink-0">
-        <div className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold mb-0.5">Shipments</div>
-        <div className="text-xl font-black font-mono text-[#0B1F33]">{shipmentCount}</div>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">Shipments</div>
+        <div className="text-[15px] font-bold font-mono text-[#0B1F33]">{shipmentCount}</div>
       </div>
 
       {/* Col 4: E9 Mismatch */}
       <div className="border-r border-[#D0D7DE] px-6 shrink-0">
-        <div className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold mb-0.5">E9 Mismatch</div>
-        <div className={`text-xl font-black font-mono ${element9MismatchPct > 20 ? 'text-[#D83933]' : 'text-[#0B1F33]'}`}>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">E9 Mismatch</div>
+        <div className={`text-[15px] font-bold font-mono ${element9MismatchPct > 20 ? 'text-[#D83933]' : 'text-[#0B1F33]'}`}>
           {element9MismatchPct.toFixed(1)}%
         </div>
       </div>
 
       {/* Col 5: Unique Shippers */}
       <div className="border-r border-[#D0D7DE] px-6 shrink-0">
-        <div className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold mb-0.5">Shippers</div>
-        <div className="text-xl font-black font-mono text-[#0B1F33]">{uniqueShippers}</div>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">Shippers</div>
+        <div className="text-[15px] font-bold font-mono text-[#0B1F33]">{uniqueShippers}</div>
       </div>
 
       {/* Col 6: HS Chapters (flex-1 to fill remaining space) */}
       <div className="flex-1 min-w-0 px-6">
-        <div className="text-[9px] text-[#5C5C5C] font-mono uppercase font-bold mb-0.5">HS Chapters</div>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">HS Chapters</div>
         <div className="flex gap-1 flex-wrap overflow-hidden max-h-[24px]">
           {hsChapters.slice(0, 4).map((hs: string, i: number) => (
             <span key={i} className="px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-[8px] font-bold whitespace-nowrap">
