@@ -7,7 +7,7 @@
 import React from 'react';
 import { Map as MapIcon, Search, Package, Gavel } from 'lucide-react';
 import TradeCorridorMap from './TradeCorridorMap';
-import { Panel, SectionHeader, StatStrip, StatusPill, ScoreBar, DataTable, Column } from '../../components/ui';
+import { Panel, SectionHeader, StatusPill, ScoreBar, DataTable, Column } from '../../components/ui';
 
 export interface ManifestStop { location: string; type: 'origin' | 'hub' | 'destination'; entity_name: string; dwell_days?: number; anomalies?: string[]; risk_score?: number }
 export interface TradeRoute { origin_country: string; destination_country: string; shipment_count: number; avg_risk_score: number; avg_dwell_days: number; anomaly_count: number }
@@ -65,6 +65,7 @@ export default function CorridorTradeAnalysis({ corridor, shipments = [] }: Prop
   const tier = avgRisk >= 80 ? 'CRITICAL' : avgRisk >= 60 ? 'HIGH' : avgRisk >= 40 ? 'MEDIUM' : 'LOW';
   const tierKey = tier.toLowerCase();
   const cm = commodityRisk[0];
+  const duties: any[] = corridor?.duties || [];
 
   const recommendation = (() => {
     if (tier === 'CRITICAL' || (tier === 'HIGH' && flagged.length >= 2)) return 'Refer for examination';
@@ -134,35 +135,40 @@ export default function CorridorTradeAnalysis({ corridor, shipments = [] }: Prop
 
       {/* 3. Commodity & Duty Exposure */}
       <Panel>
-        <SectionHeader title="Commodity & Duty Exposure" subtitle="Commodity profile and risk dimensions" icon={<Package className="w-4 h-4" />} />
+        <SectionHeader title="Commodity & Duty Exposure" subtitle="Commodity profile, risk dimensions, and active trade remedies" icon={<Package className="w-4 h-4" />} />
         <div className="flex flex-wrap gap-x-5 gap-y-1 mb-3 text-[11px]">
           <span><span className="text-[#5C5C5C]">Commodity:</span> <b className="text-[#0B1F33]">{commodityInfo.commodity}</b></span>
           <span><span className="text-[#5C5C5C]">HS:</span> <b className="font-mono text-[#0B1F33]">{commodityInfo.hs_code}</b></span>
           <span><span className="text-[#5C5C5C]">Weight:</span> <b className="font-mono text-[#0B1F33]">{(commodityInfo.weight_kg / 1000).toFixed(1)}T</b></span>
           <span><span className="text-[#5C5C5C]">Value:</span> <b className="font-mono text-[#0B1F33]">${(commodityInfo.value_usd / 1000).toFixed(0)}K</b></span>
         </div>
-        {cm ? (
+        <div className="grid md:grid-cols-2 gap-x-6 gap-y-3">
           <div>
-            <ScoreBar label="Supply Chain Risk" sublabel="Multi-hop / opacity" score={cm.supply_chain_risk} />
-            <ScoreBar label="Tariff / Duty Risk" sublabel="AD/CVD & evasion incentive" score={cm.tariff_risk} />
-            <ScoreBar label="Origin Risk" sublabel="Country-of-origin profile" score={cm.origin_risk} />
+            <div className="text-[10px] font-bold uppercase tracking-wide text-[#5C5C5C] mb-1">Risk Dimensions</div>
+            {cm ? (
+              <>
+                <ScoreBar label="Supply Chain" sublabel="Multi-hop / opacity" score={cm.supply_chain_risk} />
+                <ScoreBar label="Tariff / Duty" sublabel="AD/CVD & evasion incentive" score={cm.tariff_risk} />
+                <ScoreBar label="Origin" sublabel="Country-of-origin profile" score={cm.origin_risk} />
+              </>
+            ) : <p className="text-[11px] text-[#5C5C5C]">No commodity risk data.</p>}
           </div>
-        ) : <p className="text-[11px] text-[#5C5C5C]">No commodity risk data for this corridor.</p>}
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-[#5C5C5C] mb-1">Active AD/CVD Duties</div>
+            {duties.length ? duties.slice(0, 6).map((d, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0">
+                <div className="min-w-0">
+                  <div className="text-[11px] font-semibold text-[#0B1F33] truncate">{d.duty_type || d.product_description || 'AD/CVD order'}</div>
+                  <div className="text-[10px] font-mono text-[#5C5C5C]">{d.case_number || d.hs_prefix || '—'}</div>
+                </div>
+                <span className="text-[12px] font-mono font-bold text-[#D83933] flex-shrink-0">{Number(d.rate_pct) > 0 ? `${d.rate_pct}%` : 'Variable'}</span>
+              </div>
+            )) : <p className="text-[11px] text-[#5C5C5C]">No active duties for this corridor.</p>}
+          </div>
+        </div>
       </Panel>
 
-      {/* 4. Corridor Summary — single consolidated KPI strip */}
-      <div>
-        <SectionHeader title="Corridor Summary" />
-        <StatStrip items={[
-          { label: 'Stops', value: stops.length },
-          { label: 'Total Dwell', value: `${totalDwell}d`, color: totalDwell >= 5 ? '#C7791B' : '#0B1F33' },
-          { label: 'Flagged Anomalies', value: flagged.length, color: flagged.length ? '#D83933' : '#15803D' },
-          { label: 'Avg Risk', value: avgRisk, color: riskColor(avgRisk) },
-          { label: 'Shipments', value: shipmentCount },
-        ]} />
-      </div>
-
-      {/* 5. Assessment & Recommendation */}
+      {/* 4. Assessment & Recommendation */}
       <Panel className="border-l-4" >
         <SectionHeader title="Assessment & Recommendation" icon={<Gavel className="w-4 h-4" />}
           action={<StatusPill status={tierKey} />} />
