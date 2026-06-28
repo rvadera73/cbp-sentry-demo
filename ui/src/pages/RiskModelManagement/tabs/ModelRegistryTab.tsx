@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { CheckCircle2, ChevronRight, GitBranch } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatusPill, LoadingState, ErrorState } from '../components/ui'
+import { SectionHeader, Panel, StatusPill, LoadingState, ErrorState } from '../../../components/ui'
 
 interface ModelVersion {
   name?: string; version?: string; status?: string | null; is_production?: boolean

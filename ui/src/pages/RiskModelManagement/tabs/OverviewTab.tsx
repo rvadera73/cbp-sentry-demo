@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { CheckCircle2, Lock, ShieldCheck } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../../../components/ui'
 
 interface GateMetric { name: string; measured_value: number | null; threshold: number; unit?: string | null; passed: boolean; description?: string | null }
 interface Gate { gate_id: number | string; gate_name: string; passed: boolean; metrics?: GateMetric[]; exit_criteria?: GateMetric[] }

@@ -30,8 +30,31 @@ export const SectionHeader: React.FC<{
   </div>
 )
 
-export const Panel: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <section className={`bg-white border border-[#D0D7DE] rounded-sm p-4 ${className}`}>{children}</section>
+export const Panel: React.FC<{ children: React.ReactNode; className?: string; pad?: boolean }> = ({ children, className = '', pad = true }) => (
+  <section className={`bg-white border border-[#D0D7DE] rounded-sm ${pad ? 'p-4' : ''} ${className}`}>{children}</section>
+)
+
+/** Shared underline tab bar (matches the Active Investigation / Risk Model tabs). */
+export const Tabs: React.FC<{
+  tabs: { id: string; label: string; icon?: React.ReactNode }[]
+  active: string
+  onChange: (id: string) => void
+}> = ({ tabs, active, onChange }) => (
+  <div className="flex flex-wrap border-b border-[#D0D7DE]" role="tablist">
+    {tabs.map(t => (
+      <button
+        key={t.id}
+        role="tab"
+        aria-selected={active === t.id}
+        onClick={() => onChange(t.id)}
+        className={`px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#005EA2] ${
+          active === t.id ? 'border-[#005EA2] text-[#005EA2]' : 'border-transparent text-slate-600 hover:text-[#0B1F33]'
+        }`}
+      >
+        {t.icon}{t.label}
+      </button>
+    ))}
+  </div>
 )
 
 export const StatCard: React.FC<{

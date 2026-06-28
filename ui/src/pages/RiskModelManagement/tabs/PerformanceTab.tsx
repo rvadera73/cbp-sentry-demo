@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { TrendingUp, BarChart3 } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatStrip, LoadingState, ErrorState } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, LoadingState, ErrorState } from '../../../components/ui'
 
 interface Metrics {
   auc: number | null; precision: number | null; recall: number | null; f1_score: number | null

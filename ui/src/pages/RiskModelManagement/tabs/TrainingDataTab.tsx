@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { Database, Activity } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../../../components/ui'
 
 interface TrainingJob {
   job_id: string; model_type?: string; status: string

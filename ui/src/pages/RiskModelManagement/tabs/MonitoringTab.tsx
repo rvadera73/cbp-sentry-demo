@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { MessageSquare, TrendingUp } from 'lucide-react'
 import { getMLOpsEndpoint } from '../../../services/apiUrl'
-import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../components/ui'
+import { SectionHeader, Panel, StatStrip, StatusPill, DataTable, LoadingState, ErrorState, Column } from '../../../components/ui'
 
 interface DriftFeature {
   feature: string; drift_score: number; alert_level: 'critical' | 'warning' | 'normal'
