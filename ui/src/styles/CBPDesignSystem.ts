@@ -45,6 +45,10 @@ export const CBPColors = {
 };
 
 export const CBPTypography = {
+  // Page + content headers — aligned with the Investigation workspace
+  pageTitle: 'text-xl font-bold text-[#0B1F33]',
+  metricValue: 'text-2xl font-bold text-[#0B1F33]',
+
   // Section headers (with icon circles)
   sectionHeader: 'text-sm font-bold text-[#0B1F33]',
   sectionSubtitle: 'text-[11px] text-slate-500',
@@ -54,11 +58,19 @@ export const CBPTypography = {
   tableCaption: 'text-[10px] font-bold text-[#005EA2] uppercase tracking-wide',
   tableBody: 'text-[11px]',
 
-  // General text
+  // General text — body/small use the Investigation muted gray (#5C5C5C)
   label: 'text-[11px] font-bold text-[#0B1F33]',
-  body: 'text-[11px] text-slate-700',
-  small: 'text-[10px] text-slate-600',
+  body: 'text-[11px] text-[#5C5C5C]',
+  small: 'text-[10px] text-[#5C5C5C]',
   bold: 'font-bold',
+};
+
+// Horizontal tab bar — matches the Active Investigation workspace tabs
+export const CBPTabs = {
+  bar: 'flex overflow-x-auto border-b border-[#D0D7DE] bg-slate-50 px-4',
+  button: 'px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors whitespace-nowrap flex items-center gap-2',
+  active: 'border-[#005EA2] text-[#005EA2]',
+  inactive: 'border-transparent text-slate-600 hover:text-[#0B1F33]',
 };
 
 export const CBPComponents = {

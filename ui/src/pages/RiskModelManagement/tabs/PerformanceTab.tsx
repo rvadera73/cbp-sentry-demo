@@ -95,7 +95,7 @@ const PerformanceTab: React.FC = () => {
 
   if (error || !metrics) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-sm p-6 flex items-start gap-3">
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-semibold text-red-900">Unable to load performance metrics</p>
@@ -110,7 +110,7 @@ const PerformanceTab: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Key Performance Metrics */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             1
@@ -124,32 +124,32 @@ const PerformanceTab: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>AUC-ROC</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{fixed(metrics.auc)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{fixed(metrics.auc)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Discrimination ability</p>
           </div>
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Accuracy</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{pct(metrics.accuracy)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{pct(metrics.accuracy)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Correct predictions</p>
           </div>
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>F1 Score</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{pct(metrics.f1_score)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{pct(metrics.f1_score)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Precision/recall balance</p>
           </div>
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Precision</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{pct(metrics.precision)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{pct(metrics.precision)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>True positive rate</p>
           </div>
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Recall</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{pct(metrics.recall)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{pct(metrics.recall)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Coverage of positives</p>
           </div>
           <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Feature Count</div>
-            <div className="text-2xl font-bold text-slate-900 mt-2">{num(metrics.feature_count)}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{num(metrics.feature_count)}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Model input features</p>
           </div>
         </div>
@@ -157,17 +157,17 @@ const PerformanceTab: React.FC = () => {
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="p-3 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Training Samples</div>
-            <div className="text-lg font-bold text-slate-900 mt-1">{num(metrics.training_samples)}</div>
+            <div className="text-lg font-bold text-[#0B1F33] mt-1">{num(metrics.training_samples)}</div>
           </div>
           <div className="p-3 bg-slate-50 rounded-sm border border-[#D0D7DE]">
             <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Test Samples</div>
-            <div className="text-lg font-bold text-slate-900 mt-1">{num(metrics.test_samples)}</div>
+            <div className="text-lg font-bold text-[#0B1F33] mt-1">{num(metrics.test_samples)}</div>
           </div>
         </div>
       </div>
 
       {/* Feature Importance */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             2
@@ -187,7 +187,7 @@ const PerformanceTab: React.FC = () => {
             {importance.slice(0, 15).map((feature) => (
               <div key={feature.feature}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className={`text-[11px] font-semibold text-slate-900`}>
+                  <span className={`text-[11px] font-semibold text-[#0B1F33]`}>
                     {feature.description || feature.feature}
                   </span>
                   <span className={`text-[10px] ${CBPTypography.tableCaption}`}>gain {feature.gain.toFixed(2)}</span>

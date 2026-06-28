@@ -157,7 +157,7 @@ const ModelRegistryTab: React.FC = () => {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-sm p-6 flex items-start gap-3">
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-semibold text-red-900">Unable to load model registry</p>
@@ -180,7 +180,7 @@ const ModelRegistryTab: React.FC = () => {
       )}
 
       {/* Model Lineage */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             1
@@ -267,7 +267,7 @@ const ModelRegistryTab: React.FC = () => {
                           {metricEntries.map(([key, value]) => (
                             <div key={key}>
                               <div className={`text-[10px] uppercase tracking-wide ${CBPTypography.tableCaption}`}>{key.replace(/_/g, ' ')}</div>
-                              <div className="text-lg font-bold text-slate-900 mt-1">
+                              <div className="text-lg font-bold text-[#0B1F33] mt-1">
                                 {typeof value === 'number' ? value.toFixed(3) : String(value)}
                               </div>
                             </div>
@@ -299,7 +299,7 @@ const ModelRegistryTab: React.FC = () => {
                               {approvals.votes.map((voter, idx) => (
                                 <div key={`${voter.voter_id}-${idx}`} className="flex items-center gap-2 text-[10px]">
                                   <span className={`inline-block w-2 h-2 rounded-full ${voter.vote === 'approve' ? 'bg-green-600' : voter.vote === 'reject' ? 'bg-red-600' : 'bg-slate-400'}`} />
-                                  <span className="font-semibold text-slate-900 min-w-[120px]">{voter.voter_id}</span>
+                                  <span className="font-semibold text-[#0B1F33] min-w-[120px]">{voter.voter_id}</span>
                                   <span className={voter.vote === 'approve' ? 'text-green-700' : voter.vote === 'reject' ? 'text-red-700' : 'text-slate-500'}>
                                     {voter.vote ? voter.vote.toUpperCase() : 'PENDING'}
                                   </span>

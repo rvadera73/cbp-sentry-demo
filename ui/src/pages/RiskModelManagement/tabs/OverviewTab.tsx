@@ -97,7 +97,7 @@ const OverviewTab: React.FC = () => {
 
   if (error || !gatesData) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-sm p-6 flex items-start gap-3">
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-semibold text-red-900">Unable to load overview</p>
@@ -123,7 +123,7 @@ const OverviewTab: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Active Model Card */}
-      <div className="rounded-sm p-6 border-l-4 bg-white" style={{ borderColor: CBPColors.primary }}>
+      <div className="rounded-sm p-4 border-l-4 bg-white" style={{ borderColor: CBPColors.primary }}>
         <div className="flex items-start justify-between mb-6">
           <div>
             <h3 className={`text-lg font-bold ${CBPTypography.label}`}>
@@ -147,26 +147,26 @@ const OverviewTab: React.FC = () => {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
           <div>
             <div className={`text-xs font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>AUC</div>
-            <div className="text-3xl font-bold text-slate-900 mt-2">
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">
               {auc !== null ? auc.toFixed(3) : '—'}
             </div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Discrimination ability</p>
           </div>
           <div>
             <div className={`text-xs font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>F1 Score</div>
-            <div className="text-3xl font-bold text-slate-900 mt-2">
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">
               {f1 !== null ? f1.toFixed(3) : '—'}
             </div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Balanced performance</p>
           </div>
           <div>
             <div className={`text-xs font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Days Since Award</div>
-            <div className="text-3xl font-bold text-slate-900 mt-2">{gatesData.days_since_award}</div>
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">{gatesData.days_since_award}</div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>Program timeline</p>
           </div>
           <div>
             <div className={`text-xs font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Current Gate</div>
-            <div className="text-3xl font-bold text-slate-900 mt-2">
+            <div className="text-2xl font-bold text-[#0B1F33] mt-2">
               {currentGate ? currentGate.gate_id : '—'}
             </div>
             <p className={`text-[10px] ${CBPTypography.small} mt-1`}>{currentGate?.gate_name || ''}</p>
@@ -204,7 +204,7 @@ const OverviewTab: React.FC = () => {
                   {gate.gate_id}
                 </div>
                 <div className="hidden sm:block text-center min-w-[90px]">
-                  <div className="text-[11px] font-semibold text-slate-900">{gate.gate_name}</div>
+                  <div className="text-[11px] font-semibold text-[#0B1F33]">{gate.gate_name}</div>
                   <div className="text-[10px] text-slate-500">
                     {gate.passed ? 'Passed' : isCurrent ? 'Current' : 'Pending'}
                   </div>

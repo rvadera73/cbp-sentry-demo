@@ -70,7 +70,7 @@ const TrainingDataTab: React.FC = () => {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-sm p-6 flex items-start gap-3">
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-semibold text-red-900">Unable to load training jobs</p>
@@ -88,7 +88,7 @@ const TrainingDataTab: React.FC = () => {
     <div className="space-y-8">
       {/* Dataset Summary (from latest completed run) */}
       {latestCompleted && (
-        <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+        <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
           <div className="flex items-center gap-3 mb-6">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
               1
@@ -101,19 +101,19 @@ const TrainingDataTab: React.FC = () => {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
               <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Training Samples</div>
-              <div className="text-3xl font-bold text-slate-900 mt-2">
+              <div className="text-2xl font-bold text-[#0B1F33] mt-2">
                 {Number.isFinite(Number(ds.training_samples)) ? Number(ds.training_samples).toLocaleString() : '—'}
               </div>
             </div>
             <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
               <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Test Samples</div>
-              <div className="text-3xl font-bold text-slate-900 mt-2">
+              <div className="text-2xl font-bold text-[#0B1F33] mt-2">
                 {Number.isFinite(Number(ds.test_samples)) ? Number(ds.test_samples).toLocaleString() : '—'}
               </div>
             </div>
             <div className="p-4 bg-slate-50 rounded-sm border border-[#D0D7DE]">
               <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Feature Count</div>
-              <div className="text-3xl font-bold text-slate-900 mt-2">
+              <div className="text-2xl font-bold text-[#0B1F33] mt-2">
                 {Number.isFinite(Number(ds.feature_count)) ? Number(ds.feature_count).toLocaleString() : '—'}
               </div>
             </div>
@@ -122,7 +122,7 @@ const TrainingDataTab: React.FC = () => {
       )}
 
       {/* Training Run History */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             {latestCompleted ? 2 : 1}
@@ -167,21 +167,21 @@ const TrainingDataTab: React.FC = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
                     <div>
                       <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Model Version</div>
-                      <div className="text-sm font-semibold text-slate-900 mt-1">{run.model_version ? `v${run.model_version}` : '—'}</div>
+                      <div className="text-sm font-semibold text-[#0B1F33] mt-1">{run.model_version ? `v${run.model_version}` : '—'}</div>
                     </div>
                     <div>
                       <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Started</div>
-                      <div className="text-sm font-semibold text-slate-900 mt-1">{start ? start.toLocaleString() : '—'}</div>
+                      <div className="text-sm font-semibold text-[#0B1F33] mt-1">{start ? start.toLocaleString() : '—'}</div>
                     </div>
                     <div>
                       <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Training Samples</div>
-                      <div className="text-sm font-semibold text-slate-900 mt-1">
+                      <div className="text-sm font-semibold text-[#0B1F33] mt-1">
                         {Number.isFinite(Number(m.training_samples)) ? Number(m.training_samples).toLocaleString() : '—'}
                       </div>
                     </div>
                     <div>
                       <div className={`text-[10px] font-bold uppercase tracking-wide ${CBPTypography.tableCaption}`}>Duration</div>
-                      <div className="text-sm font-semibold text-slate-900 mt-1">{durationMins !== null ? `${durationMins} min` : '—'}</div>
+                      <div className="text-sm font-semibold text-[#0B1F33] mt-1">{durationMins !== null ? `${durationMins} min` : '—'}</div>
                     </div>
                   </div>
 

@@ -101,7 +101,7 @@ const MonitoringTab: React.FC = () => {
 
   if (error || !drift) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-sm p-6 flex items-start gap-3">
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4 flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-semibold text-red-900">Unable to load monitoring data</p>
@@ -116,7 +116,7 @@ const MonitoringTab: React.FC = () => {
   return (
     <div className="space-y-8">
       {/* Analyst Feedback Summary */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             1
@@ -144,7 +144,7 @@ const MonitoringTab: React.FC = () => {
                 {feedback.factor_summary.map((f) => (
                   <div key={f.factor} className="flex items-center justify-between p-3 bg-slate-50 border border-[#D0D7DE] rounded-sm">
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-slate-900">{f.factor}</p>
+                      <p className="text-sm font-semibold text-[#0B1F33]">{f.factor}</p>
                       <p className={`text-[10px] ${CBPTypography.small} mt-1`}>
                         {f.override_count} override{f.override_count === 1 ? '' : 's'} · avg delta {f.avg_delta !== null ? f.avg_delta.toFixed(4) : '—'}
                       </p>
@@ -165,7 +165,7 @@ const MonitoringTab: React.FC = () => {
       </div>
 
       {/* Drift Summary */}
-      <div className="border border-[#D0D7DE] bg-white rounded-sm p-6">
+      <div className="border border-[#D0D7DE] bg-white rounded-sm p-4">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold" style={{ backgroundColor: CBPColors.primary }}>
             2
@@ -181,15 +181,15 @@ const MonitoringTab: React.FC = () => {
         <div className="grid grid-cols-3 gap-4 mb-6">
           <div className="p-4 bg-red-50 rounded-sm border border-red-200">
             <div className="text-[10px] font-bold uppercase tracking-wide text-red-700">Critical</div>
-            <div className="text-3xl font-bold text-red-700 mt-2">{drift.summary.critical}</div>
+            <div className="text-2xl font-bold text-red-700 mt-2">{drift.summary.critical}</div>
           </div>
           <div className="p-4 bg-amber-50 rounded-sm border border-amber-200">
             <div className="text-[10px] font-bold uppercase tracking-wide text-amber-700">Warning</div>
-            <div className="text-3xl font-bold text-amber-700 mt-2">{drift.summary.warning}</div>
+            <div className="text-2xl font-bold text-amber-700 mt-2">{drift.summary.warning}</div>
           </div>
           <div className="p-4 bg-green-50 rounded-sm border border-green-200">
             <div className="text-[10px] font-bold uppercase tracking-wide text-green-700">Normal</div>
-            <div className="text-3xl font-bold text-green-700 mt-2">{drift.summary.normal}</div>
+            <div className="text-2xl font-bold text-green-700 mt-2">{drift.summary.normal}</div>
           </div>
         </div>
 

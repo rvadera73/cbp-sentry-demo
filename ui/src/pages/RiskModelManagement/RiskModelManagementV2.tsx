@@ -15,7 +15,7 @@ import {
   Activity,
   Zap,
 } from 'lucide-react'
-import { CBPColors } from '../../styles/CBPDesignSystem'
+import { CBPColors, CBPTypography, CBPTabs } from '../../styles/CBPDesignSystem'
 import OverviewTab from './tabs/OverviewTab'
 import ModelRegistryTab from './tabs/ModelRegistryTab'
 import PerformanceTab from './tabs/PerformanceTab'
@@ -39,24 +39,20 @@ const RiskModelManagementV2: React.FC = () => {
     <div className="flex flex-col h-full bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b-2" style={{ borderColor: CBPColors.primary }}>
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <h1 className="text-3xl font-bold text-slate-900">Risk Model Management</h1>
+        <div className="max-w-7xl mx-auto px-6 py-3">
+          <h1 className={CBPTypography.pageTitle}>Risk Model Management</h1>
         </div>
       </div>
 
       {/* Horizontal Tabs */}
-      <div className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex overflow-x-auto">
+      <div className="bg-white">
+        <div className="max-w-7xl mx-auto px-2">
+          <div className={CBPTabs.bar}>
             {tabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
-                className={`flex items-center gap-2 px-4 py-4 text-sm font-medium whitespace-nowrap border-b-2 transition-all ${
-                  activeTabId === tab.id
-                    ? 'text-[#005EA2] border-[#005EA2]'
-                    : 'text-slate-600 hover:text-slate-900 border-transparent'
-                }`}
+                className={`${CBPTabs.button} ${activeTabId === tab.id ? CBPTabs.active : CBPTabs.inactive}`}
               >
                 <span className={activeTabId === tab.id ? 'text-[#005EA2]' : 'text-slate-400'}>
                   {tab.icon}
@@ -70,16 +66,9 @@ const RiskModelManagementV2: React.FC = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto bg-white">
-        <div className="max-w-7xl mx-auto px-6 py-6">
+        <div className="max-w-7xl mx-auto px-6 py-5">
           {activeTab && (
             <div>
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-[#005EA2]">{activeTab.icon}</span>
-                  <h2 className="text-2xl font-bold text-slate-900">{activeTab.label}</h2>
-                </div>
-              </div>
-
               {activeTabId === 'overview' && <OverviewTab />}
               {activeTabId === 'registry' && <ModelRegistryTab />}
               {activeTabId === 'performance' && <PerformanceTab />}
