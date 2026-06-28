@@ -5,7 +5,7 @@
  * Built on the shared UI kit for cross-tab consistency.
  */
 import React from 'react';
-import { Map as MapIcon, Search, Package, Gavel } from 'lucide-react';
+import { Map as MapIcon, Search, Package } from 'lucide-react';
 import TradeCorridorMap from './TradeCorridorMap';
 import { Panel, SectionHeader, StatusPill, ScoreBar, DataTable, Column } from '../../components/ui';
 
@@ -59,26 +59,9 @@ export default function CorridorTradeAnalysis({ corridor, shipments = [] }: Prop
     { id: 'prior_violation', name: 'Prior Carrier Violation', status: 'clear', severity_score: 8, details: 'No recent incidents' },
   ];
 
-  const totalDwell = stops.reduce((s, x) => s + (x.dwell_days || 0), 0);
-  const avgRisk = stops.length ? Math.round(stops.reduce((s, x) => s + (x.risk_score || 0), 0) / stops.length) : 0;
   const flagged = anomalies.filter(a => a.status === 'flagged');
-  const tier = avgRisk >= 80 ? 'CRITICAL' : avgRisk >= 60 ? 'HIGH' : avgRisk >= 40 ? 'MEDIUM' : 'LOW';
-  const tierKey = tier.toLowerCase();
   const cm = commodityRisk[0];
   const duties: any[] = corridor?.duties || [];
-
-  const recommendation = (() => {
-    if (tier === 'CRITICAL' || (tier === 'HIGH' && flagged.length >= 2)) return 'Refer for examination';
-    if (tier === 'HIGH' || flagged.length >= 1) return 'Enhanced screening';
-    if (tier === 'MEDIUM') return 'Targeted review';
-    return 'Routine processing';
-  })();
-
-  const rationale = [
-    `Corridor avg risk ${avgRisk}/100 (${tier}).`,
-    flagged.length ? `${flagged.length} anomaly check(s) flagged: ${flagged.map(f => f.name).join(', ')}.` : 'No anomaly checks flagged.',
-    totalDwell >= 5 ? `Elevated cumulative dwell (${totalDwell}d) consistent with consolidation/transshipment.` : '',
-  ].filter(Boolean).join(' ');
 
   const anomalyRows = [...anomalies].sort((a, b) => {
     const rank = (s: string) => (s === 'flagged' ? 0 : s === 'pending' ? 1 : 2);
@@ -168,16 +151,6 @@ export default function CorridorTradeAnalysis({ corridor, shipments = [] }: Prop
         </div>
       </Panel>
 
-      {/* 4. Assessment & Recommendation */}
-      <Panel className="border-l-4" >
-        <SectionHeader title="Assessment & Recommendation" icon={<Gavel className="w-4 h-4" />}
-          action={<StatusPill status={tierKey} />} />
-        <div className="flex items-center gap-3 mb-2">
-          <span className="text-[11px] font-bold uppercase tracking-wide text-[#5C5C5C]">Recommended action</span>
-          <span className="text-[13px] font-bold" style={{ color: riskColor(avgRisk) }}>{recommendation}</span>
-        </div>
-        <p className="text-[12px] text-[#0B1F33] leading-snug">{rationale}</p>
-      </Panel>
     </div>
   );
 }

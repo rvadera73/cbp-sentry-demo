@@ -30,8 +30,8 @@ export const SectionHeader: React.FC<{
   </div>
 )
 
-export const Panel: React.FC<{ children: React.ReactNode; className?: string; pad?: boolean }> = ({ children, className = '', pad = true }) => (
-  <section className={`bg-white border border-[#D0D7DE] rounded-sm ${pad ? 'p-4' : ''} ${className}`}>{children}</section>
+export const Panel: React.FC<{ children: React.ReactNode; className?: string; pad?: boolean; style?: React.CSSProperties }> = ({ children, className = '', pad = true, style }) => (
+  <section style={style} className={`bg-white border border-[#D0D7DE] rounded-sm ${pad ? 'p-4' : ''} ${className}`}>{children}</section>
 )
 
 /** Shared underline tab bar (matches the Active Investigation / Risk Model tabs). */
