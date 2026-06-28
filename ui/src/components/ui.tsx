@@ -93,6 +93,26 @@ export const StatStrip: React.FC<{
   </div>
 )
 
+/** Dense factor/dimension row — colored mono score + bar (matches the Active
+ * Investigation 7-factor risk breakdown). Use for risk dimensions, factors, etc. */
+export const ScoreBar: React.FC<{ label: string; sublabel?: string; score: number; max?: number; color?: string }> = ({ label, sublabel, score, max = 100, color }) => {
+  const c = color || (score >= 80 ? '#D83933' : score >= 60 ? '#C7791B' : score >= 40 ? '#B8860B' : '#15803D')
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
+      <div className="min-w-0">
+        <div className="text-[11px] font-bold text-[#0B1F33] truncate">{label}</div>
+        {sublabel && <div className="text-[10px] text-[#5C5C5C] truncate">{sublabel}</div>}
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="w-24 h-1.5 bg-slate-200 rounded-sm overflow-hidden">
+          <div className="h-full" style={{ width: `${Math.min((score / max) * 100, 100)}%`, background: c }} />
+        </div>
+        <span className="text-[13px] font-black font-mono w-9 text-right" style={{ color: c }}>{score}</span>
+      </div>
+    </div>
+  )
+}
+
 const PILL: Record<string, string> = {
   production: 'bg-green-100 text-green-800 border-green-300',
   candidate: 'bg-blue-100 text-blue-800 border-blue-300',
@@ -103,6 +123,9 @@ const PILL: Record<string, string> = {
   passed: 'bg-green-100 text-green-800 border-green-300',
   blocked: 'bg-amber-100 text-amber-900 border-amber-300',
   critical: 'bg-red-100 text-red-800 border-red-300',
+  high: 'bg-orange-100 text-orange-800 border-orange-300',
+  medium: 'bg-amber-100 text-amber-900 border-amber-300',
+  low: 'bg-green-100 text-green-800 border-green-300',
   warning: 'bg-amber-100 text-amber-900 border-amber-300',
   normal: 'bg-green-100 text-green-800 border-green-300',
   completed: 'bg-green-100 text-green-800 border-green-300',

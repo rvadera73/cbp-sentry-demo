@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { AlertTriangle, CheckCircle, Network, Globe, Shield, TrendingUp } from 'lucide-react';
-import { RadarChart, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer } from 'recharts';
 import EntityNetworkGraph from './EntityNetworkGraph';
 import EntityGeoMap from './EntityGeoMap';
-import { Tabs, Panel, SectionHeader, StatStrip, StatusPill, DataTable, Column } from '../../components/ui';
+import { Tabs, Panel, SectionHeader, StatStrip, StatusPill, DataTable, ScoreBar, Column } from '../../components/ui';
 
 type TabType = 'Network' | 'Geography' | 'Intelligence' | 'Risk Profile';
 
@@ -175,39 +174,37 @@ export default function V2EntityResolutionPanel() {
         )}
 
         {activeTab === 'Risk Profile' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <Panel>
-              <SectionHeader title="Multidimensional Risk Profile" subtitle="Risk score across six dimensions" icon={<TrendingUp className="w-4 h-4" />} />
-              <ResponsiveContainer width="100%" height={280}>
-                <RadarChart data={FIXTURE_RISK_DIMENSIONS}>
-                  <PolarAngleAxis dataKey="dimension" tick={{ fontSize: 11, fill: '#5C5C5C' }} />
-                  <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 9 }} />
-                  <Radar name="Risk Score" dataKey="score" stroke="#D83933" fill="#D83933" fillOpacity={0.25} />
-                </RadarChart>
-              </ResponsiveContainer>
+              <SectionHeader title="Risk Breakdown" subtitle="Score across six risk dimensions" icon={<TrendingUp className="w-4 h-4" />} />
+              <div>
+                {FIXTURE_RISK_DIMENSIONS.map(d => (
+                  <ScoreBar key={d.dimension} label={d.dimension} score={d.score} />
+                ))}
+              </div>
             </Panel>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid md:grid-cols-2 gap-3">
               <Panel>
                 <SectionHeader title="Top Concerns" icon={<AlertTriangle className="w-4 h-4" />} />
-                <div className="space-y-1.5">
+                <ul className="space-y-1">
                   {FIXTURE_CONCERNS.map((c, i) => (
-                    <div key={i} className="text-[11px] bg-red-50 text-[#D83933] px-2.5 py-1.5 rounded-sm border border-red-200 font-semibold">• {c}</div>
+                    <li key={i} className="flex gap-1.5 text-[11px] text-[#0B1F33]"><span className="text-[#D83933] font-bold">•</span><span>{c}</span></li>
                   ))}
-                </div>
+                </ul>
               </Panel>
               <Panel>
                 <SectionHeader title="Positive Factors" icon={<CheckCircle className="w-4 h-4" />} />
-                <div className="space-y-1.5">
+                <ul className="space-y-1">
                   {FIXTURE_POSITIVE_FACTORS.map((f, i) => (
-                    <div key={i} className="text-[11px] bg-green-50 text-green-800 px-2.5 py-1.5 rounded-sm border border-green-200 font-semibold">✓ {f}</div>
+                    <li key={i} className="flex gap-1.5 text-[11px] text-[#0B1F33]"><span className="text-green-700 font-bold">✓</span><span>{f}</span></li>
                   ))}
-                </div>
+                </ul>
               </Panel>
             </div>
-            <div className="bg-amber-50 border border-amber-200 rounded-sm p-3">
-              <div className="text-[11px] font-bold text-amber-900 uppercase tracking-wide mb-1">Analyst Recommendation</div>
-              <p className="text-[12px] text-amber-900">
-                Recommend <strong>Enhanced Screening</strong> for shipments involving these entities. Manual review required for any value &gt;$50K. Consider adding to watchlist for a 90-day monitoring period.
+            <div className="bg-amber-50 border-l-4 border-amber-400 rounded-sm px-3 py-2">
+              <div className="text-[10px] font-bold text-amber-900 uppercase tracking-wide mb-0.5">Analyst Recommendation</div>
+              <p className="text-[11px] text-amber-900">
+                Recommend <strong>Enhanced Screening</strong> for shipments involving these entities. Manual review required for value &gt;$50K; add to watchlist for a 90-day monitoring period.
               </p>
             </div>
           </div>

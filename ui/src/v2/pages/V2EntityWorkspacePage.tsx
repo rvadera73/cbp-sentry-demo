@@ -48,7 +48,7 @@ export default function V2EntityWorkspacePage({
         <div className="flex items-center justify-between">
           <button
             onClick={handleBack}
-            className="flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-100 rounded text-xs font-bold text-[#0076D6] transition-colors"
+            className="flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-100 rounded text-xs font-bold text-[#005EA2] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Watchlist</span>
@@ -99,7 +99,7 @@ export default function V2EntityWorkspacePage({
                     <button
                       key={idx}
                       onClick={() => handleViewRelated(entity.entity_id)}
-                      className="w-full text-left p-3 bg-slate-50 hover:bg-[#E3F2FD] rounded transition-colors border border-slate-200 hover:border-[#0076D6]"
+                      className="w-full text-left p-3 bg-slate-50 hover:bg-[#E3F2FD] rounded transition-colors border border-slate-200 hover:border-[#005EA2]"
                     >
                       <div className="flex items-start justify-between mb-1">
                         <span className="font-bold text-[#0B1F33] text-xs line-clamp-2">
@@ -119,13 +119,13 @@ export default function V2EntityWorkspacePage({
                         <span className="text-[8px] text-slate-600">
                           {entity.relationship}
                         </span>
-                        <span className="text-[8px] text-[#0076D6] font-bold">→ Open</span>
+                        <span className="text-[8px] text-[#005EA2] font-bold">→ Open</span>
                       </div>
                     </button>
                   ))}
 
                   {FIXTURE_RELATED_ENTITIES.length > 0 && (
-                    <button className="w-full mt-3 px-3 py-2 bg-[#0076D6] hover:bg-[#005EA2] text-white rounded text-xs font-bold transition-colors">
+                    <button className="w-full mt-3 px-3 py-2 bg-[#005EA2] hover:bg-[#005EA2] text-white rounded text-xs font-bold transition-colors">
                       View All Connected ({FIXTURE_RELATED_ENTITIES.length})
                     </button>
                   )}
@@ -143,7 +143,7 @@ export default function V2EntityWorkspacePage({
             <div>
               <span className="text-[9px] font-bold text-[#5C5C5C] uppercase">Confidence</span>
               <div className="w-full bg-slate-200 rounded-full h-2 mt-1">
-                <div className="bg-[#0076D6] h-2 rounded-full" style={{ width: '92%' }}></div>
+                <div className="bg-[#005EA2] h-2 rounded-full" style={{ width: '92%' }}></div>
               </div>
               <span className="text-[8px] text-slate-600 mt-1 block">92% match confidence</span>
             </div>
