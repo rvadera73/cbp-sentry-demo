@@ -1,8 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { Map as MapIcon } from 'lucide-react';
-import { Panel, SectionHeader, StatStrip } from '../../components/ui';
 
 interface TradeRoute {
   origin_country: string;
@@ -111,17 +109,11 @@ export default function TradeCorridorMap({ routes, height = 360 }: TradeCorridor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(routes)]);
 
-  const totalShipments = drawRoutes.reduce((s, x) => s + x.r.shipment_count, 0);
-  const avgRisk = drawRoutes.length ? Math.round(drawRoutes.reduce((s, x) => s + x.r.avg_risk_score, 0) / drawRoutes.length) : 0;
-  const totalAnomalies = drawRoutes.reduce((s, x) => s + x.r.anomaly_count, 0);
-
   return (
-    <Panel>
-      <SectionHeader title="Trade Corridor Map" subtitle="Origin → destination routing, weighted by risk & volume" icon={<MapIcon className="w-4 h-4" />} />
+    <div>
       <style>{`.corridor-label{background:#0B1F33;color:#fff;border:none;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;box-shadow:none}.corridor-label:before{display:none}`}</style>
       <div ref={mapContainer} style={{ height, borderRadius: 4 }} className="border border-[#D0D7DE] overflow-hidden" />
-
-      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-[10px]">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[10px]">
         {[['Critical ≥80', '#D83933'], ['High 60–79', '#C7791B'], ['Medium 40–59', '#B8860B'], ['Low <40', '#15803D']].map(([label, c]) => (
           <div key={label} className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full" style={{ background: c as string }} />
@@ -129,15 +121,6 @@ export default function TradeCorridorMap({ routes, height = 360 }: TradeCorridor
           </div>
         ))}
       </div>
-
-      <div className="mt-3">
-        <StatStrip items={[
-          { label: 'Corridors', value: drawRoutes.length },
-          { label: 'Total Shipments', value: totalShipments },
-          { label: 'Avg Risk', value: `${avgRisk}%`, color: riskColor(avgRisk) },
-          { label: 'Total Anomalies', value: totalAnomalies, color: '#D83933' },
-        ]} />
-      </div>
-    </Panel>
+    </div>
   );
 }

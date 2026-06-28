@@ -132,6 +132,9 @@ const PILL: Record<string, string> = {
   running: 'bg-blue-100 text-blue-800 border-blue-300',
   failed: 'bg-red-100 text-red-800 border-red-300',
   queued: 'bg-slate-100 text-slate-700 border-slate-300',
+  flagged: 'bg-red-100 text-red-800 border-red-300',
+  clear: 'bg-green-100 text-green-800 border-green-300',
+  pending: 'bg-amber-100 text-amber-900 border-amber-300',
 }
 
 export const StatusPill: React.FC<{ status: string }> = ({ status }) => {
