@@ -47,15 +47,17 @@ export const CBPColors = {
 export const CBPTypography = {
   // Page + content headers — aligned with the Investigation workspace
   pageTitle: 'text-xl font-bold text-[#0B1F33]',
-  metricValue: 'text-2xl font-bold text-[#0B1F33]',
+  // Numeric values render mono + heavy, matching the Investigation score style
+  metricValue: 'text-2xl font-black font-mono text-[#0B1F33]',
 
   // Section headers (with icon circles)
   sectionHeader: 'text-sm font-bold text-[#0B1F33]',
-  sectionSubtitle: 'text-[11px] text-slate-500',
+  sectionSubtitle: 'text-[11px] text-[#5C5C5C]',
 
   // Table headers
   tableHeader: 'text-[11px] font-semibold uppercase tracking-wide',
-  tableCaption: 'text-[10px] font-bold text-[#005EA2] uppercase tracking-wide',
+  // Stat/metric captions use navy (was CBP blue) to match Investigation labels
+  tableCaption: 'text-[10px] font-bold text-[#0B1F33] uppercase tracking-wide',
   tableBody: 'text-[11px]',
 
   // General text — body/small use the Investigation muted gray (#5C5C5C)
