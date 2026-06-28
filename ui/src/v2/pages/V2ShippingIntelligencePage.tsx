@@ -43,7 +43,7 @@ export default function V2ShippingIntelligencePage({
     }
   }, [corridors, selectedCorridorId]);
 
-  const [activeTab, setActiveTab] = useState<TabType>('pre-manifest');
+  const [activeTab, setActiveTab] = useState<TabType>('trade-analysis');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Search and filter state for Active Shipments tab
@@ -191,16 +191,16 @@ export default function V2ShippingIntelligencePage({
               corridors={corridors}
               onCorridorChange={(corridorId: string) => {
                 setSelectedCorridorId(corridorId);
-                setActiveTab('pre-manifest');
+                setActiveTab('trade-analysis');
               }}
             />
 
             {/* Tab Navigation */}
             <TabNavigation
               tabs={[
+                { id: 'trade-analysis', label: 'Trade Analysis', badge: '✨' },
                 { id: 'pre-manifest', label: `Pre-Manifest`, badge: vessels.length.toString() },
                 { id: 'active-shipments', label: 'Active Shipments', badge: corridorShipments.length.toString() },
-                { id: 'trade-analysis', label: 'Trade Analysis', badge: '✨' },
                 { id: 'compliance', label: 'Duties & Enforcement' }
               ]}
               activeTab={activeTab as string}
