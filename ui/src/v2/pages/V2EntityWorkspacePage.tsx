@@ -1,154 +1,108 @@
-import React, { useState } from 'react';
-import { ArrowLeft, AlertTriangle, Network, Scale, Briefcase, TrendingUp, MoreVertical } from 'lucide-react';
+/**
+ * Entity workspace — orchestrates the selected entity: resolves it from CORD,
+ * shows the summary on top (outside tabs), the intelligence panel (tabs), a
+ * Related & Similar sidebar, and the Assessment & Recommendation at the bottom
+ * (outside tabs) — mirroring the Shipment Intelligence layout.
+ */
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
-import { TYPOGRAPHY, DESIGN } from '../styles/typography';
+import EntitySummary from '../components/EntitySummary';
+import EntityAssessment from '../components/EntityAssessment';
+import { cordEntityDetail, cordSearch, EntityDetail, CordMatch } from '../services/cordApi';
 
-interface RelatedEntity {
-  entity_id: string;
-  entity_name: string;
-  risk_score: number;
-  relationship: string;
-}
-
-interface V2EntityWorkspacePageProps {
+interface Props {
   selectedEntityId?: string | null;
   setSelectedEntityId?: (id: string | null) => void;
   setActiveTab?: (tab: string) => void;
 }
 
-const FIXTURE_RELATED_ENTITIES: RelatedEntity[] = [
-  { entity_id: 'ENT-GF-HK-001', entity_name: 'Greenfield Global Metals Holdings Ltd.', risk_score: 58, relationship: 'Owner' },
-  { entity_id: 'ENT-GF-CN-001', entity_name: 'Guangdong Greenfield Aluminum Mfg.', risk_score: 52, relationship: 'Parent' },
-  { entity_id: 'ENT-PAN-PAC-001', entity_name: 'Pan-Pacific Logistics, Inc.', risk_score: 38, relationship: 'Freight Fwd' },
-  { entity_id: 'ENT-CTS-001', entity_name: 'China Trade Services', risk_score: 28, relationship: 'Registered Agent' },
-  { entity_id: 'ENT-SP-US-001', entity_name: 'SunPath Energy Distributors LLC', risk_score: 52, relationship: 'Consignee' },
-];
+const riskDot = (s: number) => (s >= 80 ? 'bg-[#D83933]' : s >= 60 ? 'bg-orange-600' : s >= 40 ? 'bg-amber-600' : 'bg-green-600');
 
-export default function V2EntityWorkspacePage({
-  selectedEntityId,
-  setSelectedEntityId,
-  setActiveTab,
-}: V2EntityWorkspacePageProps) {
-  const [showActionsMenu, setShowActionsMenu] = useState(false);
+export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEntityId, setActiveTab }: Props) {
+  const [detail, setDetail] = useState<EntityDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [similar, setSimilar] = useState<CordMatch[]>([]);
 
-  const handleBack = () => {
-    setSelectedEntityId?.(null);
-    setActiveTab?.('entities');
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!selectedEntityId) { setDetail(null); setSimilar([]); setLoading(false); return; }
+      setLoading(true);
+      const d = await cordEntityDetail(selectedEntityId);
+      if (cancelled) return;
+      setDetail(d);
+      setLoading(false);
+      // Related & Similar fallback: when CORD resolves no parties, surface
+      // name-network matches so the "view related" flow is always usable.
+      if (!d.parties?.length) {
+        const token = (d.entity?.name || '').split(/[\s,.]+/).find((w: string) => w.length >= 4) || '';
+        if (token) {
+          const matches = await cordSearch(token, 8);
+          if (!cancelled) setSimilar(matches.filter((m) => m.entity_id !== selectedEntityId).slice(0, 6));
+        } else if (!cancelled) setSimilar([]);
+      } else if (!cancelled) setSimilar([]);
+    })();
+    return () => { cancelled = true; };
+  }, [selectedEntityId]);
 
-  const handleViewRelated = (entityId: string) => {
-    setSelectedEntityId?.(entityId);
-    // Stay on entity-workspace, just reload with new entity
-  };
+  const openEntity = (id: string) => id && setSelectedEntityId?.(id);
+  const handleBack = () => { setSelectedEntityId?.(null); setActiveTab?.('entities'); };
+
+  const parties = detail?.parties || [];
+  const related = parties.length
+    ? parties.map((p: any) => ({ id: p.entity_id || p.id, name: p.name || p.entity_name || p.entity_id, sub: p.relationship || p.type || 'related', score: Math.round((p.confidence ?? 0.5) * 100), real: true }))
+    : similar.map((m) => ({ id: m.entity_id, name: m.name, sub: `${m.data_source || 'match'}${m.country ? ' · ' + m.country : ''}`, score: null as number | null, real: false }));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC]">
-      {/* Header with Back Button */}
-      <div className={`${DESIGN.bgWhite} border-b ${DESIGN.borderColor} px-6 py-4 shadow-sm`}>
-        <div className="flex items-center justify-between">
-          <button
-            onClick={handleBack}
-            className="flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-100 rounded text-xs font-bold text-[#005EA2] transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Back to Watchlist</span>
-          </button>
+      {/* Back bar */}
+      <div className="bg-white border-b border-[#D0D7DE] px-6 py-2">
+        <button onClick={handleBack} className="flex items-center gap-2 text-[12px] font-bold text-[#005EA2] hover:underline focus:outline-none focus:ring-2 focus:ring-[#005EA2] rounded px-1">
+          <ArrowLeft className="w-4 h-4" /> Back to Watchlist
+        </button>
+      </div>
 
-          <button
-            onClick={() => setShowActionsMenu(!showActionsMenu)}
-            className="relative p-2 hover:bg-slate-100 rounded transition-colors"
-            title="More actions"
-          >
-            <MoreVertical className="w-4 h-4 text-slate-600" />
+      {/* Entity summary — outside the tabs, changes with selection */}
+      <EntitySummary detail={detail} loading={loading} />
 
-            {showActionsMenu && (
-              <div className="absolute right-0 top-full mt-2 bg-white border border-[#D0D7DE] rounded-sm shadow-lg z-50 w-48">
-                <button className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-bold text-[#0B1F33]">
-                  Export Profile
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-bold text-[#0B1F33]">
-                  Add to Manual Review
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-slate-50 text-xs font-bold text-[#0B1F33]">
-                  Flag as False Positive
-                </button>
-              </div>
+      {/* Panel + Related sidebar */}
+      <div className="flex-1 flex overflow-hidden gap-4 p-4">
+        <div className="flex-1 bg-white rounded-sm border border-[#D0D7DE] overflow-hidden flex flex-col">
+          {loading && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Resolving entity…</div>}
+          {!loading && detail && <V2EntityResolutionPanel detail={detail} onOpenEntity={openEntity} />}
+          {!loading && !detail && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Select an entity from the watchlist.</div>}
+        </div>
+
+        <div className="w-72 bg-white rounded-sm border border-[#D0D7DE] flex flex-col overflow-hidden">
+          <div className="bg-[#F0F4F8] px-3 py-2.5 border-b border-[#D0D7DE]">
+            <h3 className="text-[11px] font-bold uppercase tracking-wide text-[#0B1F33]">
+              {parties.length ? 'Related Entities' : 'Related & Similar'} ({related.length})
+            </h3>
+          </div>
+          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            {related.length ? related.map((r, i) => (
+              <button key={i} onClick={() => openEntity(r.id)}
+                className="w-full text-left p-2 bg-slate-50 hover:bg-[#E3F2FD] border border-slate-200 hover:border-[#005EA2] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
+                <div className="flex items-start justify-between gap-1.5">
+                  <span className="text-[11px] font-bold text-[#0B1F33] line-clamp-2">{r.name}</span>
+                  {r.score != null && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded text-white shrink-0 ${riskDot(r.score)}`}>{r.score}</span>}
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[10px] text-[#5C5C5C] truncate">{r.sub}</span>
+                  <span className="text-[10px] text-[#005EA2] font-bold shrink-0">→ Open</span>
+                </div>
+              </button>
+            )) : (
+              <p className="text-[11px] text-[#5C5C5C] text-center py-8">No related or similar entities resolved.</p>
             )}
-          </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Content with Sidebar */}
-      <div className="flex-1 flex overflow-hidden gap-4 p-6">
-        {/* Main Panel (75%) - Entity Intelligence */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-white rounded-sm border border-[#D0D7DE] shadow-sm">
-          <V2EntityResolutionPanel />
-        </div>
-
-        {/* Right Sidebar (25%) - Related Entities */}
-        <div className="w-80 flex flex-col overflow-hidden bg-white rounded-sm border border-[#D0D7DE] shadow-sm">
-          <div className="bg-[#F0F4F8] p-3 border-b border-[#D0D7DE]">
-            <h3 className={`${TYPOGRAPHY.tableHeader}`}>RELATED ENTITIES</h3>
-          </div>
-
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-3 space-y-2">
-              {FIXTURE_RELATED_ENTITIES.length > 0 ? (
-                <>
-                  {FIXTURE_RELATED_ENTITIES.map((entity, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleViewRelated(entity.entity_id)}
-                      className="w-full text-left p-3 bg-slate-50 hover:bg-[#E3F2FD] rounded transition-colors border border-slate-200 hover:border-[#005EA2]"
-                    >
-                      <div className="flex items-start justify-between mb-1">
-                        <span className="font-bold text-[#0B1F33] text-xs line-clamp-2">
-                          {entity.entity_name}
-                        </span>
-                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded text-white shrink-0 ${
-                          entity.risk_score >= 50
-                            ? 'bg-orange-600'
-                            : entity.risk_score >= 30
-                            ? 'bg-amber-600'
-                            : 'bg-green-600'
-                        }`}>
-                          {entity.risk_score}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[8px] text-slate-600">
-                          {entity.relationship}
-                        </span>
-                        <span className="text-[8px] text-[#005EA2] font-bold">→ Open</span>
-                      </div>
-                    </button>
-                  ))}
-
-                  {FIXTURE_RELATED_ENTITIES.length > 0 && (
-                    <button className="w-full mt-3 px-3 py-2 bg-[#005EA2] hover:bg-[#005EA2] text-white rounded text-xs font-bold transition-colors">
-                      View All Connected ({FIXTURE_RELATED_ENTITIES.length})
-                    </button>
-                  )}
-                </>
-              ) : (
-                <div className={`text-center py-8 ${DESIGN.textGray}`}>
-                  <p className="text-xs">No related entities</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Sidebar Footer - Quick Info */}
-          <div className="border-t border-[#D0D7DE] p-3 bg-[#F7F9FC] space-y-2">
-            <div>
-              <span className="text-[9px] font-bold text-[#5C5C5C] uppercase">Confidence</span>
-              <div className="w-full bg-slate-200 rounded-full h-2 mt-1">
-                <div className="bg-[#005EA2] h-2 rounded-full" style={{ width: '92%' }}></div>
-              </div>
-              <span className="text-[8px] text-slate-600 mt-1 block">92% match confidence</span>
-            </div>
-          </div>
-        </div>
+      {/* Assessment & recommendation — outside the tabs, at the bottom */}
+      <div className="shrink-0 px-4 pb-4 pt-1 border-t border-[#D0D7DE] bg-[#F7F9FC]">
+        <EntityAssessment detail={detail} />
       </div>
     </div>
   );

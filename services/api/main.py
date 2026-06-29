@@ -3804,6 +3804,20 @@ async def cord_search(
         raise HTTPException(status_code=503, detail=f"CORD search failed: {str(e)}")
 
 
+@app.get("/api/cord/watchlist")
+async def cord_watchlist(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
+    """Default flagged/sanctioned Entity Resolution watchlist from the local CORD
+    index: CBP-DEMO high-risk supply-chain entities + OFAC SDN matches."""
+    try:
+        from cord_engine import get_cord_engine
+        cord = get_cord_engine()
+        items = cord.watchlist(limit=limit)
+        return {"status": "success", "count": len(items), "entities": items}
+    except Exception as e:
+        logger.error(f"CORD watchlist error: {e}")
+        raise HTTPException(status_code=503, detail=f"CORD watchlist failed: {str(e)}")
+
+
 @app.post("/api/cord/resolve")
 async def cord_resolve(
     shipper_name: str = Query(...),

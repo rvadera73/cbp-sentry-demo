@@ -301,6 +301,88 @@ class CORDEngine:
         finally:
             conn.close()
 
+    # Flagged data sources present in the CORD index, mapped to a watchlist flag.
+    WATCHLIST_SOURCES = [
+        ("OFAC", "sanctioned"),
+        ("OPEN-SANCTIONS", "sanctioned"),
+        ("US-LABOR-VIOLATIONS", "forced_labor"),
+        ("ICIJ", "offshore"),
+        ("NOMINO-RISK", "high_risk"),
+    ]
+
+    @staticmethod
+    def _name_from_raw(raw: Dict) -> str:
+        """Best-effort entity name from a raw CORD record across source schemas
+        (the index only special-cases GLEIF/OFAC for name_primary)."""
+        for key in ("NAMES", "NAME_LIST"):
+            arr = raw.get(key)
+            if isinstance(arr, list) and arr:
+                prim = next((n for n in arr if n.get("NAME_TYPE") == "PRIMARY"), None) or arr[0]
+                org = prim.get("NAME_ORG") or prim.get("NAME_FULL")
+                if org:
+                    return org
+                parts = [prim.get("PRIMARY_NAME_FIRST"), prim.get("PRIMARY_NAME_MIDDLE"), prim.get("PRIMARY_NAME_LAST")]
+                full = " ".join(p for p in parts if p).strip()
+                if full:
+                    return full
+        for key in ("PRIMARY_NAME_ORG", "LEGAL_NAME_ORG", "NAME", "name", "Title"):
+            v = raw.get(key)
+            if v:
+                return str(v)
+        return ""
+
+    @staticmethod
+    def _country_from_raw(raw: Dict) -> str:
+        c = raw.get("COUNTRIES")
+        if isinstance(c, list) and c:
+            c0 = c[0]
+            return c0.get("REGISTRATION_COUNTRY") or c0.get("COUNTRY") or c0.get("ADDR_COUNTRY") or ""
+        return raw.get("COUNTRY_CODE") or raw.get("BUSINESS_ADDR_STATE") or ""
+
+    def watchlist(self, limit: int = 50) -> List[Dict]:
+        """Default flagged/sanctioned Entity Resolution watchlist drawn from the
+        real flagged CORD sources (OFAC + OpenSanctions, US forced-labor, ICIJ
+        offshore leaks, risk data). Shown before any search."""
+        per = max(1, limit // len(self.WATCHLIST_SOURCES))
+        conn = sqlite3.connect(self.index_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        out: List[Dict] = []
+        try:
+            for src, flag in self.WATCHLIST_SOURCES:
+                cursor.execute(
+                    "SELECT record_id, data_source, name_primary, country, ofac_program, sanctions_topic, raw_json "
+                    "FROM cord_fts WHERE data_source = ? LIMIT ?",
+                    (src, per * 4),
+                )
+                kept = 0
+                for row in cursor.fetchall():
+                    if kept >= per:
+                        break
+                    name = row["name_primary"]
+                    country = row["country"]
+                    if not name or not country:
+                        try:
+                            raw = json.loads(row["raw_json"])
+                        except Exception:
+                            raw = {}
+                        name = name or self._name_from_raw(raw)
+                        country = country or self._country_from_raw(raw)
+                    if not name:
+                        continue
+                    out.append({
+                        "entity_id": f"{row['data_source']}:{row['record_id']}",
+                        "name": name,
+                        "country": (country or "").upper(),
+                        "data_source": row["data_source"],
+                        "flag": flag,
+                        "program": row["ofac_program"] or row["sanctions_topic"] or None,
+                    })
+                    kept += 1
+            return out[:limit]
+        finally:
+            conn.close()
+
     def build_senzing_subset(self, entities_to_search: List[Tuple[str, str]]) -> List[Dict]:
         """
         Build a subset of ~20 CORD records to load into Senzing SDK.
