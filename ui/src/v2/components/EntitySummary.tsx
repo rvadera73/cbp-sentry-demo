@@ -6,13 +6,16 @@ import { EntityDetail, entityRisk } from '../services/cordApi';
 
 const riskColor = (s: number) => (s >= 80 ? '#D83933' : s >= 60 ? '#C7791B' : s >= 40 ? '#B8860B' : '#15803D');
 
-export default function EntitySummary({ detail, loading }: { detail: EntityDetail | null; loading?: boolean }) {
+export default function EntitySummary({ detail, loading, scoreBreakdown }: { detail: EntityDetail | null; loading?: boolean; scoreBreakdown?: any | null }) {
   if (loading || !detail) {
     return <div className="bg-white border-b border-[#D0D7DE] px-6 py-3 text-[12px] text-[#5C5C5C]">Resolving entity from CORD…</div>;
   }
   const e = detail.entity || {};
   const name = e.name || 'Unknown entity';
-  const { score, tier } = entityRisk(detail);
+  // Prefer the real v4.0 backend score; fall back to the local heuristic.
+  const heur = entityRisk(detail);
+  const score = scoreBreakdown ? Math.round(scoreBreakdown.final_score) : heur.score;
+  const tier = scoreBreakdown ? String(scoreBreakdown.tier) : heur.tier;
   return (
     <div className="bg-white border-b border-[#D0D7DE] px-6 py-3">
       <div className="flex items-center justify-between mb-2 gap-3">

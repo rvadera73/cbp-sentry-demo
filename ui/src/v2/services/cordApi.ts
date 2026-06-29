@@ -69,6 +69,26 @@ export async function cordSearch(name: string, limit = 30): Promise<CordMatch[]>
   } catch { return []; }
 }
 
+/** Real v4.0 factor-attributed entity score (CT-1) from the backend scorer. */
+export async function cordEntityScore(entity: any): Promise<any | null> {
+  try {
+    const r = await fetch('/api/cord/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: entity?.name,
+        data_source: entity?.data_source,
+        country: entity?.country,
+        flag: entity?.flag,
+        raw_data: entity?.raw_data,
+      }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.score || null;
+  } catch { return null; }
+}
+
 /** Full detail for one entity: record + ownership chain + related parties. */
 export async function cordEntityDetail(entityId: string): Promise<EntityDetail> {
   const enc = encodeURIComponent(entityId);

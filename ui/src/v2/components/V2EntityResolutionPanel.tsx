@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Network, Globe, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
-import { Tabs, Panel, SectionHeader, StatusPill, DataTable, Column } from '../../components/ui';
+import { Tabs, Panel, SectionHeader, StatusPill, DataTable, ScoreBar, Column } from '../../components/ui';
 import { EntityDetail, entityRisk } from '../services/cordApi';
 
 type TabId = 'network' | 'geography' | 'intelligence' | 'risk';
@@ -16,14 +16,24 @@ const partyId = (r: any) => r.entity_id || r.id || r.related_entity_id || '';
 export default function V2EntityResolutionPanel({
   detail,
   onOpenEntity,
+  scoreBreakdown,
 }: {
   detail: EntityDetail;
   onOpenEntity?: (id: string) => void;
+  scoreBreakdown?: any | null;
 }) {
   const [tab, setTab] = useState<TabId>('intelligence');
   const e = detail.entity || {};
   const raw = e.raw_data || {};
-  const { score, tier, signals } = entityRisk(detail);
+  const heur = entityRisk(detail);
+  // Prefer the real v4.0 factor-attributed score; fall back to the heuristic.
+  const score = scoreBreakdown ? Math.round(scoreBreakdown.final_score) : heur.score;
+  const tier = scoreBreakdown ? String(scoreBreakdown.tier) : heur.tier;
+  const signals = heur.signals;
+  const realComponents: any[] = scoreBreakdown
+    ? (scoreBreakdown.components || []).filter((c: any) => (c.weighted_result || 0) > 0)
+        .sort((a: any, b: any) => (b.weighted_result || 0) - (a.weighted_result || 0))
+    : [];
 
   // Aliases (NAMES / NAME_LIST), addresses, sanctions program — defensively parsed.
   const nameObjs = raw.NAMES || raw.NAME_LIST || [];
@@ -126,8 +136,25 @@ export default function V2EntityResolutionPanel({
 
         {tab === 'risk' && (
           <Panel>
-            <SectionHeader title="Risk Signals" subtitle={`Resolved risk ${score}/100 (${tier})`} icon={<TrendingUp className="w-4 h-4" />} action={<StatusPill status={tier.toLowerCase()} />} />
-            {signals.length ? (
+            <SectionHeader
+              title="Risk Profile"
+              subtitle={`${scoreBreakdown ? 'v4.0 model score' : 'Resolved risk'} ${score}/100 (${tier})`}
+              icon={<TrendingUp className="w-4 h-4" />}
+              action={<StatusPill status={tier.toLowerCase()} />}
+            />
+            {realComponents.length ? (
+              <div>
+                {realComponents.map((c, i) => (
+                  <ScoreBar
+                    key={i}
+                    label={c.component}
+                    sublabel={`${c.factor} · weight ${Math.round(c.weight)}%`}
+                    score={Math.round((c.score || 0) * 10)}
+                  />
+                ))}
+                <p className="mt-2 text-[10px] text-[#5C5C5C]">Factor-attributed v4.0 entity score (provisional weights — pinned at calibration).</p>
+              </div>
+            ) : signals.length ? (
               <ul className="space-y-1.5">
                 {signals.map((s, i) => (
                   <li key={i} className="flex gap-1.5 text-[12px] text-[#0B1F33]">

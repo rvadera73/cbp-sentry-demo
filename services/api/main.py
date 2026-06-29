@@ -3818,6 +3818,43 @@ async def cord_watchlist(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]
         raise HTTPException(status_code=503, detail=f"CORD watchlist failed: {str(e)}")
 
 
+@app.post("/api/cord/score")
+async def cord_score(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Score a resolved entity (H2) on the v4.0 factor model.
+
+    Accepts a CORD-style entity dict ({name, data_source, country, raw_data, flag}).
+    Adds EAPA / UFLPA name-screening so a match surfaces even when the entity's own
+    data_source isn't the flag source (e.g. a GLEIF shipper that is a known EAPA
+    respondent), then returns the factor-attributed ScoreBreakdownV4 (CT-1).
+    Graph signals are flags-only for now (signals=None); the network half fills in
+    once edge precompute is wired (T-Graph B2/B3)."""
+    try:
+        from entity_scorer import score_entity
+        from cord_engine import get_cord_engine, EAPA_FLAG, UFLPA_FLAG
+
+        ent = dict(payload or {})
+        name = (ent.get("name") or "").strip()
+        eng = get_cord_engine()
+        eapa = bool(name) and eng.is_eapa_respondent(name)
+        uflpa = bool(name) and eng.is_uflpa_listed(name)
+        # Surface a screening hit as an enforcement flag when the entity's own
+        # data_source didn't already carry one.
+        if not ent.get("flag"):
+            if eapa:
+                ent["flag"] = EAPA_FLAG
+            elif uflpa:
+                ent["flag"] = UFLPA_FLAG
+        score = score_entity(ent)
+        return {
+            "status": "success",
+            "score": score.to_dict(),
+            "screened": {"eapa": eapa, "uflpa": uflpa},
+        }
+    except Exception as e:
+        logger.error(f"CORD score error: {e}")
+        raise HTTPException(status_code=503, detail=f"CORD score failed: {str(e)}")
+
+
 @app.post("/api/cord/resolve")
 async def cord_resolve(
     shipper_name: str = Query(...),

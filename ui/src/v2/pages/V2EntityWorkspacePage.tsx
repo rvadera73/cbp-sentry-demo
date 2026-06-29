@@ -9,7 +9,7 @@ import { ArrowLeft } from 'lucide-react';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import EntitySummary from '../components/EntitySummary';
 import EntityAssessment from '../components/EntityAssessment';
-import { cordEntityDetail, cordSearch, EntityDetail, CordMatch } from '../services/cordApi';
+import { cordEntityDetail, cordEntityScore, cordSearch, EntityDetail, CordMatch } from '../services/cordApi';
 
 interface Props {
   selectedEntityId?: string | null;
@@ -23,16 +23,20 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
   const [detail, setDetail] = useState<EntityDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [similar, setSimilar] = useState<CordMatch[]>([]);
+  const [scoreBreakdown, setScoreBreakdown] = useState<any | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!selectedEntityId) { setDetail(null); setSimilar([]); setLoading(false); return; }
+      if (!selectedEntityId) { setDetail(null); setSimilar([]); setScoreBreakdown(null); setLoading(false); return; }
       setLoading(true);
+      setScoreBreakdown(null);
       const d = await cordEntityDetail(selectedEntityId);
       if (cancelled) return;
       setDetail(d);
       setLoading(false);
+      // Real v4.0 factor-attributed score (non-blocking).
+      cordEntityScore(d.entity).then((s) => { if (!cancelled) setScoreBreakdown(s); });
       // Related & Similar fallback: when CORD resolves no parties, surface
       // name-network matches so the "view related" flow is always usable.
       if (!d.parties?.length) {
@@ -64,13 +68,13 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
       </div>
 
       {/* Entity summary — outside the tabs, changes with selection */}
-      <EntitySummary detail={detail} loading={loading} />
+      <EntitySummary detail={detail} loading={loading} scoreBreakdown={scoreBreakdown} />
 
       {/* Panel + Related sidebar */}
       <div className="flex-1 flex overflow-hidden gap-4 p-4">
         <div className="flex-1 bg-white rounded-sm border border-[#D0D7DE] overflow-hidden flex flex-col">
           {loading && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Resolving entity…</div>}
-          {!loading && detail && <V2EntityResolutionPanel detail={detail} onOpenEntity={openEntity} />}
+          {!loading && detail && <V2EntityResolutionPanel detail={detail} onOpenEntity={openEntity} scoreBreakdown={scoreBreakdown} />}
           {!loading && !detail && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Select an entity from the watchlist.</div>}
         </div>
 
@@ -102,7 +106,7 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
 
       {/* Assessment & recommendation — outside the tabs, at the bottom */}
       <div className="shrink-0 px-4 pb-4 pt-1 border-t border-[#D0D7DE] bg-[#F7F9FC]">
-        <EntityAssessment detail={detail} />
+        <EntityAssessment detail={detail} scoreBreakdown={scoreBreakdown} />
       </div>
     </div>
   );

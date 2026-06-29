@@ -7,9 +7,19 @@ import { EntityDetail, entityRisk } from '../services/cordApi';
 
 const riskColor = (s: number) => (s >= 80 ? '#D83933' : s >= 60 ? '#C7791B' : s >= 40 ? '#B8860B' : '#15803D');
 
-export default function EntityAssessment({ detail }: { detail: EntityDetail | null }) {
+export default function EntityAssessment({ detail, scoreBreakdown }: { detail: EntityDetail | null; scoreBreakdown?: any | null }) {
   if (!detail) return null;
-  const { score, tier, signals } = entityRisk(detail);
+  const heur = entityRisk(detail);
+  const score = scoreBreakdown ? Math.round(scoreBreakdown.final_score) : heur.score;
+  const tier = scoreBreakdown ? String(scoreBreakdown.tier) : heur.tier;
+  // Rationale from the real fired components when available, else heuristic signals.
+  const signals: string[] = scoreBreakdown
+    ? (scoreBreakdown.components || [])
+        .filter((c: any) => (c.weighted_result || 0) > 0)
+        .sort((a: any, b: any) => (b.weighted_result || 0) - (a.weighted_result || 0))
+        .slice(0, 4)
+        .map((c: any) => c.rationale || c.component)
+    : heur.signals;
   const recommendation =
     tier === 'CRITICAL' ? 'Block & refer for enforcement action'
       : tier === 'HIGH' ? 'Enhanced due diligence before clearance'
