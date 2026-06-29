@@ -2,7 +2,7 @@
 
 **Date:** June 29, 2026
 **Design source of truth:** [`../decisions/DECISION_MULTI_LEVEL_FACTOR_SCORING.md`](../decisions/DECISION_MULTI_LEVEL_FACTOR_SCORING.md) — this plan does **not** restate design; it executes it.
-**Status:** Phase 0 ready to execute now (no external blockers).
+**Status:** Ready to execute — contract-first parallel model (Step 0 freeze, then 5 concurrent role-tracks; only final calibration needs the full pipeline assembled).
 
 > **DOC DISCIPLINE (hard rule for every executor / subagent):** Do **not** create new design, architecture, or `*_SUMMARY` / `*_DESIGN` / `*_ANALYSIS` markdown files. All design lives in the decision record above; all execution status lives in **this** file (check the boxes). Subagents return findings to the orchestrator; the orchestrator updates this single plan. This repo already has doc sprawl (FIXES_SUMMARY, COMPLETE_REDESIGN, ALL_TABS_ARE_MOCK_DATA, …) — do not add to it.
 
@@ -63,41 +63,62 @@ Each workstream maps to one or more subagents. IDs are referenced by the phase/d
 
 ---
 
-## Phase / dependency map (execution order)
+## Execution model: contract-first parallel tracks
 
-| Phase | Tasks | Parallel? | Blockers |
+The only true serialization point is **freezing the contracts**. Once the interfaces below are fixed, the role-aligned tracks run **concurrently against stubs/fixtures**; integration is a *swap*, not a rebuild. (The current H2 UI already runs on fixtures — proof the pattern works.) This replaces the earlier coarse "phase gate" model: the dependency graph is really *contract → parallel build → late swap-in*, not a serial queue.
+
+### Step 0 — Contract freeze (short; nothing else is blocked once done)
+Lock the interfaces every track builds against:
+- **CT-1** `RiskScoreBreakdown` at entity + corridor level (reuse the shipment shape)
+- **CT-2** `entity_edges` schema (src, dst, edge_type, evidence, confidence)
+- **CT-3** CORD source schema for `CBP-EAPA` + `UFLPA-ENTITY-LIST` (entity, country, flag, docket/program, commodity, route)
+- **CT-4** graph-signal interface (reach/degree, centrality, shell indicators, resolved-vs-explicit delta)
+- **CT-5** score read + propagation API + provenance `(model_version, cord_resolution_version, inputs_hash, computed_at)`
+- **CT-6** referral evidence contract (entity factor block, network-evidence block)
+
+### Parallel tracks (run together after Step 0) — one per role group
+| Track | Tasks | Builds against (stub) | Primary roles |
 |---|---|---|---|
-| **0 — Foundations (NOW)** | A1, A2, A3, B1, **F0**, C1-scaffold | ✅ fully parallel | none |
-| **1 — Graph + Scores** | B2, B3, C1-full, C2, C3 | partial | B2/B3←B1; C1←A1/A2+B3; C2/C3←C1 |
-| **2 — Lifecycle** | C4, D1–D4 | partial | ←Phase 1 |
-| **3 — Experience (gated)** | E1–E4, F1–F6 | partial | ←C scores + A/B data |
+| **T-Data** | A1 EAPA expose · A2 UFLPA load · A3 identity-tag · score/edge tables | CT-2, CT-3 | DBA, data engineer |
+| **T-Graph** | B1 edges · B2 store · B3 signals | CT-2, CT-4 (stub edges until B1) | data scientist, backend eng |
+| **T-Score** | C1 entity · C2 corridor · C3 accounting | CT-1, CT-3, CT-4 (stub flags/signals) | data scientist, ML eng |
+| **T-MLOps** | C4 propagation · D1 registry bundle · D2 calibration harness · D3 gates/drift · D4 backfill | CT-5 (synthetic scores) | ML engineer |
+| **T-Experience** | F0 OFAC · E1–E4 H2 UI · F1–F6 referral | CT-1, CT-6 (fixture scores) | UX designer, frontend dev, architect |
 
----
+All five tracks proceed **in parallel**. File-collision is avoided by module boundaries (own files/dirs per track; worktree isolation for shared touch-points like `cord_engine.py` / `risk_scoring_engine.py`). Even *within* T-Score, the **enforcement-flag factors** (EAPA/OFAC/UFLPA) need only T-Data, while only the **network/shell/reach factors** need T-Graph — so C1 itself splits into two parallel halves.
 
-## Multi-subagent execution
+### Integration barriers (the only late syncs — swap + verify, not rebuild)
+- **I-1** real edges (B1) → T-Graph signals
+- **I-2** real flags + signals (T-Data, T-Graph) → T-Score
+- **I-3** real scores (T-Score) → T-MLOps + T-Experience (replace fixtures/synthetics)
+- **I-4** calibration on real scores + EAPA labels → real weights / **maturity-to-30% claim** — the one thing needing full end-to-end; everything before it parallelizes.
 
-**Phase 0 — launch now (5 parallel subagents, worktree isolation for code-mutating tasks):**
+So: **1 short freeze → 5 concurrent tracks → 4 late swap-in barriers.** Nothing but I-4 requires the whole pipeline assembled.
 
-| Subagent | Task | Files (primary) | Verify |
-|---|---|---|---|
-| `data-eapa` | A1 expose EAPA as CORD source | `services/api/cord_engine.py`, EAPA Postgres read | `/api/cord/entity` shows EAPA flag |
-| `data-uflpa` | A2 load UFLPA list + A3 tag identity-only | `cord_engine.py`, loader | watchlist shows UFLPA; NPI/GLOBALDATA excluded |
-| `graph-edges` | B1 edge materialization | `cord_engine.py`, new `entity_edges` | edges count > 0 from shared ids/addrs |
-| `referral-ofac` | F0 OFAC render quick win | `referral_comprehensive_v2.py`, `ReferralPackageV2.tsx` | OFAC status visible in referral §3-10 |
-| `score-scaffold` | C1 entity-scorer skeleton emitting `RiskScoreBreakdown` | `risk_scoring_engine.py` | unit test: entity score returns by_factor |
-
-Each subagent: scoped task, **typecheck/build/test verification**, returns a findings summary to the orchestrator. **No new docs.** Orchestrator integrates, checks the boxes here, commits.
-
-**Phases 1–3** are launched the same way after the prior phase's accept criteria pass (the orchestrator gates each phase).
+### Subagent fan-out
+One+ subagents per track, launched together after Step 0. Each: scoped to its module, **typecheck/build/test verification**, returns findings to the orchestrator. **No new docs.** Orchestrator owns the integration barriers (I-1…I-4), checks the boxes below, commits.
 
 ---
 
 ## Progress (orchestrator updates only)
 
-- [ ] **Phase 0** — A1 ☐ · A2 ☐ · A3 ☐ · B1 ☐ · F0 ☐ · C1-scaffold ☐
-- [ ] **Phase 1** — B2 ☐ · B3 ☐ · C1 ☐ · C2 ☐ · C3 ☐
-- [ ] **Phase 2** — C4 ☐ · D1 ☐ · D2 ☐ · D3 ☐ · D4 ☐
-- [ ] **Phase 3** — E1 ☐ · E2 ☐ · E3 ☐ · E4 ☐ · F1 ☐ · F2 ☐ · F3 ☐ · F4 ☐ · F5 ☐ · F6 ☐
+- [ ] **Step 0 — Contracts** — CT-1 ☐ · CT-2 ☐ · CT-3 ☐ · CT-4 ☐ · CT-5 ☐ · CT-6 ☐
+- [ ] **T-Data** — A1 ☐ · A2 ☐ · A3 ☐ · tables ☐
+- [ ] **T-Graph** — B1 ☐ · B2 ☐ · B3 ☐
+- [ ] **T-Score** — C1 ☐ · C2 ☐ · C3 ☐
+- [ ] **T-MLOps** — C4 ☐ · D1 ☐ · D2 ☐ · D3 ☐ · D4 ☐
+- [ ] **T-Experience** — F0 ☐ · E1 ☐ · E2 ☐ · E3 ☐ · E4 ☐ · F1 ☐ · F2 ☐ · F3 ☐ · F4 ☐ · F5 ☐ · F6 ☐
+- [ ] **Integration** — I-1 ☐ · I-2 ☐ · I-3 ☐ · I-4 (calibration/maturity) ☐
+
+---
+
+## Backlog / tech debt (tracked)
+
+- **DOC-1 — Documentation consolidation (HIGH).** v4.0 design/build content is fragmented across many files (this plan, `decisions/DECISION_MULTI_LEVEL_FACTOR_SCORING.md`, `design/PRECISE_RISK_MODEL_COMPLETE_DESIGN.md`, `design/ARCHITECTURE_CLARIFICATION.md`, `MODEL_LIFECYCLE_CLARIFICATION.md`, `ENTITY_GRAPH_DESIGN_ANALYSIS.md`, the referral UX docs, plus ~40 loose root-level `*_SUMMARY/_DESIGN/_ANALYSIS.md`). A reader must correlate across all of them.
+  - **Goal:** one role-organized v4.0 dossier a multi-disciplinary team can start from, with sections per role — **Architect** (system + graph substrate, service boundaries), **Data Scientist** (factors, calibration, labels, maturity), **Data Engineer / DBA** (sources, schemas, edges, migrations), **ML Engineer** (registry, gates, propagation), **Backend Dev** (scoring/graph APIs), **Frontend / UX** (H2 experience, referral) — over a single index with cross-refs, no duplication.
+  - **Scope:** audit existing docs → map content to roles → consolidate into the dossier → retire/redirect superseded root-level docs.
+  - **Accept:** each named role has one entry point; no design fact lives in two places.
+  - **Owner:** TBD. Until then, do **not** spawn new design docs — extend the dossier.
 
 ---
 
