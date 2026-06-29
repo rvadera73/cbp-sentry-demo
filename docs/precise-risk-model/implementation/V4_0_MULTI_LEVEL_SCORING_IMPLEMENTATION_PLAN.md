@@ -102,7 +102,7 @@ One+ subagents per track, launched together after Step 0. Each: scoped to its mo
 
 ## Progress (orchestrator updates only)
 
-- [ ] **Step 0 — Contracts** — CT-1 ☐ · CT-2 ☐ · CT-3 ☐ · CT-4 ☐ · CT-5 ☐ · CT-6 ☐
+- [x] **Step 0 — Contracts** — CT-1 ☑ · CT-2 ☑ · CT-3 ☑ · CT-4 ☑ · CT-5 ☑ · CT-6 ☑  *(services/api/v4_contracts.py, ui/src/v2/types/v4Contracts.ts)*
 - [ ] **T-Data** — A1 ☐ · A2 ☐ · A3 ☐ · tables ☐
 - [ ] **T-Graph** — B1 ☐ · B2 ☐ · B3 ☐
 - [ ] **T-Score** — C1 ☐ · C2 ☐ · C3 ☐
