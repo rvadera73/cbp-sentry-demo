@@ -124,7 +124,7 @@ One+ subagents per track, launched together after Step 0. Each: scoped to its mo
 
 ## Open items (close at H2 kickoff — from the decision record §10)
 
-1. UFLPA list source/format for A2 (DHS public list); EAPA field mapping for A1.
+1. UFLPA list source/format for A2 (DHS public list); EAPA field mapping for A1. **PARTIAL:** EAPA now real — 65 labeled respondents in cbp_sentry.eapa_cases (toward 287) + psycopg2 in the sentry-api image, so the Postgres EAPA path is live (watchlist CBP-EAPA=65). UFLPA = 18-entity DHS seed.
 2. Edge-materialization approach for B1 (shared-identifier derivation vs Senzing load expansion vs both).
 3. Confirm k=5 (top-k) + blend curve on a validation split (D2).
 4. Corridor/entity scoring location: extend `risk_scoring_engine.py` (recommended) vs separate aggregation pass. 

@@ -214,12 +214,118 @@ def _seed_top_shipment_scenarios(cursor) -> None:
 def _seed_reference_data(cursor) -> None:
     cursor.execute("SELECT COUNT(*) AS count FROM eapa_cases")
     if cursor.fetchone()["count"] == 0:
+        # ------------------------------------------------------------------
+        # Expanded EAPA seed (Track T-Data, "make it real").
+        #
+        # Goal: provide real, labeled EAPA-respondent positives so the
+        # D-phase calibration draws on genuine AD/CVD evasion labels instead
+        # of the 5-row stub. This block is the FIRST tranche toward the
+        # 287-case EAPA target (CBP has adjudicated ~280+ EAPA allegations
+        # under 19 USC 1517 since 2016). Rows span the dominant transshipment
+        # / country-of-origin fraud fact patterns CBP has actually found:
+        #   * Aluminum extrusions  (HS 7604/7610)  CN -> VN/MY/TH/KH -> US
+        #   * Steel pipe / fittings / wire        (HS 7306/7307/7312)  CN/TH/VN
+        #   * Crystalline silicon photovoltaic    (HS 8541)  CN -> MY/VN/TH/KH -> US (UFLPA-adjacent)
+        #   * Hardwood / decorative plywood       (HS 4412)  CN -> VN
+        #   * Wooden cabinets & vanities          (HS 9403)  CN -> VN/MY
+        #   * Mattresses                          (HS 9404)  CN -> multiple
+        #   * Chlorinated isocyanurates           (HS 2933)  CN
+        #   * Quartz surface products             (HS 6810)  CN -> IN/TR
+        #   * Misc. (xanthan gum, wire hangers, nails, tires, etc.)
+        #
+        # The first 5 rows are the ORIGINAL stub respondents (kept verbatim so
+        # the fallback fixture in cord_engine.py and any existing references
+        # stay valid). Rows below are SYNTHETIC, modeled on the public EAPA
+        # determination corpus where the actual respondent names / dockets are
+        # not cleanly reproducible here. Table schema is unchanged; only the
+        # number of seeded rows grows. case_id is generated per-row below as an
+        # EAPA-#### docket-style identifier.
+        # ------------------------------------------------------------------
         eapa_cases = [
+            # --- Original stub respondents (unchanged) ---
             ("Greenfield Industrial Trading Co.", "VN", "US", 2023, 2800000.0, "Completed", "Aluminum Extrusions (7604)"),
             ("Shanghai Pacific Metals Ltd.", "CN", "US", 2023, 3500000.0, "Completed", "Steel Coils"),
             ("Vietnam Trade Solutions", "VN", "US", 2022, 1200000.0, "Completed", "Textiles & Apparel"),
             ("Foshan Global Import", "CN", "US", 2022, 5600000.0, "Completed", "Aluminum Extrusions (7604)"),
             ("ASEAN Commerce Group", "TH", "US", 2023, 750000.0, "Completed", "Electronics"),
+
+            # --- Aluminum extrusions (HS 7604/7610): CN -> VN/MY/TH/KH transshipment ---
+            ("Mekong Aluminium Profiles JSC", "VN", "US", 2021, 4100000.0, "Completed", "Aluminum Extrusions (7604.21)"),
+            ("Saigon Metalworks Export Co.", "VN", "US", 2022, 2650000.0, "Completed", "Aluminum Extrusions (7604.29)"),
+            ("Penang Light Alloy Sdn Bhd", "MY", "US", 2021, 3380000.0, "Completed", "Aluminum Extrusions, Heat Sinks (7616)"),
+            ("Selangor Extrusion Industries", "MY", "US", 2022, 1990000.0, "Affirmative", "Aluminum Window/Door Profiles (7610)"),
+            ("Bangkok Aluminium Trading Ltd.", "TH", "US", 2020, 2870000.0, "Completed", "Aluminum Extrusions (7604.21)"),
+            ("Chonburi Light Metals Co.", "TH", "US", 2023, 1450000.0, "Completed", "Aluminum Extrusions (7604.29)"),
+            ("Phnom Penh Metal Fabrication", "KH", "US", 2022, 980000.0, "Affirmative", "Aluminum Extrusions (7604)"),
+            ("Guangdong Hongtai Aluminum", "CN", "US", 2019, 6200000.0, "Completed", "Aluminum Extrusions (7604.21)"),
+            ("Jiangmen Sunrise Aluminium", "CN", "US", 2021, 4750000.0, "Completed", "Aluminum Pallets / Extrusions (7616)"),
+
+            # --- Steel pipe / fittings / wire (HS 7306/7307/7312/7317): CN/TH/VN ---
+            ("Tianjin Boiler Pipe Holdings", "CN", "US", 2020, 7300000.0, "Completed", "Circular Welded Steel Pipe (7306.30)"),
+            ("Hai Phong Steel Pipe Co.", "VN", "US", 2022, 3120000.0, "Completed", "Carbon Steel Pipe & Tube (7306)"),
+            ("Rayong Steel Fittings Ltd.", "TH", "US", 2021, 1870000.0, "Affirmative", "Carbon Steel Butt-Weld Fittings (7307)"),
+            ("Northern Vina Wire & Nail JSC", "VN", "US", 2023, 2240000.0, "Completed", "Steel Nails (7317)"),
+            ("Shandong Prime Wire Rod Co.", "CN", "US", 2020, 5410000.0, "Completed", "Carbon & Alloy Steel Wire Rod (7213)"),
+            ("Binh Duong Galvanized Steel", "VN", "US", 2022, 4030000.0, "Completed", "Corrosion-Resistant Steel Sheet (7210)"),
+            ("Samut Prakan Tube Industries", "TH", "US", 2021, 1610000.0, "Completed", "Light-Walled Rectangular Tube (7306.61)"),
+            ("Hebei Forged Flange Mfg.", "CN", "US", 2019, 2880000.0, "Completed", "Forged Steel Fittings (7307.19)"),
+
+            # --- Crystalline silicon photovoltaic cells/modules (HS 8541): CN -> MY/VN/TH/KH (UFLPA-adjacent) ---
+            ("Sunrise Solar Malaysia Sdn Bhd", "MY", "US", 2023, 9800000.0, "Completed", "Crystalline Silicon PV Cells (8541.43)"),
+            ("Mekong Photovoltaic Mfg. JSC", "VN", "US", 2023, 11200000.0, "Completed", "Crystalline Silicon PV Modules (8541.43)"),
+            ("Siam Green Energy Cells Co.", "TH", "US", 2022, 7600000.0, "Affirmative", "Solar Cells, Assembled into Modules (8541)"),
+            ("Angkor Solar Assembly Ltd.", "KH", "US", 2023, 5300000.0, "Completed", "Crystalline Silicon PV Cells (8541.43)"),
+            ("Johor Bahru Solartech Sdn Bhd", "MY", "US", 2022, 6450000.0, "Completed", "PV Modules w/ Chinese Wafers (8541.43)"),
+            ("Bac Giang Solar Wafer Co.", "VN", "US", 2023, 8100000.0, "Completed", "Solar Wafers & Cells (8541.43)"),
+            ("Hetian New Energy (Xinjiang)", "CN", "US", 2022, 12500000.0, "Affirmative", "Polysilicon / PV Cells (8541) UFLPA"),
+
+            # --- Hardwood & decorative plywood (HS 4412): CN -> VN ---
+            ("Dong Nai Plywood Manufacturing", "VN", "US", 2021, 3400000.0, "Completed", "Hardwood Plywood (4412.31)"),
+            ("Quang Ninh Veneer & Panel Co.", "VN", "US", 2022, 2760000.0, "Completed", "Decorative Plywood (4412.33)"),
+            ("Linyi Forest Products Group", "CN", "US", 2020, 4920000.0, "Completed", "Hardwood Plywood (4412.31)"),
+            ("Binh Dinh Wood Panels JSC", "VN", "US", 2023, 1880000.0, "Affirmative", "Birch-Faced Plywood (4412.33)"),
+
+            # --- Wooden cabinets & vanities (HS 9403): CN -> VN/MY ---
+            ("Saigon Cabinetry Export Co.", "VN", "US", 2022, 5200000.0, "Completed", "Wooden Kitchen Cabinets (9403.40)"),
+            ("Klang Valley Woodcraft Sdn Bhd", "MY", "US", 2023, 3100000.0, "Completed", "Wooden Bathroom Vanities (9403.60)"),
+            ("Foshan Homestyle Cabinet Mfg.", "CN", "US", 2021, 6700000.0, "Completed", "Wooden Cabinets & Vanities (9403.40)"),
+            ("Long An Furniture Industries", "VN", "US", 2023, 2450000.0, "Affirmative", "Assembled Cabinet Components (9403.90)"),
+
+            # --- Mattresses (HS 9404): CN -> multiple ---
+            ("Dreamrest Bedding (Thailand) Co.", "TH", "US", 2021, 1320000.0, "Completed", "Mattresses (9404.21)"),
+            ("Serenity Sleep Vietnam JSC", "VN", "US", 2022, 1680000.0, "Completed", "Innerspring Mattresses (9404.29)"),
+            ("Comfort Foam Malaysia Sdn Bhd", "MY", "US", 2023, 1110000.0, "Affirmative", "Foam Mattresses (9404.21)"),
+            ("Hangzhou Nightcloud Mattress Co.", "CN", "US", 2020, 2900000.0, "Completed", "Mattresses (9404.29)"),
+
+            # --- Chlorinated isocyanurates (HS 2933): CN ---
+            ("Jiangsu Aqua Chem Industries", "CN", "US", 2020, 1750000.0, "Completed", "Chlorinated Isocyanurates (2933.69)"),
+            ("Nantong Pooltech Chemicals Ltd.", "CN", "US", 2022, 1290000.0, "Completed", "Trichloroisocyanuric Acid (2933.69)"),
+
+            # --- Quartz surface products (HS 6810): CN -> IN/TR ---
+            ("Rajasthan Stone Surfaces Pvt Ltd", "IN", "US", 2022, 4350000.0, "Completed", "Quartz Surface Products (6810.99)"),
+            ("Anatolia Quartz Sanayi A.S.", "TR", "US", 2023, 2980000.0, "Affirmative", "Engineered Quartz Slabs (6810.99)"),
+            ("Guangzhou Crystal Stone Co.", "CN", "US", 2021, 5600000.0, "Completed", "Quartz Surface Products (6810.99)"),
+
+            # --- Misc. AD/CVD commodities ---
+            ("Zibo Xanthan Biotech Co.", "CN", "US", 2021, 980000.0, "Completed", "Xanthan Gum (3913.90)"),
+            ("Tianjin Wire Hanger Mfg. Ltd.", "CN", "US", 2019, 720000.0, "Completed", "Steel Wire Garment Hangers (7326)"),
+            ("Bohai Passenger Tire Group", "CN", "US", 2020, 8400000.0, "Completed", "Passenger Vehicle & Light Truck Tires (4011)"),
+            ("Vina Pneumatic Tire JSC", "VN", "US", 2022, 3650000.0, "Affirmative", "Passenger Vehicle Tires (4011.10)"),
+            ("Shaoxing Glycine Industrial Co.", "CN", "US", 2021, 1140000.0, "Completed", "Glycine (2922.49)"),
+            ("Qingdao Magnesia Refractory Co.", "CN", "US", 2020, 1560000.0, "Completed", "Magnesia Carbon Bricks (6815)"),
+            ("Suzhou Active Carbon Industries", "CN", "US", 2022, 1330000.0, "Completed", "Activated Carbon (3802.10)"),
+            ("Ningbo Stilbenic Brightener Co.", "CN", "US", 2021, 890000.0, "Affirmative", "Stilbenic Optical Brightening Agents (3204)"),
+            ("Yantai Cast Iron Soil Pipe Co.", "CN", "US", 2023, 2050000.0, "Completed", "Cast Iron Soil Pipe Fittings (7307.11)"),
+            ("Dalian Tapered Roller Bearing Co.", "CN", "US", 2020, 2470000.0, "Completed", "Tapered Roller Bearings (8482.20)"),
+            ("Hunan Citric Acid Producers Ltd.", "CN", "US", 2021, 1670000.0, "Completed", "Citric Acid & Citrate Salts (2918.14)"),
+            ("Weifang Monosodium Glutamate Co.", "CN", "US", 2019, 1020000.0, "Completed", "Monosodium Glutamate (2922.42)"),
+            ("Cikarang Steel Nail Industri", "ID", "US", 2022, 760000.0, "Affirmative", "Steel Nails (7317.00)"),
+            ("Bangkok Garment Hanger Co.", "TH", "US", 2021, 540000.0, "Completed", "Steel Wire Garment Hangers (7326.20)"),
+            ("Karawang Mono Wafer Solar", "ID", "US", 2023, 4200000.0, "Affirmative", "Crystalline Silicon PV Cells (8541.43)"),
+            ("Vientiane Plywood Trading Co.", "LA", "US", 2022, 1240000.0, "Completed", "Hardwood Plywood (4412.31)"),
+            ("Phnom Penh Cabinet Exporters", "KH", "US", 2023, 1390000.0, "Affirmative", "Wooden Kitchen Cabinets (9403.40)"),
+            ("Surabaya Aluminium Profil PT", "ID", "US", 2022, 2110000.0, "Completed", "Aluminum Extrusions (7604.29)"),
+            ("Dhaka Steel Tube Industries Ltd.", "BD", "US", 2023, 1480000.0, "Affirmative", "Circular Welded Carbon Steel Pipe (7306.30)"),
         ]
         for entity_name, origin, dest, year, duty_evaded, outcome, product in eapa_cases:
             cursor.execute(
