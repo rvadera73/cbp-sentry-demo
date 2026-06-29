@@ -409,6 +409,19 @@ Deployment:
 
 ---
 
+## DECISION 7: MULTI-LEVEL FACTOR SCORING OVER A RESOLVED-ENTITY GRAPH (v4.0)
+
+**Status: Provisional** — scoring synthesis + lifecycle decided; aggregation/apportionment locked; data-readiness items open. Full record: `decisions/DECISION_MULTI_LEVEL_FACTOR_SCORING.md`.
+
+- Corridor (H1) and Entity (H2) each get their own `RiskScoreBreakdown` from the **same 7-factor recipe** as the shipment scorer; the factor breakdown is the inter-horizon navigation (party-risk → H2, time/incoming → H3).
+- **One resolved-entity graph** underneath: contributions = edge weights, horizon scores = node aggregates (prevents cross-corridor double-counting).
+- **Locked:** aggregation = **top-k blend** (k≈5); apportionment = **by shipment count**.
+- **Registry:** v4.0 = a **single bundled version** (factor weights + calibrators + XGBoost + locked params + **CORD resolution snapshot** + feature-pipeline version). Same train→register→gate→promote lifecycle.
+- **Data-readiness gate (OPEN, blocks H2):** onboard **CBP-EAPA** and **UFLPA Entity List** (both absent from CORD); materialize relationship→edges; exclude NPI/GLOBALDATA from scoring.
+- **Referral package = primary consumer** of the H2 score (renders factor-attributed entity risk, OFAC, EAPA anchor, network); same v4.0 program.
+
+---
+
 ## Questions for Clarification
 
 **Before we finalize, confirm:**
@@ -419,6 +432,7 @@ Deployment:
 4. ✅ **Configuration-driven** (no hardcoding)?
 5. ✅ **Multi-tenant ready, single-tenant deployed** (tenant_id column, but tenant_id=1)?
 6. ✅ **V2AITuningPage calls microservice APIs** (not embedded logic)?
+7. 🔶 **v4.0 multi-level factor scoring** (single bundled version; EAPA/UFLPA onboarding gate before H2) — see DECISION 7.
 
 **If all approved**, next step: Rewrite PRECISE_RISK_MODEL_COMPLETE_DESIGN.md with these decisions baked in.
 

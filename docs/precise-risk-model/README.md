@@ -17,11 +17,13 @@ docs/precise-risk-model/
 │
 ├── implementation/
 │  ├── PRECISE_RISK_MODEL_IMPLEMENTATION_PLAN.md (30 pages, 16-week roadmap)
-│  └── PRECISE_RISK_MODEL_EXECUTIVE_SUMMARY.md (20 pages, approval checklist)
+│  ├── PRECISE_RISK_MODEL_EXECUTIVE_SUMMARY.md (20 pages, approval checklist)
+│  └── V4_0_MULTI_LEVEL_SCORING_IMPLEMENTATION_PLAN.md (multi-subagent executable plan for DECISION 7) ← NEW
 │
 └── decisions/
    ├── DECISION_FRAMEWORK_WITH_ALTERNATIVES.md (6 decisions with alternatives)
-   └── BUILD_VS_BUY_DECISION.md (platform evaluation)
+   ├── BUILD_VS_BUY_DECISION.md (platform evaluation)
+   └── DECISION_MULTI_LEVEL_FACTOR_SCORING.md (v4.0: 3-level factor scoring over a resolved-entity graph; MLOps lifecycle; EAPA/UFLPA data gate; referral consumer) ← NEW
 ```
 
 ---
@@ -106,4 +108,4 @@ All documents are:
 ---
 
 **Status**: Ready for stakeholder review and team kickoff.  
-**Last Updated**: June 12, 2026
+**Last Updated**: June 29, 2026 — added DECISION 7 / `DECISION_MULTI_LEVEL_FACTOR_SCORING.md` (v4.0 multi-level factor scoring; data-readiness gate for H2).
