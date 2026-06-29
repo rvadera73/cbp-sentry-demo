@@ -3855,6 +3855,41 @@ async def cord_score(payload: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=503, detail=f"CORD score failed: {str(e)}")
 
 
+@app.post("/api/cord/corridor/score")
+async def cord_corridor_score(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Score a corridor (H1) on the v4.0 factor model.
+
+    Accepts {corridor: {id/display_name/route, applicable_duties, commodity_name,
+    corridor_risk_score, anomaly_rate, incoming_count}, parties: [{name,
+    data_source?, country?, flag?, shipment_count?}]}. Each party is scored as an
+    entity (with EAPA/UFLPA name-screening), apportioned by shipment_count, and
+    blended (top-k) into the corridor Party factor — the H1<->H2 bridge."""
+    try:
+        from entity_scorer import score_entity
+        from corridor_scorer import score_corridor
+        from cord_engine import get_cord_engine, EAPA_FLAG, UFLPA_FLAG
+
+        corridor = (payload or {}).get("corridor") or {}
+        parties = (payload or {}).get("parties") or []
+        eng = get_cord_engine()
+        actor_scores = []
+        for p in parties:
+            ent = dict(p)
+            name = (ent.get("name") or "").strip()
+            if name and not ent.get("flag"):
+                if eng.is_eapa_respondent(name):
+                    ent["flag"] = EAPA_FLAG
+                elif eng.is_uflpa_listed(name):
+                    ent["flag"] = UFLPA_FLAG
+            esc = score_entity(ent)
+            actor_scores.append((name or esc.subject_id, float(esc.final_score), int(p.get("shipment_count") or 1)))
+        score = score_corridor(corridor, actor_scores)
+        return {"status": "success", "score": score.to_dict(), "actors_scored": len(actor_scores)}
+    except Exception as e:
+        logger.error(f"CORD corridor score error: {e}")
+        raise HTTPException(status_code=503, detail=f"CORD corridor score failed: {str(e)}")
+
+
 @app.post("/api/cord/resolve")
 async def cord_resolve(
     shipper_name: str = Query(...),
