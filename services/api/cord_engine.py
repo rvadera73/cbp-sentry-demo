@@ -1,4 +1,15 @@
-"""CORD FTS Index Engine — Search 244K entities efficiently without eval limits."""
+"""CORD FTS Index Engine — Search 244K entities efficiently without eval limits.
+
+Track T-Data extensions (A1/A2/A3) live in THIS file only:
+  * A1 — EAPA respondents (Postgres ``cbp_sentry.eapa_cases``) surfaced as the
+    CORD source ``CBP-EAPA`` (CT-3 ``CordFlagRecord`` shape), with
+    ``is_eapa_respondent()`` and flow into ``watchlist()``.
+  * A2 — DHS UFLPA Entity List seed loaded from
+    ``data/uflpa_entity_list.jsonl`` as source ``UFLPA-ENTITY-LIST``, with
+    ``is_uflpa_listed()`` and flow into ``watchlist()``.
+  * A3 — ``NPI-PROVIDERS`` / ``GLOBALDATA`` are identity-resolution mass only;
+    excluded from ``watchlist()`` and any scoring path. ``is_identity_only()``.
+"""
 
 import sqlite3
 import json
@@ -8,6 +19,39 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+# --- T-Data: frozen contract values (CT-3). Import defensively so the engine
+# still loads if the contract module is not on the path in some tooling. -------
+try:
+    from v4_contracts import (
+        EAPA_SOURCE,
+        UFLPA_SOURCE,
+        IDENTITY_ONLY_SOURCES,
+        CordFlagRecord,
+    )
+except Exception:  # pragma: no cover - keep the engine importable in isolation
+    EAPA_SOURCE = "CBP-EAPA"
+    UFLPA_SOURCE = "UFLPA-ENTITY-LIST"
+    IDENTITY_ONLY_SOURCES = ("NPI-PROVIDERS", "GLOBALDATA")
+    CordFlagRecord = None  # type: ignore
+
+# A1 flag value entity_scorer keys on (data_source==CBP-EAPA OR FLAG==this).
+EAPA_FLAG = "eapa_respondent"
+# A2 flag value entity_scorer keys on (data_source==UFLPA-ENTITY-LIST OR FLAG==this).
+UFLPA_FLAG = "uflpa_listed"
+
+# A1 fallback fixture — mirrors the rows seeded into ``cbp_sentry.eapa_cases``
+# (services/data/db.py ``_seed_reference_data``). Used ONLY when the Postgres
+# ``cbp_sentry.eapa_cases`` table is unreachable from this process (e.g. the
+# sentry-api container ships without psycopg2). Tuple shape mirrors the table:
+# (entity_name, origin_country, destination_country, case_id, product_description).
+_EAPA_FALLBACK_RESPONDENTS = [
+    ("Greenfield Industrial Trading Co.", "VN", "US", "EAPA-a4d8bf20", "Aluminum Extrusions (7604)"),
+    ("Shanghai Pacific Metals Ltd.", "CN", "US", "EAPA-09af72ea", "Steel Coils"),
+    ("Vietnam Trade Solutions", "VN", "US", "EAPA-a10f8f70", "Textiles & Apparel"),
+    ("Foshan Global Import", "CN", "US", "EAPA-3aaeea32", "Aluminum Extrusions (7604)"),
+    ("ASEAN Commerce Group", "TH", "US", "EAPA-37773c1c", "Electronics"),
+]
 
 
 class CORDEngine:
@@ -28,6 +72,183 @@ class CORDEngine:
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
 
         self._ensure_index_exists()
+
+        # --- T-Data flag sources (loaded into memory, flowed into watchlist) ---
+        # A1: EAPA respondents (CBP-EAPA). A2: UFLPA Entity List (UFLPA-ENTITY-LIST).
+        self._eapa_records: List[Dict] = self._load_eapa_respondents()
+        self._eapa_names: set = {
+            (r.get("PRIMARY_NAME_ORG") or "").strip().lower()
+            for r in self._eapa_records if r.get("PRIMARY_NAME_ORG")
+        }
+        self._uflpa_records: List[Dict] = self._load_uflpa_entities()
+        self._uflpa_names: set = {
+            (r.get("PRIMARY_NAME_ORG") or "").strip().lower()
+            for r in self._uflpa_records if r.get("PRIMARY_NAME_ORG")
+        }
+        logger.info(
+            "T-Data flag sources loaded: %d CBP-EAPA respondents, %d UFLPA-ENTITY-LIST entries",
+            len(self._eapa_records), len(self._uflpa_records),
+        )
+
+    # ----------------------------------------------------------------------
+    # A1 — EAPA respondents as CORD source CBP-EAPA
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def _flag_record(data_source: str, record_id: str, name: str, flag: str,
+                     country: str = "", docket: str = "", commodity: str = "",
+                     route: str = "") -> Dict:
+        """Build a CT-3 CordFlagRecord-shaped dict (uses the frozen contract
+        dataclass when importable, else an equivalent literal)."""
+        if CordFlagRecord is not None:
+            return CordFlagRecord(
+                DATA_SOURCE=data_source, RECORD_ID=record_id,
+                PRIMARY_NAME_ORG=name, COUNTRY=country, FLAG=flag,
+                DOCKET=docket, COMMODITY=commodity, ROUTE=route,
+            ).to_record()
+        return {
+            "DATA_SOURCE": data_source, "RECORD_ID": record_id,
+            "RECORD_TYPE": "ORGANIZATION", "PRIMARY_NAME_ORG": name,
+            "COUNTRY": country, "FLAG": flag, "DOCKET": docket,
+            "COMMODITY": commodity, "ROUTE": route,
+        }
+
+    def _eapa_rows(self) -> List[Tuple]:
+        """Fetch EAPA respondents from Postgres ``cbp_sentry.eapa_cases``.
+
+        Returns rows of (entity_name, origin_country, destination_country,
+        case_id, product_description). Falls back to the embedded fixture if
+        psycopg2 is unavailable or the DB/table is unreachable (the sentry-api
+        runtime ships without psycopg2, so the fixture is the live path there)."""
+        try:
+            import psycopg2  # noqa: WPS433 — optional dependency, DB-only path
+            dsn = os.environ.get(
+                "DATABASE_URL", "postgresql://sentry:sentry-secret@sentry-db:5432/sentry"
+            )
+            conn = psycopg2.connect(dsn, options="-c search_path=cbp_sentry")
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT entity_name, origin_country, destination_country, "
+                    "case_id, product_description FROM eapa_cases "
+                    "WHERE entity_name IS NOT NULL"
+                )
+                rows = cur.fetchall()
+                cur.close()
+                if rows:
+                    logger.info("Loaded %d EAPA respondents from cbp_sentry.eapa_cases", len(rows))
+                    return list(rows)
+                logger.warning("cbp_sentry.eapa_cases empty; using EAPA fixture")
+            finally:
+                conn.close()
+        except Exception as exc:  # psycopg2 missing or DB unreachable
+            logger.warning("EAPA Postgres load unavailable (%s); using EAPA fixture", exc)
+        return list(_EAPA_FALLBACK_RESPONDENTS)
+
+    def _load_eapa_respondents(self) -> List[Dict]:
+        """A1: build CordFlagRecord-shaped CBP-EAPA records from EAPA rows."""
+        out: List[Dict] = []
+        for (name, origin, dest, case_id, product) in self._eapa_rows():
+            if not name:
+                continue
+            origin = (origin or "").strip()
+            dest = (dest or "").strip()
+            route = f"{origin}->{dest}" if origin and dest else (origin or dest or "")
+            out.append(self._flag_record(
+                data_source=EAPA_SOURCE,
+                record_id=str(case_id or name),
+                name=str(name).strip(),
+                flag=EAPA_FLAG,
+                country=origin,
+                docket=str(case_id or ""),
+                commodity=str(product or ""),
+                route=route,
+            ))
+        return out
+
+    def is_eapa_respondent(self, name: str) -> bool:
+        """A1: True iff ``name`` is a confirmed CBP-EAPA respondent (case-insensitive)."""
+        if not name:
+            return False
+        return name.strip().lower() in self._eapa_names
+
+    def eapa_records(self) -> List[Dict]:
+        """A1: all CBP-EAPA CordFlagRecord-shaped records."""
+        return list(self._eapa_records)
+
+    # ----------------------------------------------------------------------
+    # A2 — DHS UFLPA Entity List as CORD source UFLPA-ENTITY-LIST
+    # ----------------------------------------------------------------------
+    def _uflpa_seed_path(self) -> Optional[Path]:
+        """Locate the UFLPA seed JSONL (env override, then alongside this module,
+        then the container /app/data path)."""
+        candidates = [
+            os.getenv("UFLPA_ENTITY_LIST_PATH"),
+            str(Path(__file__).with_name("data") / "uflpa_entity_list.jsonl"),
+            "/app/data/uflpa_entity_list.jsonl",
+        ]
+        for c in candidates:
+            if c and os.path.exists(c):
+                return Path(c)
+        return None
+
+    def _load_uflpa_entities(self) -> List[Dict]:
+        """A2: build CordFlagRecord-shaped UFLPA-ENTITY-LIST records from the
+        seed JSONL. Lines starting with ``//`` (or ``#``) and blank lines are
+        ignored so the file can carry provenance comments."""
+        path = self._uflpa_seed_path()
+        if not path:
+            logger.warning("UFLPA seed file not found; UFLPA-ENTITY-LIST will be empty")
+            return []
+        out: List[Dict] = []
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    s = line.strip()
+                    if not s or s.startswith("//") or s.startswith("#"):
+                        continue
+                    try:
+                        rec = json.loads(s)
+                    except json.JSONDecodeError:
+                        logger.warning("Skipped malformed UFLPA seed line in %s", path.name)
+                        continue
+                    name = (rec.get("PRIMARY_NAME_ORG") or rec.get("name") or "").strip()
+                    if not name:
+                        continue
+                    out.append(self._flag_record(
+                        data_source=UFLPA_SOURCE,
+                        record_id=str(rec.get("RECORD_ID") or name),
+                        name=name,
+                        flag=UFLPA_FLAG,
+                        country=str(rec.get("COUNTRY") or "").strip(),
+                        docket=str(rec.get("DOCKET") or ""),
+                        commodity=str(rec.get("COMMODITY") or ""),
+                        route=str(rec.get("ROUTE") or ""),
+                    ))
+            logger.info("Loaded %d UFLPA-ENTITY-LIST entries from %s", len(out), path.name)
+        except Exception as exc:
+            logger.error("Error loading UFLPA seed %s: %s", path, exc)
+        return out
+
+    def is_uflpa_listed(self, name: str) -> bool:
+        """A2: True iff ``name`` is on the DHS UFLPA Entity List (case-insensitive)."""
+        if not name:
+            return False
+        return name.strip().lower() in self._uflpa_names
+
+    def uflpa_records(self) -> List[Dict]:
+        """A2: all UFLPA-ENTITY-LIST CordFlagRecord-shaped records."""
+        return list(self._uflpa_records)
+
+    # ----------------------------------------------------------------------
+    # A3 — NPI-PROVIDERS / GLOBALDATA are identity-resolution mass only
+    # ----------------------------------------------------------------------
+    @staticmethod
+    def is_identity_only(source: str) -> bool:
+        """A3: True iff ``source`` is identity-resolution mass only
+        (IDENTITY_ONLY_SOURCES) and must be excluded from watchlist + scoring."""
+        return (source or "").strip().upper() in {
+            s.upper() for s in IDENTITY_ONLY_SOURCES
+        }
 
     def _ensure_index_exists(self) -> None:
         """Create FTS5 index if it doesn't exist."""
@@ -339,17 +560,50 @@ class CORDEngine:
             return c0.get("REGISTRATION_COUNTRY") or c0.get("COUNTRY") or c0.get("ADDR_COUNTRY") or ""
         return raw.get("COUNTRY_CODE") or raw.get("BUSINESS_ADDR_STATE") or ""
 
+    def _flag_record_to_watchlist(self, rec: Dict, flag: str) -> Dict:
+        """Project a CT-3 CordFlagRecord dict onto the watchlist row shape."""
+        program = " / ".join(p for p in (rec.get("DOCKET"), rec.get("COMMODITY")) if p) or None
+        return {
+            "entity_id": f"{rec['DATA_SOURCE']}:{rec['RECORD_ID']}",
+            "name": rec["PRIMARY_NAME_ORG"],
+            "country": (rec.get("COUNTRY") or "").upper(),
+            "data_source": rec["DATA_SOURCE"],
+            "flag": flag,
+            "program": program,
+            "route": rec.get("ROUTE") or None,
+        }
+
     def watchlist(self, limit: int = 50) -> List[Dict]:
         """Default flagged/sanctioned Entity Resolution watchlist drawn from the
         real flagged CORD sources (OFAC + OpenSanctions, US forced-labor, ICIJ
-        offshore leaks, risk data). Shown before any search."""
-        per = max(1, limit // len(self.WATCHLIST_SOURCES))
+        offshore leaks, risk data) PLUS the T-Data flag sources CBP-EAPA (A1)
+        and UFLPA-ENTITY-LIST (A2). Identity-only sources (A3, NPI-PROVIDERS /
+        GLOBALDATA) are always excluded. Shown before any search."""
+        out: List[Dict] = []
+
+        # A1/A2: T-Data flag sources first (in-memory CordFlagRecords).
+        for rec in self._eapa_records:
+            out.append(self._flag_record_to_watchlist(rec, EAPA_FLAG))
+        for rec in self._uflpa_records:
+            out.append(self._flag_record_to_watchlist(rec, UFLPA_FLAG))
+
+        # Remaining budget for the FTS-indexed flagged sources.
+        # A3: never surface identity-only sources, even if listed.
+        fts_sources = [
+            (src, flag) for (src, flag) in self.WATCHLIST_SOURCES
+            if not self.is_identity_only(src)
+        ]
+        remaining = max(0, limit - len(out))
+        if remaining == 0 or not fts_sources:
+            return out[:limit]
+        per = max(1, remaining // len(fts_sources))
         conn = sqlite3.connect(self.index_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        out: List[Dict] = []
         try:
-            for src, flag in self.WATCHLIST_SOURCES:
+            for src, flag in fts_sources:
+                if self.is_identity_only(src):
+                    continue
                 cursor.execute(
                     "SELECT record_id, data_source, name_primary, country, ofac_program, sanctions_topic, raw_json "
                     "FROM cord_fts WHERE data_source = ? LIMIT ?",

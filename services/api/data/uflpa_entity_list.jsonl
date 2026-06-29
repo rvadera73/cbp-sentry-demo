@@ -1,0 +1,33 @@
+// UFLPA Entity List — SEED SUBSET (NOT the full official list).
+//
+// This is a representative, hand-curated subset of REAL entities on the U.S.
+// Department of Homeland Security (DHS) Uyghur Forced Labor Prevention Act
+// (UFLPA) Entity List, maintained by the Forced Labor Enforcement Task Force
+// (FLETF) and published in the Federal Register. Goods produced wholly or in
+// part by these entities are subject to the UFLPA rebuttable presumption (19
+// U.S.C. 1307) and are denied entry at U.S. ports.
+//
+// >>> SEED ONLY: replace with the full official DHS UFLPA Entity List <<<
+// Source of truth: https://www.dhs.gov/uflpa-entity-list (Federal Register
+// notices). Names/countries below are transcribed from public FLETF listings.
+// Each line is a JSON object consumed by cord_engine into a CordFlagRecord
+// (DATA_SOURCE=UFLPA-ENTITY-LIST, FLAG=uflpa_listed). Lines beginning with
+// "//" and blank lines are ignored by the loader.
+{"RECORD_ID": "UFLPA-0001", "PRIMARY_NAME_ORG": "Xinjiang Production and Construction Corps (XPCC)", "COUNTRY": "CN", "DOCKET": "FR-2021-12-23 / FLETF", "COMMODITY": "Cotton; multiple", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0002", "PRIMARY_NAME_ORG": "Hoshine Silicon Industry Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2021-06-24 WRO/FLETF", "COMMODITY": "Silica-based products; polysilicon (2804)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0003", "PRIMARY_NAME_ORG": "Xinjiang Daqo New Energy Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2022-06-21 / FLETF", "COMMODITY": "Polysilicon (2804.61)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0004", "PRIMARY_NAME_ORG": "Xinjiang GCL New Energy Material Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-06-09 / FLETF", "COMMODITY": "Polysilicon (2804.61)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0005", "PRIMARY_NAME_ORG": "Xinjiang East Hope New Energy Company Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2022-06-21 / FLETF", "COMMODITY": "Polysilicon (2804.61)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0006", "PRIMARY_NAME_ORG": "Jiangsu Zhongneng Silicon Technology Development Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2022-06-21 / FLETF", "COMMODITY": "Polysilicon (2804.61)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0007", "PRIMARY_NAME_ORG": "Xinjiang Junggar Cotton and Linen Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-08-01 / FLETF", "COMMODITY": "Cotton (5201)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0008", "PRIMARY_NAME_ORG": "Esquel Group (Changji Esquel Textile Co., Ltd.)", "COUNTRY": "CN", "DOCKET": "Commerce Entity List / FLETF", "COMMODITY": "Cotton apparel (61/62)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0009", "PRIMARY_NAME_ORG": "Baowu Group Xinjiang Bayi Iron and Steel Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-12-11 / FLETF", "COMMODITY": "Steel (72)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0010", "PRIMARY_NAME_ORG": "Camel Group Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-12-11 / FLETF", "COMMODITY": "Lithium-ion batteries; lead-acid batteries (8507)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0011", "PRIMARY_NAME_ORG": "Chenguang Biotech Group Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-12-11 / FLETF", "COMMODITY": "Capsicum; lutein; pigments", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0012", "PRIMARY_NAME_ORG": "Xinjiang Zhongtai Chemical Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2023-06-09 / FLETF", "COMMODITY": "PVC; chemicals (3904)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0013", "PRIMARY_NAME_ORG": "Ninestar Corporation (Zhuhai Ninestar)", "COUNTRY": "CN", "DOCKET": "FR-2023-06-09 / FLETF", "COMMODITY": "Printer cartridges; electronics (8443)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0014", "PRIMARY_NAME_ORG": "Anhui Wonderful Industrial Co., Ltd. (Hefei Bitland)", "COUNTRY": "CN", "DOCKET": "FR-2023-06-09 / FLETF", "COMMODITY": "Electronics; laptops (8471)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0015", "PRIMARY_NAME_ORG": "Lop County Hair Product Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2021-12-23 WRO/FLETF", "COMMODITY": "Hair products (6703/6704)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0016", "PRIMARY_NAME_ORG": "Xinjiang Tianmian Foundation Textile Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2024-01-25 / FLETF", "COMMODITY": "Cotton textiles (52)", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0017", "PRIMARY_NAME_ORG": "COFCO Sugar Holding Co., Ltd. (Xinjiang)", "COUNTRY": "CN", "DOCKET": "FR-2024-01-25 / FLETF", "COMMODITY": "Sugar; tomato products", "ROUTE": "CN->US"}
+{"RECORD_ID": "UFLPA-0018", "PRIMARY_NAME_ORG": "Shandong Meijia Group Co., Ltd.", "COUNTRY": "CN", "DOCKET": "FR-2024-06-12 / FLETF", "COMMODITY": "Seafood; processed foods", "ROUTE": "CN->US"}
