@@ -19,6 +19,7 @@ import {
   AlertCircle, Info, Clock, ArrowRight, Target, Loader
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/apiUrl';
+import { StatusPill } from '../../components/ui';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -696,9 +697,13 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
             {s.section_3_4_parties_and_roles?.parties?.length > 0 && (
               <DataTable
                 caption="Table 3-4: Parties and Roles"
-                headers={['Entity', 'Role', 'Country']}
+                headers={['Entity', 'Role', 'Country', 'OFAC / Sanctions']}
                 rows={(s.section_3_4_parties_and_roles.parties || []).map((p: any) => [
-                  p.entity, p.role, countryName(p.country),
+                  p.entity || p.name, p.role, countryName(p.country),
+                  <span className="inline-flex items-center gap-1">
+                    <StatusPill status={p.ofac_listed ? 'flagged' : 'clear'} />
+                    {p.ofac_listed && p.ofac_program ? <span className="text-[10px] text-slate-600">{p.ofac_program}</span> : null}
+                  </span>,
                 ])}
               />
             )}
@@ -800,6 +805,14 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
                 headers={['Field', 'Value', 'Risk Assessment']}
                 rows={[
                   ['Shipper Name', suppSection.shipper || packageData.shipper_name, '—'],
+                  [
+                    'OFAC / Sanctions Status',
+                    <span className="inline-flex items-center gap-1">
+                      <StatusPill status={suppSection.shipper_ofac_listed ? 'flagged' : 'clear'} />
+                      {suppSection.shipper_ofac_listed && suppSection.shipper_ofac_program ? <span className="text-[10px] text-slate-600">{suppSection.shipper_ofac_program}</span> : null}
+                    </span>,
+                    suppSection.shipper_ofac_listed ? '⚠ Sanctioned party — escalate' : '✓ No SDN match',
+                  ],
                   ['Establishment Age', suppSection.shipper_age_months ? `${suppSection.shipper_age_months} months` : '—', suppSection.shipper_age_risk ? `⚠ ${suppSection.shipper_age_risk}` : '—'],
                   ['Declared Volume', suppSection.declared_volume_kg ? `${suppSection.declared_volume_kg.toLocaleString()} kg` : '—', '—'],
                   ['Capacity Assessment', suppSection.capacity_assessment || '—', '—'],

@@ -24,6 +24,31 @@ class ComprehensiveReferralGenerator:
         self.db_path = db_path
         self.cord_url = cord_url or os.getenv("CORD_SERVICE_URL", "http://sentry-cord-integration:8004")
 
+    def _ofac_status_for(self, name: str) -> Dict[str, Any]:
+        """Defensively resolve OFAC/sanctions status for a party name.
+
+        Uses the local CORD OFAC SDN index (cord_engine.get_ofac_status). Never
+        raises — returns a clear status if CORD/OFAC lookup is unavailable.
+
+        Returns: {"ofac_listed": bool, "ofac_program": str|None}
+        """
+        clear = {"ofac_listed": False, "ofac_program": None}
+        if not name or not str(name).strip() or str(name).strip().lower() == "unknown":
+            return clear
+        try:
+            from cord_engine import get_cord_engine
+
+            match = get_cord_engine().get_ofac_status(str(name).strip())
+            if match and match.get("matched"):
+                return {
+                    "ofac_listed": True,
+                    "ofac_program": match.get("program")
+                    or (match.get("raw") or {}).get("SDN_PROGRAM"),
+                }
+        except Exception as e:
+            logger.warning(f"OFAC lookup unavailable for '{name}': {e}")
+        return clear
+
     def generate_referral_package(self, shipment_id: str) -> Dict[str, Any]:
         """
         Generate comprehensive 14-section referral package for a shipment.
@@ -178,6 +203,10 @@ class ComprehensiveReferralGenerator:
                 {"name": shipment.get("shipper_name", "Unknown"), "role": "Shipper", "country": shipment.get("origin_country")},
                 {"name": shipment.get("consignee_name", "Unknown"), "role": "Consignee", "country": shipment.get("destination_country")},
             ]
+
+        # F0: surface OFAC/sanctions status per party (defensive — never crashes)
+        for party in parties:
+            party.update(self._ofac_status_for(party.get("name")))
 
         return {
             "title": "SECTION 3-4: PARTIES AND ROLES",
@@ -347,9 +376,19 @@ class ComprehensiveReferralGenerator:
         except Exception as e:
             logger.warning(f"Could not fetch suppliers: {e}")
 
+        # F0: surface OFAC/sanctions status per supplier (defensive — never crashes)
+        for supplier in suppliers:
+            supplier.update(self._ofac_status_for(supplier.get("name")))
+
+        # F0: OFAC status for the shipper (manufacturer/verification subject)
+        shipper_name = shipment.get("shipper_name")
+        shipper_ofac = self._ofac_status_for(shipper_name)
+
         return {
             "title": "SECTION 3-10: SUPPLIER MANUFACTURING VERIFICATION",
             "suppliers": suppliers,
+            "shipper_ofac_listed": shipper_ofac["ofac_listed"],
+            "shipper_ofac_program": shipper_ofac["ofac_program"],
         }
 
     def _critical_indicators(self, shipment: Dict) -> List[str]:
