@@ -66,6 +66,19 @@ TIER_CRITICAL = 80.0
 TIER_HIGH = 60.0
 TIER_MEDIUM = 40.0
 
+# Provisional ENTITY final-score floors (open item #5). A single enforcement flag
+# lights only 1 of 7 factors, so the raw additive subtotal under-scores a flagged
+# entity (e.g. OFAC-only -> ~21/LOW). An enforcement flag therefore sets a tier
+# FLOOR; graph/network signals push ABOVE it; multiple stacked signals can still
+# exceed it additively. Values mirror the H2 watchlist flag->tier mapping; exact
+# floors/weights are a D2 calibration concern pinned in the registered v4.0 model.
+SEVERITY_FLOOR = {
+    "OFAC / Sanctions Exposure": 90.0,
+    "EAPA Respondent": 88.0,
+    "UFLPA Entity List": 85.0,
+    "Fraud / Offshore Exposure": 62.0,
+}
+
 
 def _component(
     component: str,
@@ -311,9 +324,17 @@ def score_entity(
     components.extend(_graph_components(entity, signals))
 
     subtotal = sum(c.weighted_result for c in components)
-    # weighted_result is already on the 0-100 contribution scale
-    # (score[0-10] * weight%[0-100] / 10). Clamp to a 0-100 final score.
-    final_score = max(0.0, min(100.0, subtotal))
+    # Provisional entity aggregation (open item #5): an enforcement flag sets a
+    # tier FLOOR so a single strong flag lands at the right tier; graph/network
+    # signals push ABOVE the floor, and multiple stacked signals can exceed it
+    # via the additive subtotal. floor==0 (no enforcement flag) -> pure additive.
+    floor = max((SEVERITY_FLOOR.get(c.component, 0.0) for c in components), default=0.0)
+    graph_total = sum(
+        c.weighted_result for c in components
+        if c.component.startswith(("Network", "Cross-Corridor"))
+    )
+    final_score = subtotal if floor == 0.0 else max(subtotal, floor + graph_total)
+    final_score = max(0.0, min(100.0, final_score))
     tier = _tier(final_score)
 
     return ScoreBreakdownV4(
