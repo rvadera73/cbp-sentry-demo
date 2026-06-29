@@ -106,8 +106,8 @@ One+ subagents per track, launched together after Step 0. Each: scoped to its mo
 - [ ] **T-Data** — A1 ☑ · A2 ☑ · A3 ☑ · tables ☐
 - [ ] **T-Graph** — B1 ☑ · B2 ☐ · B3 ☐
 - [ ] **T-Score** — C1 ☑ · C2 ☑ · C3 ☑
-- [ ] **T-MLOps** — C4 ☐ · D1 ☐ · D2 ☐ · D3 ☐ · D4 ☐
-- [ ] **T-Experience** — F0 ☑ · E1 ☑ · E2 ☐ · E3 ☐ · E4 ☐ · F1 ☐ · F2 ☐ · F3 ☐ · F4 ☐ · F5 ☐ · F6 ☐
+- [ ] **T-MLOps** — C4 ☐ · D1 ☑ · D2 ☑ · D3 ☑ · D4 ☐
+- [ ] **T-Experience** — F0 ☑ · E1 ☑ · E2 ☑ · E3 ☐ · E4 ☐ · F1 ☑ · F2 ☐ · F3 ☐ · F4 ☑ · F5 ☐ · F6 ☑
 - [ ] **Integration** — I-1 ☑ · I-2 ☑ · I-3 ☑ · I-4 (calibration/maturity) ☐
 
 ---
@@ -128,4 +128,4 @@ One+ subagents per track, launched together after Step 0. Each: scoped to its mo
 2. Edge-materialization approach for B1 (shared-identifier derivation vs Senzing load expansion vs both).
 3. Confirm k=5 (top-k) + blend curve on a validation split (D2).
 4. Corridor/entity scoring location: extend `risk_scoring_engine.py` (recommended) vs separate aggregation pass. 
-5. **Entity final-score aggregation** (surfaced building C1): pure-additive over fixed factor weights under-scores single-flag entities — an OFAC-only entity lands ~21/100 (LOW) because only one of seven factors fires, though the OFAC *component* is 9.5/10. Needs a severity-floor (enforcement flag -> minimum tier) or renormalization over applicable factors; resolve at D2 calibration / pinned v4.0 weights. Until then the H2 watchlist flag->tier mapping and the entity scorer disagree. **RESOLVED (provisional):** severity-floor aggregation added to entity_scorer.py — OFAC/EAPA/UFLPA -> CRITICAL (90/88/85), fraud/offshore -> HIGH (62); graph signals push above the floor; benign/identity-only stay LOW. Exact floor values + weighting remain a D2 calibration item.
+5. **Entity final-score aggregation** (surfaced building C1): pure-additive over fixed factor weights under-scores single-flag entities — an OFAC-only entity lands ~21/100 (LOW) because only one of seven factors fires, though the OFAC *component* is 9.5/10. Needs a severity-floor (enforcement flag -> minimum tier) or renormalization over applicable factors; resolve at D2 calibration / pinned v4.0 weights. Until then the H2 watchlist flag->tier mapping and the entity scorer disagree. **RESOLVED (provisional):** severity-floor aggregation added to entity_scorer.py — OFAC/EAPA/UFLPA -> CRITICAL (90/88/85), fraud/offshore -> HIGH (62); graph signals push above the floor; benign/identity-only stay LOW. Exact floor values + weighting remain a D2 calibration item. **VALIDATED at D2:** recall 1.000 / FP-rate 0.000 on 283 positives vs 120 negatives; D3 gate PASS; v4.0 registered (production) — provisional floors held, no weight change needed.

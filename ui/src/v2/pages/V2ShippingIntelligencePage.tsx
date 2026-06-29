@@ -11,6 +11,7 @@ import DataTable, { DataTableColumn } from '../components/DataTable';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import CorridorTradeAnalysis from '../components/CorridorTradeAnalysis';
 import CorridorAssessment from '../components/CorridorAssessment';
+import CorridorRiskScoreV4 from '../components/CorridorRiskScoreV4';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { COLORS, PATTERNS } from '../styles/designSystem';
 import { API_BASE_URL } from '../../services/apiUrl';
@@ -333,7 +334,8 @@ export default function V2ShippingIntelligencePage({
             </div>
 
             {/* Corridor-level assessment — shown outside the tabs, like the top summary */}
-            <div className="shrink-0 px-4 pt-2 pb-4 bg-[#F7F9FC] border-t border-[#D0D7DE]">
+            <div className="shrink-0 px-4 pt-2 pb-4 bg-[#F7F9FC] border-t border-[#D0D7DE] space-y-3">
+              <CorridorRiskScoreV4 corridor={selectedCorridor} shipments={corridorShipments} />
               <CorridorAssessment corridor={selectedCorridor} shipments={corridorShipments} />
             </div>
           </div>

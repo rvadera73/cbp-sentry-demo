@@ -19,7 +19,9 @@ import {
   AlertCircle, Info, Clock, ArrowRight, Target, Loader
 } from 'lucide-react';
 import { API_BASE_URL } from '../../services/apiUrl';
-import { StatusPill } from '../../components/ui';
+import { StatusPill, ScoreBar as KitScoreBar } from '../../components/ui';
+import EntityNetworkEvidencePanel from './EntityNetworkEvidencePanel';
+import type { EntityFactorBlockV4, NetworkEvidenceBlockV4, ScoreComponentV4 } from '../types/v4Contracts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,6 +165,64 @@ function ScoreBar({ label, score, maxScore, weight }: { label: string; score: nu
       </div>
       <span className="w-12 text-right font-bold text-slate-800">{score.toFixed(1)}/{maxScore.toFixed(0)}</span>
       <span className="w-10 text-right text-slate-500">{(weight * 100).toFixed(0)}% wt</span>
+    </div>
+  );
+}
+
+// ─── F1: Per-entity v4.0 factor-attributed risk block ─────────────────────────
+
+function EntityFactorBlockCard({ block }: { block: any }) {
+  // `block` is an EntityFactorBlockV4-aligned dict from referral §3-10.entity_risk.
+  const score = block?.score || {};
+  const finalScore: number = block?.final_score ?? score.final_score ?? 0;
+  const tier: string = block?.tier ?? score.tier ?? 'LOW';
+  const components: ScoreComponentV4[] = block?.top_components || score.components || [];
+  const rc = riskColor(finalScore);
+  const eapaListed = !!block?.eapa?.listed;
+  const uflpaListed = !!block?.uflpa?.listed;
+  const ofacListed = !!block?.ofac?.listed;
+  const dockets: string[] = block?.eapa?.dockets || [];
+
+  return (
+    <div className="border border-[#D0D7DE] rounded-sm p-3 bg-white">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <span className="text-[11px] font-bold text-[#0B1F33] truncate">{block?.name || block?.entity_id}</span>
+        {block?.role && (
+          <span className="text-[10px] text-slate-500 uppercase tracking-wide">{block.role}</span>
+        )}
+        <span className="ml-auto inline-flex items-center gap-2">
+          {/* EAPA anchor — F4 surfaced as a StatusPill */}
+          {eapaListed && <StatusPill status="flagged" />}
+          {eapaListed && <span className="text-[10px] font-bold text-red-700">EAPA RESPONDENT</span>}
+          {uflpaListed && <StatusPill status="critical" />}
+          {uflpaListed && <span className="text-[10px] font-bold text-red-700">UFLPA</span>}
+          <StatusPill status={ofacListed ? 'flagged' : 'clear'} />
+          <span
+            className="text-[11px] font-black px-2 py-0.5 rounded border"
+            style={{ background: rc.bg, color: rc.text, borderColor: rc.border }}
+          >
+            {finalScore.toFixed(0)} · {tier}
+          </span>
+        </span>
+      </div>
+      {dockets.length > 0 && (
+        <p className="text-[10px] text-red-700 mb-2">EAPA docket(s): {dockets.join(', ')}</p>
+      )}
+      {components.length > 0 ? (
+        <div>
+          {components.map((c, i) => (
+            <KitScoreBar
+              key={i}
+              label={`${c.factor}: ${c.component}`}
+              sublabel={c.rationale}
+              score={Math.round(c.weighted_result || 0)}
+              max={Math.round(c.weight || 100) || 100}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-slate-500">No weighted risk components — entity scored clear.</p>
+      )}
     </div>
   );
 }
@@ -482,6 +542,11 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
   const suppSection = s.section_3_10_supplier_verification || {};
   const routeSection = s.section_3_3_routing_history || {};
   const tradeSection = s.section_3_7_trade_flow_intelligence || {};
+  // F1/F4/F6 — Track T-Experience referral evidence (entity factor blocks,
+  // EAPA respondent anchors, primary-party network evidence).
+  const entityRisk: EntityFactorBlockV4[] = suppSection.entity_risk || [];
+  const networkEvidence: NetworkEvidenceBlockV4 | null = suppSection.network_evidence || null;
+  const eapaAnchors: any[] = tradeSection.eapa_anchors || [];
   const scoreSection = s.section_3_12_score_breakdown || {};
   const indicatorSection = s.section_3_11_risk_indicators || {};
   const whatIfSection = s.section_3_13_what_if_scenarios || {};
@@ -834,6 +899,43 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
                   ])}
                 />
               )}
+
+              {/* F4: EAPA respondent anchor linkage (§3-7) */}
+              {eapaAnchors.length > 0 && (
+                <div className="bg-red-50 border border-red-300 rounded-sm p-3 mt-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-red-700 mb-2">
+                    EAPA Respondent Anchor — Confirmed Enforcement Linkage
+                  </p>
+                  <div className="space-y-1.5">
+                    {eapaAnchors.map((a: any, i: number) => (
+                      <div key={i} className="flex flex-wrap items-center gap-2 text-[11px]">
+                        <StatusPill status="flagged" />
+                        <span className="font-bold text-[#0B1F33]">{a.name}</span>
+                        <span className="text-[10px] text-slate-500 uppercase tracking-wide">{a.role}</span>
+                        <span className="text-slate-700">is a confirmed CBP-EAPA respondent</span>
+                        {a.docket && <span className="text-[10px] font-mono text-red-700">Docket: {a.docket}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* F1: per-entity v4.0 factor-attributed risk (shipper/consignee/manufacturer) */}
+              {entityRisk.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-[10px] font-bold text-[#005EA2] uppercase tracking-wide mb-2">
+                    Per-Entity Risk (Model v4.0 — Factor Attribution)
+                  </p>
+                  <div className="space-y-3">
+                    {entityRisk.map((block: any, i: number) => (
+                      <EntityFactorBlockCard key={i} block={block} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* F6: primary-party network evidence */}
+              <EntityNetworkEvidencePanel block={networkEvidence} />
             </RiskFactorCard>
 
             {/* RF-4: Risk Intelligence Synthesis */}

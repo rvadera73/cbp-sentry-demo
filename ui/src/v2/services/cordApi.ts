@@ -2,6 +2,14 @@
  * CORD Entity Resolution data layer — talks to the real /api/cord/* endpoints
  * (243K-entity Senzing-backed service via the sentry-api gateway).
  */
+import type { ScoreBreakdownV4 } from '../types/v4Contracts';
+
+/** A corridor-scoring party derived from manifest data (shipper / consignee). */
+export interface CordParty {
+  name: string;
+  data_source?: string;
+  shipment_count?: number;
+}
 
 export interface CordMatch {
   entity_id: string;
@@ -81,6 +89,30 @@ export async function cordEntityScore(entity: any): Promise<any | null> {
         country: entity?.country,
         flag: entity?.flag,
         raw_data: entity?.raw_data,
+      }),
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.score || null;
+  } catch { return null; }
+}
+
+/** Real v4.0 corridor-level factor-attributed score (H1) from the backend scorer. */
+export async function cordCorridorScore(corridor: any, parties: CordParty[]): Promise<ScoreBreakdownV4 | null> {
+  try {
+    const r = await fetch('/api/cord/corridor/score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        corridor: {
+          display_name: corridor?.display_name,
+          route: corridor?.route,
+          applicable_duties: corridor?.applicable_duties,
+          corridor_risk_score: corridor?.corridor_risk_score,
+          anomaly_rate: corridor?.anomaly_rate,
+          incoming_count: corridor?.incoming_count,
+        },
+        parties,
       }),
     });
     if (!r.ok) return null;

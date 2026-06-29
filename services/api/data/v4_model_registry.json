@@ -1,0 +1,186 @@
+[
+  {
+    "model_id": "cbp-sentry-risk-v4.0",
+    "model_name": "CBP Sentry Risk Model v4.0 (Multi-Level Factor Scoring)",
+    "model_version": "v4.0",
+    "factor_weights": {
+      "entity": {
+        "W_OFAC": 22.0,
+        "W_EAPA": 22.0,
+        "W_UFLPA": 18.0,
+        "W_FRAUD": 12.0,
+        "W_SHELL": 12.0,
+        "W_CENTRALITY": 8.0,
+        "W_REACH": 6.0
+      },
+      "corridor": {
+        "W_PARTY": 30.0,
+        "W_COMMODITY": 22.0,
+        "W_ROUTING": 20.0,
+        "W_PATTERN": 14.0,
+        "W_TIME": 14.0
+      }
+    },
+    "severity_floors": {
+      "OFAC / Sanctions Exposure": 90.0,
+      "EAPA Respondent": 88.0,
+      "UFLPA Entity List": 85.0,
+      "Fraud / Offshore Exposure": 62.0
+    },
+    "tier_thresholds": {
+      "CRITICAL": 80.0,
+      "HIGH": 60.0,
+      "MEDIUM": 40.0
+    },
+    "aggregation": {
+      "rule": "top_k_blend",
+      "k": 5
+    },
+    "apportionment": {
+      "rule": "by_shipment_count"
+    },
+    "cord_resolution_version": "cord-resolution-2026.06.29",
+    "feature_pipeline_version": "feature-pipeline-v4.0.0",
+    "calibration_metrics": {
+      "d2_metrics": {
+        "n_positives": 283,
+        "n_negatives": 120,
+        "positives_caught_at_HIGH": 283,
+        "negatives_flagged_at_MEDIUM": 0,
+        "recall": 1.0,
+        "false_positive_rate": 0.0,
+        "per_flag_tier_distribution": {
+          "EAPA Respondent": {
+            "count": 65,
+            "CRITICAL": 65,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "min": 88.0,
+            "max": 88.0,
+            "avg": 88.0
+          },
+          "UFLPA Entity List": {
+            "count": 18,
+            "CRITICAL": 18,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "min": 85.0,
+            "max": 85.0,
+            "avg": 85.0
+          },
+          "OFAC / Sanctions Exposure": {
+            "count": 120,
+            "CRITICAL": 120,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "min": 90.0,
+            "max": 90.0,
+            "avg": 90.0
+          },
+          "Fraud / Offshore Exposure": {
+            "count": 80,
+            "CRITICAL": 0,
+            "HIGH": 80,
+            "MEDIUM": 0,
+            "LOW": 0,
+            "min": 62.0,
+            "max": 62.0,
+            "avg": 62.0
+          },
+          "benign (GLEIF)": {
+            "count": 120,
+            "CRITICAL": 0,
+            "HIGH": 0,
+            "MEDIUM": 0,
+            "LOW": 120,
+            "min": 0.0,
+            "max": 0.0,
+            "avg": 0.0
+          }
+        },
+        "thresholds": {
+          "HIGH": 60.0,
+          "MEDIUM": 40.0
+        },
+        "worst_positives": [
+          {
+            "name": "VANITY ENTERPRISES CORP.",
+            "flag": "Fraud / Offshore Exposure",
+            "score": 62.0,
+            "tier": "HIGH"
+          },
+          {
+            "name": "VEDERSON ASSETS LTD",
+            "flag": "Fraud / Offshore Exposure",
+            "score": 62.0,
+            "tier": "HIGH"
+          },
+          {
+            "name": "WALLNET DESIGN INC.",
+            "flag": "Fraud / Offshore Exposure",
+            "score": 62.0,
+            "tier": "HIGH"
+          },
+          {
+            "name": "FUTURE INVESTMENTS GROUP INC.",
+            "flag": "Fraud / Offshore Exposure",
+            "score": 62.0,
+            "tier": "HIGH"
+          },
+          {
+            "name": "QUINAM INTERNATIONAL CORP.",
+            "flag": "Fraud / Offshore Exposure",
+            "score": 62.0,
+            "tier": "HIGH"
+          }
+        ],
+        "worst_negatives": [
+          {
+            "name": "THE BARCLAYS BANK UK RETIREMENT FUND",
+            "flag": "benign (GLEIF)",
+            "score": 0.0,
+            "tier": "LOW"
+          },
+          {
+            "name": "THE MARKETING STORE WORLDWIDE (EUROPE) LIMITED",
+            "flag": "benign (GLEIF)",
+            "score": 0.0,
+            "tier": "LOW"
+          },
+          {
+            "name": "CARRINGGATE LIMITED",
+            "flag": "benign (GLEIF)",
+            "score": 0.0,
+            "tier": "LOW"
+          },
+          {
+            "name": "HB REAVIS CONSTRUCTION UK LTD",
+            "flag": "benign (GLEIF)",
+            "score": 0.0,
+            "tier": "LOW"
+          },
+          {
+            "name": "ARES EUROPEAN CLO II B.V.",
+            "flag": "benign (GLEIF)",
+            "score": 0.0,
+            "tier": "LOW"
+          }
+        ]
+      },
+      "d3_gate": {
+        "gate": "D3-validation",
+        "passed": true,
+        "recall": 1.0,
+        "recall_threshold": 0.9,
+        "recall_ok": true,
+        "false_positive_rate": 0.0,
+        "fp_rate_threshold": 0.1,
+        "fp_rate_ok": true
+      }
+    },
+    "registered_at": "2026-06-29T20:45:44.481707+00:00"
+  }
+]
