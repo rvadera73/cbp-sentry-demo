@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Upload, Radio, AlertTriangle, Route, Users, Ship, ChevronRight, Clock } from 'lucide-react';
+import { Upload, Radio, AlertTriangle, Route, Users, ChevronRight, Clock } from 'lucide-react';
 import { useV2ThreatFeed } from '../hooks/useV2ThreatFeed';
 import { useV2Cases } from '../hooks/useV2Cases';
 import { useCorridorIntelligence } from '../hooks/useCorridorIntelligence';
-import { usePreManifestVessels } from '../hooks/usePreManifestVessels';
 import { cordWatchlist, flagRisk, CordMatch } from '../services/cordApi';
 import { Case, Shipment } from '../types/v2.types';
 import UploadPipelineModal from '../../components/cases/UploadPipelineModal';
@@ -35,7 +34,6 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
   const { cases: localCases } = useV2Cases();
   const { threatFeed, loading: threatLoading } = useV2ThreatFeed();
   const { corridors, isLoading: corridorsLoading } = useCorridorIntelligence();
-  const { vessels, isLoading: vesselsLoading } = usePreManifestVessels(undefined, false);
   const cases = propCases || localCases;
 
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -67,18 +65,6 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
       .slice(0, 5);
   }, [actors]);
 
-  // ---- H3: Incoming high-risk manifests, next 72h ----
-  // A vessel is "high-risk" if its corridor is High/Critical risk.
-  const hotCorridorIds = useMemo(() => new Set(hotCorridors.map(c => c.id)), [hotCorridors]);
-  const incoming72h = useMemo(() => {
-    const now = Date.now();
-    const horizon = now + 72 * 3600 * 1000;
-    return vessels
-      .map(v => ({ v, eta: v.eta_us ? new Date(v.eta_us).getTime() : NaN, highRisk: hotCorridorIds.has(v.corridor_id) }))
-      .filter(x => !isNaN(x.eta) && x.eta >= now && x.eta <= horizon)
-      .sort((a, b) => Number(b.highRisk) - Number(a.highRisk) || a.eta - b.eta);
-  }, [vessels, hotCorridorIds]);
-  const incomingHighRisk = useMemo(() => incoming72h.filter(x => x.highRisk), [incoming72h]);
 
   // ---- Triage: needs attention now (overdue / highest score), top 5 ----
   const needsAttention = useMemo(() => {
@@ -90,11 +76,6 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
   const goShipments = () => setActiveTab?.('shipments');
   const goEntities = () => setActiveTab?.('entities');
 
-  const fmtEta = (iso: string) => {
-    if (!iso) return '—';
-    const d = new Date(iso);
-    return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  };
 
   // Route a threat-feed click to its horizon.
   const openThreat = (e: typeof threatFeed[number]) => {
@@ -113,7 +94,7 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
         <div>
           <h1 className="text-lg font-black text-[#0B1F33] uppercase tracking-wide">Command Center</h1>
           <p className="text-[12px] text-[#5C5C5C] mt-0.5">
-            Three-horizon triage — synthesis across corridors (H1), actors (H2), and the 72-hour manifest pipeline (H3). Drill into a tab for full detail.
+            Three-horizon triage — corridors (H1) and actors (H2) above; the flagged-manifest case pipeline (H3) below. Drill into a tab for full detail.
           </p>
         </div>
         <ModelBadge className="shrink-0 mt-0.5" />
@@ -124,12 +105,11 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
         { label: 'Critical Investigations', value: cases.filter(c => c.priority === 'Critical').length, color: '#D83933' },
         { label: 'High-Risk ≥80', value: cases.filter(c => c.risk_score >= 80).length, color: '#C7791B' },
         { label: 'Active Cases', value: cases.filter(c => c.case_status === 'Active').length },
-        { label: 'Inbound 72h (high-risk)', value: incomingHighRisk.length, color: '#C7791B' },
         { label: 'Total Cases', value: cases.length },
       ]} />
 
       {/* THREE-HORIZON SYNTHESIS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 shrink-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 shrink-0">
         {/* H1 — Hot Corridors */}
         <Panel className="flex flex-col">
           <SectionHeader
@@ -191,37 +171,6 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
           </button>
         </Panel>
 
-        {/* H3 — Incoming high-risk manifests, next 72h */}
-        <Panel className="flex flex-col">
-          <SectionHeader
-            title="Incoming Manifests — Next 72h"
-            subtitle="H3 · high-risk inbound vessels"
-            icon={<Ship className="w-4 h-4" />}
-            action={<span className="text-[10px] font-mono text-[#5C5C5C]">{incomingHighRisk.length}/{incoming72h.length}</span>}
-          />
-          <div className="flex-1">
-            {vesselsLoading ? (
-              <p className="text-[12px] text-[#5C5C5C] py-6 text-center">Loading pipeline…</p>
-            ) : incoming72h.length === 0 ? (
-              <p className="text-[12px] text-[#5C5C5C] py-6 text-center">No inbound vessels arriving in the next 72h.</p>
-            ) : incoming72h.slice(0, 5).map(({ v, eta, highRisk }) => (
-              <button key={v.vessel_imo || v.vessel_name} onClick={goShipments}
-                className="w-full text-left flex items-center justify-between gap-2 py-1.5 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-sm px-1 focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
-                <div className="min-w-0">
-                  <div className="text-[11px] font-bold text-[#0B1F33] truncate">{v.vessel_name || v.vessel_imo}</div>
-                  <div className="text-[10px] text-[#5C5C5C] truncate">{v.corridor_id || `${v.origin_country} → ${v.destination_country}`}</div>
-                </div>
-                <div className="flex flex-col items-end flex-shrink-0">
-                  <span className="text-[10px] font-mono text-[#5C5C5C]">{fmtEta(new Date(eta).toISOString())}</span>
-                  {highRisk && <span className="text-[9px] font-bold uppercase text-[#D83933]">High-risk lane</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-          <button onClick={goShipments} className="mt-2 text-[11px] font-bold text-[#005EA2] hover:underline self-start flex items-center gap-1">
-            View pre-manifest vessels <ChevronRight className="w-3 h-3" />
-          </button>
-        </Panel>
       </div>
 
       {/* Upload action */}
@@ -239,7 +188,7 @@ export default function V2DashboardPage({ cases: propCases, selectCaseForDetail,
           <Panel className="h-full flex flex-col">
             <SectionHeader
               title="Needs Attention Now"
-              subtitle="Top cases by SLA breach / highest risk"
+              subtitle="H3 · flagged manifests in the case pipeline — by SLA breach / highest risk"
               icon={<AlertTriangle className="w-4 h-4" />}
             />
             <div className="overflow-y-auto flex-1">
