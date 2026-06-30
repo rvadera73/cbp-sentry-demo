@@ -578,64 +578,146 @@ class CORDEngine:
         real flagged CORD sources (OFAC + OpenSanctions, US forced-labor, ICIJ
         offshore leaks, risk data) PLUS the T-Data flag sources CBP-EAPA (A1)
         and UFLPA-ENTITY-LIST (A2). Identity-only sources (A3, NPI-PROVIDERS /
-        GLOBALDATA) are always excluded. Shown before any search."""
-        out: List[Dict] = []
+        GLOBALDATA) are always excluded. Shown before any search.
 
-        # A1/A2: T-Data flag sources first (in-memory CordFlagRecords).
-        for rec in self._eapa_records:
-            out.append(self._flag_record_to_watchlist(rec, EAPA_FLAG))
-        for rec in self._uflpa_records:
-            out.append(self._flag_record_to_watchlist(rec, UFLPA_FLAG))
+        The list is balanced so no single source floods it: each flagged source
+        is capped at a fair per-source share (``ceil(limit / num_sources)``) and
+        the sources are interleaved so the watchlist shows a MIX of CBP-EAPA,
+        UFLPA-ENTITY-LIST, OFAC, OPEN-SANCTIONS, US-LABOR-VIOLATIONS, ICIJ and
+        NOMINO-RISK."""
+        import math
 
-        # Remaining budget for the FTS-indexed flagged sources.
+        # Buckets keyed by source, each holding already-shaped watchlist rows.
+        # A1/A2 overlay flag sources (in-memory CordFlagRecords) ...
+        buckets: "Dict[str, List[Dict]]" = {}
+        order: List[str] = []
+
+        def _register(src: str, rows: List[Dict]) -> None:
+            if rows:
+                buckets[src] = rows
+                order.append(src)
+
+        _register(EAPA_SOURCE, [self._flag_record_to_watchlist(r, EAPA_FLAG) for r in self._eapa_records])
+        _register(UFLPA_SOURCE, [self._flag_record_to_watchlist(r, UFLPA_FLAG) for r in self._uflpa_records])
+
+        # ... plus the FTS-indexed flagged sources.
         # A3: never surface identity-only sources, even if listed.
         fts_sources = [
             (src, flag) for (src, flag) in self.WATCHLIST_SOURCES
             if not self.is_identity_only(src)
         ]
-        remaining = max(0, limit - len(out))
-        if remaining == 0 or not fts_sources:
-            return out[:limit]
-        per = max(1, remaining // len(fts_sources))
-        conn = sqlite3.connect(self.index_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        try:
-            for src, flag in fts_sources:
-                if self.is_identity_only(src):
-                    continue
-                cursor.execute(
-                    "SELECT record_id, data_source, name_primary, country, ofac_program, sanctions_topic, raw_json "
-                    "FROM cord_fts WHERE data_source = ? LIMIT ?",
-                    (src, per * 4),
-                )
-                kept = 0
-                for row in cursor.fetchall():
-                    if kept >= per:
+        num_sources = len(order) + len(fts_sources)
+        if num_sources == 0:
+            return []
+        # Fair per-source share so no single source (e.g. the 65 CBP-EAPA rows)
+        # floods the default-limit list.
+        per_source = max(1, math.ceil(limit / num_sources))
+
+        # Trim the already-shaped overlay buckets to their fair share.
+        for src in order:
+            buckets[src] = [r for r in buckets[src] if r.get("name")][:per_source]
+
+        # Pull the fair share from each FTS source.
+        if fts_sources:
+            conn = sqlite3.connect(self.index_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            try:
+                for src, flag in fts_sources:
+                    cursor.execute(
+                        "SELECT record_id, data_source, name_primary, country, ofac_program, sanctions_topic, raw_json "
+                        "FROM cord_fts WHERE data_source = ? LIMIT ?",
+                        (src, per_source * 4),
+                    )
+                    rows: List[Dict] = []
+                    for row in cursor.fetchall():
+                        if len(rows) >= per_source:
+                            break
+                        name = row["name_primary"]
+                        country = row["country"]
+                        if not name or not country:
+                            try:
+                                raw = json.loads(row["raw_json"])
+                            except Exception:
+                                raw = {}
+                            name = name or self._name_from_raw(raw)
+                            country = country or self._country_from_raw(raw)
+                        if not name:
+                            continue
+                        rows.append({
+                            "entity_id": f"{row['data_source']}:{row['record_id']}",
+                            "name": name,
+                            "country": (country or "").upper(),
+                            "data_source": row["data_source"],
+                            "flag": flag,
+                            "program": row["ofac_program"] or row["sanctions_topic"] or None,
+                        })
+                    _register(src, rows)
+            finally:
+                conn.close()
+
+        # Interleave: round-robin across the source buckets so the watchlist
+        # opens on a MIX of sources rather than a single source's block.
+        out: List[Dict] = []
+        idx = 0
+        while len(out) < limit:
+            progressed = False
+            for src in order:
+                bucket = buckets.get(src) or []
+                if idx < len(bucket):
+                    out.append(bucket[idx])
+                    progressed = True
+                    if len(out) >= limit:
                         break
-                    name = row["name_primary"]
-                    country = row["country"]
-                    if not name or not country:
-                        try:
-                            raw = json.loads(row["raw_json"])
-                        except Exception:
-                            raw = {}
-                        name = name or self._name_from_raw(raw)
-                        country = country or self._country_from_raw(raw)
-                    if not name:
-                        continue
-                    out.append({
-                        "entity_id": f"{row['data_source']}:{row['record_id']}",
-                        "name": name,
-                        "country": (country or "").upper(),
-                        "data_source": row["data_source"],
-                        "flag": flag,
-                        "program": row["ofac_program"] or row["sanctions_topic"] or None,
-                    })
-                    kept += 1
-            return out[:limit]
-        finally:
-            conn.close()
+            if not progressed:
+                break
+            idx += 1
+        return out[:limit]
+
+    # ----------------------------------------------------------------------
+    # Overlay entity resolution — fallback for overlay-source entity_ids.
+    # ----------------------------------------------------------------------
+    def get_overlay_entity(self, entity_id: str) -> Optional[Dict]:
+        """Resolve an overlay-source entity_id to an entity-detail-shaped dict.
+
+        Overlay entity_ids are the watchlist ``entity_id`` values for the T-Data
+        flag sources, i.e. prefixed ``CBP-EAPA:`` (A1) or ``UFLPA-ENTITY-LIST:``
+        (A2). main.py calls this as a fallback when the CORD service 404s, which
+        fixes the workspace "unknown entity" for EAPA/UFLPA actors.
+
+        Returns ``{"entity": {...}}`` (matching the /entity proxy shape the UI
+        unwraps) or ``None`` for non-overlay ids."""
+        if not entity_id or ":" not in entity_id:
+            return None
+        src, _, record_id = entity_id.partition(":")
+        src = src.strip()
+        record_id = record_id.strip()
+        if src == EAPA_SOURCE:
+            records = self._eapa_records
+        elif src == UFLPA_SOURCE:
+            records = self._uflpa_records
+        else:
+            return None
+        rec = next((r for r in records if str(r.get("RECORD_ID")) == record_id), None)
+        if rec is None:
+            return None
+        return {
+            "entity": {
+                "entity_id": entity_id,
+                "data_source": src,
+                "record_id": record_id,
+                "name": rec.get("PRIMARY_NAME_ORG") or "",
+                "country": (rec.get("COUNTRY") or "").upper(),
+                "entity_type": "organization",
+                "confidence": 1.0,
+                "raw_data": {
+                    "FLAG": rec.get("FLAG") or "",
+                    "DOCKET": rec.get("DOCKET") or "",
+                    "COMMODITY": rec.get("COMMODITY") or "",
+                    "ROUTE": rec.get("ROUTE") or "",
+                },
+            }
+        }
 
     def build_senzing_subset(self, entities_to_search: List[Tuple[str, str]]) -> List[Dict]:
         """

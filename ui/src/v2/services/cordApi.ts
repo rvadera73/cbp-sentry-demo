@@ -142,6 +142,9 @@ export async function cordEntityDetail(entityId: string): Promise<EntityDetail> 
 export function flagRisk(flag?: string, source?: string): { score: number; tier: string } {
   const f = flag || '';
   const s = (source || '').toUpperCase();
+  // T-Data overlay flag sources — these rank at the top of the watchlist.
+  if (f === 'eapa_respondent' || s === 'CBP-EAPA') return { score: 92, tier: 'CRITICAL' };
+  if (f === 'uflpa_listed' || s === 'UFLPA-ENTITY-LIST') return { score: 88, tier: 'CRITICAL' };
   if (f === 'sanctioned' || s === 'OFAC' || s === 'OPEN-SANCTIONS') return { score: 92, tier: 'CRITICAL' };
   if (f === 'forced_labor' || s === 'US-LABOR-VIOLATIONS') return { score: 78, tier: 'HIGH' };
   if (f === 'offshore' || s === 'ICIJ') return { score: 64, tier: 'HIGH' };

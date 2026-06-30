@@ -17,7 +17,7 @@ interface Props {
 interface Row extends CordMatch { score: number; tier: string }
 
 const riskColor = (t: string) => (t === 'CRITICAL' ? '#D83933' : t === 'HIGH' ? '#C7791B' : t === 'MEDIUM' ? '#B8860B' : '#15803D');
-const FLAG_LABEL: Record<string, string> = { sanctioned: 'Sanctioned', forced_labor: 'Forced labor', offshore: 'Offshore leak', high_risk: 'Risk-flagged' };
+const FLAG_LABEL: Record<string, string> = { eapa_respondent: 'EAPA respondent', uflpa_listed: 'UFLPA listed', sanctioned: 'Sanctioned', forced_labor: 'Forced labor', offshore: 'Offshore leak', high_risk: 'Risk-flagged' };
 
 export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveTab }: Props) {
   const [query, setQuery] = useState('');
@@ -108,6 +108,7 @@ export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveT
     <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC]">
       <div className="bg-white border-b border-[#D0D7DE] px-6 py-3">
         <h1 className="text-xl font-bold text-[#0B1F33]">Entity Resolution</h1>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[#005EA2]">Entity Resolution · H2 (actor intelligence)</p>
         <p className="text-[12px] text-[#5C5C5C]">Flagged/sanctioned watchlist · search across 243K resolved CORD entities</p>
       </div>
 

@@ -1271,6 +1271,24 @@ async def get_referral_package(shipment_id: str) -> Dict[str, Any]:
             risk_breakdown = risk_scoring_engine.score_shipment(shipment)
             calculated_risk_score = risk_breakdown.final_score
             logger.debug(f"[{shipment_id}] Risk breakdown calculated: {calculated_risk_score}/100")
+
+            # SCORE WRITE-BACK: this endpoint previously computed the score and
+            # discarded it. Persist calculated_risk_score + model_version +
+            # scored_at (risk_score_calculated_at column) to the shipment row.
+            # Best-effort; never blocks the referral package response.
+            try:
+                async with await get_data_service_client() as _wb_client:
+                    await _wb_client.patch(
+                        f"/shipments/{shipment_id}",
+                        json={
+                            "calculated_risk_score": round(float(calculated_risk_score), 1),
+                            "model_version": "xgb-v1.0-15pct",
+                            "model_maturity": 15,
+                            "risk_score_calculated_at": datetime.utcnow().isoformat(),
+                        },
+                    )
+            except Exception as _wb_err:
+                logger.warning(f"[{shipment_id}] referral score write-back failed: {_wb_err}")
         except Exception as e:
             logger.warning(f"[{shipment_id}] Risk breakdown calculation failed: {e}")
             calculated_risk_score = shipment.get("risk_score", 58)  # Fallback to database value
@@ -3371,6 +3389,183 @@ async def record_gate1_outcome(
         return {"error": str(e), "status": "failed"}
 
 
+# ============= GATE-1 PPV FEEDBACK LOOP (direct gate1_outcomes store) =============
+
+_GATE1_DB_URL = os.getenv(
+    "DATABASE_URL", "postgresql://sentry:sentry-secret@sentry-db:5432/sentry"
+)
+
+
+def _gate1_conn():
+    """Open a direct psycopg2 connection to the risk_scoring schema.
+
+    Kept local to the feedback endpoints; defensive callers wrap usage in try.
+    """
+    import psycopg2
+    import psycopg2.extras
+
+    conn = psycopg2.connect(_GATE1_DB_URL)
+    return conn
+
+
+def _ensure_gate1_table(cur) -> None:
+    """CREATE IF NOT EXISTS the gate1_outcomes table (mirrors db.py contract)."""
+    cur.execute("CREATE SCHEMA IF NOT EXISTS risk_scoring")
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS risk_scoring.gate1_outcomes (
+            id SERIAL PRIMARY KEY,
+            shipment_id TEXT,
+            officer_action TEXT,
+            outcome TEXT,
+            predicted_risk DOUBLE PRECISION,
+            model_version TEXT,
+            analyst_id TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    cur.execute(
+        "ALTER TABLE risk_scoring.gate1_outcomes ADD COLUMN IF NOT EXISTS model_version TEXT"
+    )
+
+
+class Gate1FeedbackBody(BaseModel):
+    shipment_id: str
+    action: str  # Hold | Examine | Clear
+    outcome: Optional[str] = None
+    predicted_risk: Optional[float] = None
+    model_version: Optional[str] = None
+    analyst_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@app.post("/api/feedback")
+async def post_gate1_feedback(body: Gate1FeedbackBody = Body(...)) -> Dict[str, Any]:
+    """Record a Gate-1 officer disposition into risk_scoring.gate1_outcomes.
+
+    Body: {shipment_id, action (Hold|Examine|Clear), outcome?, predicted_risk?,
+           model_version?, analyst_id?, notes?}
+
+    Defensive: never raises out; returns {"status":"error",...} on failure.
+    """
+    action = (body.action or "").strip().capitalize()
+    if action not in ("Hold", "Examine", "Clear"):
+        return {
+            "status": "error",
+            "detail": f"action must be Hold|Examine|Clear, got {body.action!r}",
+        }
+    conn = None
+    try:
+        conn = _gate1_conn()
+        cur = conn.cursor()
+        _ensure_gate1_table(cur)
+        cur.execute(
+            """
+            INSERT INTO risk_scoring.gate1_outcomes (
+                shipment_id, officer_action, outcome, predicted_risk,
+                model_version, analyst_id, notes, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                body.shipment_id,
+                action,
+                body.outcome,
+                body.predicted_risk,
+                body.model_version,
+                body.analyst_id,
+                body.notes,
+                datetime.utcnow(),
+            ),
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return {
+            "status": "success",
+            "id": int(new_id),
+            "shipment_id": body.shipment_id,
+            "action": action,
+        }
+    except Exception as e:
+        logger.error(f"Gate-1 feedback insert failed: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return {"status": "error", "detail": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.get("/api/feedback/ppv")
+async def get_gate1_ppv(model_version: Optional[str] = Query(None)) -> Dict[str, Any]:
+    """Compute Gate-1 PPV = confirmed / referred from gate1_outcomes.
+
+    referred  = officer_action IN ('Hold','Examine')
+    confirmed = those rows where outcome = 'confirmed'
+
+    Defensive: returns zeros on empty/missing data; never raises.
+    """
+    conn = None
+    try:
+        conn = _gate1_conn()
+        cur = conn.cursor()
+        _ensure_gate1_table(cur)
+        params: List[Any] = []
+        ver_clause = ""
+        if model_version:
+            ver_clause = " AND model_version = %s"
+            params.append(model_version)
+        cur.execute(
+            f"""
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE officer_action IN ('Hold','Examine'){ver_clause}
+                ) AS referred,
+                COUNT(*) FILTER (
+                    WHERE officer_action IN ('Hold','Examine')
+                      AND outcome = 'confirmed'{ver_clause}
+                ) AS confirmed
+            FROM risk_scoring.gate1_outcomes
+            """,
+            params + params,
+        )
+        row = cur.fetchone() or (0, 0)
+        referred = int(row[0] or 0)
+        confirmed = int(row[1] or 0)
+        ppv = round(confirmed / referred, 4) if referred else 0.0
+        return {
+            "status": "success",
+            "referred": referred,
+            "confirmed": confirmed,
+            "ppv": ppv,
+            "model_version": model_version,
+        }
+    except Exception as e:
+        logger.error(f"Gate-1 PPV computation failed: {e}")
+        return {
+            "status": "error",
+            "detail": str(e),
+            "referred": 0,
+            "confirmed": 0,
+            "ppv": 0.0,
+        }
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.get("/api/feedback/overrides")
 async def get_overrides(
     shipment_id: Optional[str] = Query(None),
@@ -3925,19 +4120,47 @@ async def cord_get_entity(entity_id: str) -> Dict[str, Any]:
 
     Proxies to cord-integration service.
     """
+    def _overlay_fallback() -> Optional[Dict[str, Any]]:
+        """Try the local CORD engine overlay for known EAPA/UFLPA workspace ids.
+
+        Another task adds get_overlay_entity(id) -> {"entity": {...}} | None to
+        cord_engine.py. Be defensive: the helper may not exist yet.
+        """
+        try:
+            from cord_engine import get_cord_engine
+
+            eng = get_cord_engine()
+            if eng is not None and hasattr(eng, "get_overlay_entity"):
+                overlay = eng.get_overlay_entity(entity_id)
+                if isinstance(overlay, dict):
+                    # Helper returns {"entity": {...}}; unwrap if present.
+                    return overlay.get("entity", overlay)
+        except Exception as fb_err:
+            logger.warning(f"CORD overlay fallback failed for {entity_id}: {fb_err}")
+        return None
+
     try:
         async with await get_cord_service_client() as client:
             resp = await client.get(f"/entity/{entity_id}")
             if resp.status_code == 200:
                 return {"status": "success", "entity": resp.json()}
             elif resp.status_code == 404:
+                # CORD service has no record — try the local overlay (fixes the
+                # "unknown entity" workspace error for CBP-EAPA / UFLPA ids).
+                overlay_entity = _overlay_fallback()
+                if overlay_entity is not None:
+                    return {"status": "success", "entity": overlay_entity}
                 raise HTTPException(status_code=404, detail="Entity not found in CORD")
             else:
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
     except HTTPException:
         raise
     except Exception as e:
+        # CORD service call failed (connection error / timeout) — try overlay too.
         logger.error(f"CORD get entity error: {e}")
+        overlay_entity = _overlay_fallback()
+        if overlay_entity is not None:
+            return {"status": "success", "entity": overlay_entity}
         raise HTTPException(status_code=503, detail=f"CORD fetch failed: {str(e)}")
 
 

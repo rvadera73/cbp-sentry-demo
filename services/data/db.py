@@ -379,13 +379,226 @@ def _seed_reference_data(cursor) -> None:
     _seed_top_shipment_scenarios(cursor)
 
 
+def _seed_scope_corridor_shipments(cursor) -> None:
+    """Seed a small set of VN->US HS-7604/8541 demo shipments whose shipper or
+    consignee names ARE EAPA respondents, so the scope corridor's Party factor
+    lights up (the corridor scorer cross-references EAPA respondent names).
+
+    Guarded by a count check on the marker shippers so re-running init_db does
+    not duplicate these rows. Public-record-flavored demo data.
+    """
+    marker_shippers = (
+        "Mekong Aluminium Profiles JSC",
+        "Saigon Metalworks Export Co.",
+        "Mekong Photovoltaic Mfg. JSC",
+        "Bac Giang Solar Wafer Co.",
+    )
+    cursor.execute(
+        "SELECT COUNT(*) AS count FROM shipments WHERE shipper_name = ANY(%s)",
+        (list(marker_shippers),),
+    )
+    if (cursor.fetchone() or {}).get("count", 0) > 0:
+        return
+
+    # (shipper, consignee, hs_code, value_usd, weight_kg, age_months, ad_cvd_rate,
+    #  description). Shipper names are EAPA respondents from eapa_cases above.
+    scope_rows = [
+        ("Mekong Aluminium Profiles JSC", "SunPath Energy Distributors LLC",
+         "7604.21", 412000.0, 165000.0, 7, 0.86, "Aluminum extrusions, 6063-T5 profiles"),
+        ("Saigon Metalworks Export Co.", "Pacific Coast Traders",
+         "7604.29", 298000.0, 128000.0, 5, 0.86, "Aluminum extrusions, mill-finish"),
+        ("Greenfield Industrial Trading Co.", "Newark Metals Inc.",
+         "7604.29", 356000.0, 142000.0, 9, 0.86, "Aluminum extrusions, anodized"),
+        ("Mekong Photovoltaic Mfg. JSC", "California Solar Solutions",
+         "8541.43", 1180000.0, 96000.0, 4, 0.238, "Crystalline-silicon PV cells"),
+        ("Bac Giang Solar Wafer Co.", "Georgia Steel Imports",
+         "8541.43", 845000.0, 72000.0, 6, 0.238, "Solar wafers & cells, mono-PERC"),
+    ]
+
+    manifest_id = "SEED-GATE1-SCOPE"
+    for shipper, consignee, hs, value, weight, age, adcvd, desc in scope_rows:
+        unit_price = round(value / weight, 4) if weight else None
+        cursor.execute(
+            """
+            INSERT INTO shipments (
+                id, manifest_id, shipper_name, consignee_name,
+                origin_country, destination_country, hs_code, commodity_code,
+                declared_value_usd, declared_weight_kg, unit_price_per_kg,
+                description, shipper_age_months, ad_cvd_rate, ad_cvd_applicable,
+                status, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                str(uuid.uuid4()),
+                manifest_id,
+                shipper,
+                consignee,
+                "VN",
+                "US",
+                hs,
+                hs,
+                value,
+                weight,
+                unit_price,
+                desc,
+                age,
+                adcvd,
+                True,
+                "received",
+                datetime.utcnow(),
+            ),
+        )
+    logger.info("✓ Seeded %d Gate-1 scope corridor (VN->US 7604/8541) demo shipments", len(scope_rows))
+
+
+def _ensure_gate1_outcomes(cursor) -> None:
+    """Ensure the Gate-1 PPV feedback table exists (CREATE IF NOT EXISTS).
+
+    Lives in the risk_scoring schema. Idempotent and additive: if the table
+    already exists with a slightly older shape, ADD COLUMN IF NOT EXISTS brings
+    it up to the full Gate-1 feedback contract without dropping data.
+    """
+    cursor.execute("CREATE SCHEMA IF NOT EXISTS risk_scoring")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS risk_scoring.gate1_outcomes (
+            id SERIAL PRIMARY KEY,
+            shipment_id TEXT,
+            officer_action TEXT,
+            outcome TEXT,
+            predicted_risk DOUBLE PRECISION,
+            model_version TEXT,
+            analyst_id TEXT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+        """
+    )
+    # Bring older instances up to the full contract (e.g. missing model_version).
+    for col, ddl in (
+        ("shipment_id", "TEXT"),
+        ("officer_action", "TEXT"),
+        ("outcome", "TEXT"),
+        ("predicted_risk", "DOUBLE PRECISION"),
+        ("model_version", "TEXT"),
+        ("analyst_id", "TEXT"),
+        ("notes", "TEXT"),
+        ("created_at", "TIMESTAMP DEFAULT NOW()"),
+    ):
+        cursor.execute(
+            f"ALTER TABLE risk_scoring.gate1_outcomes ADD COLUMN IF NOT EXISTS {col} {ddl}"
+        )
+
+
+def insert_gate1_outcome(
+    shipment_id: str,
+    officer_action: str,
+    outcome: Optional[str] = None,
+    predicted_risk: Optional[float] = None,
+    model_version: Optional[str] = None,
+    analyst_id: Optional[str] = None,
+    notes: Optional[str] = None,
+) -> Optional[int]:
+    """Insert a Gate-1 officer-feedback row; return the new row id (or None).
+
+    Defensive: ensures the table exists, never raises out of the happy path.
+    """
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        _ensure_gate1_outcomes(cursor)
+        cursor.execute(
+            """
+            INSERT INTO risk_scoring.gate1_outcomes (
+                shipment_id, officer_action, outcome, predicted_risk,
+                model_version, analyst_id, notes, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                shipment_id,
+                officer_action,
+                outcome,
+                predicted_risk,
+                model_version,
+                analyst_id,
+                notes,
+                datetime.utcnow(),
+            ),
+        )
+        new_id = cursor.fetchone()["id"]
+        conn.commit()
+        return int(new_id)
+    except Exception as exc:
+        logger.error("insert_gate1_outcome failed: %s", exc, exc_info=True)
+        conn.rollback()
+        return None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def compute_gate1_ppv(model_version: Optional[str] = None) -> Dict[str, Any]:
+    """Compute Gate-1 Positive Predictive Value from gate1_outcomes.
+
+    referred  = officer_action IN ('Hold', 'Examine')
+    confirmed = referred rows whose outcome = 'confirmed'
+    ppv       = confirmed / referred
+
+    Defensive: returns zeros if the table is empty/absent; never raises.
+    """
+    conn = _get_conn()
+    cursor = _get_cursor(conn)
+    try:
+        _ensure_gate1_outcomes(cursor)
+        params: List[Any] = []
+        version_clause = ""
+        if model_version:
+            version_clause = " AND model_version = %s"
+            params.append(model_version)
+        cursor.execute(
+            f"""
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE officer_action IN ('Hold', 'Examine'){version_clause}
+                ) AS referred,
+                COUNT(*) FILTER (
+                    WHERE officer_action IN ('Hold', 'Examine')
+                      AND outcome = 'confirmed'{version_clause}
+                ) AS confirmed
+            FROM risk_scoring.gate1_outcomes
+            """,
+            params + params,
+        )
+        row = cursor.fetchone() or {}
+        referred = int(row.get("referred") or 0)
+        confirmed = int(row.get("confirmed") or 0)
+        ppv = (confirmed / referred) if referred else 0.0
+        return {
+            "referred": referred,
+            "confirmed": confirmed,
+            "ppv": round(ppv, 4),
+            "model_version": model_version,
+        }
+    except Exception as exc:
+        logger.error("compute_gate1_ppv failed: %s", exc, exc_info=True)
+        return {"referred": 0, "confirmed": 0, "ppv": 0.0, "model_version": model_version}
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def init_db() -> None:
     """Initialize PostgreSQL schema and seed reference tables."""
     conn = _get_conn()
     cursor = _get_cursor(conn)
     try:
         cursor.execute(INIT_SQL_PATH.read_text())
+        _ensure_gate1_outcomes(cursor)
         _seed_reference_data(cursor)
+        _seed_scope_corridor_shipments(cursor)
         conn.commit()
     finally:
         cursor.close()

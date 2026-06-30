@@ -5,7 +5,7 @@
  * (outside tabs) — mirroring the Shipment Intelligence layout.
  */
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileText } from 'lucide-react';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import EntitySummary from '../components/EntitySummary';
 import EntityAssessment from '../components/EntityAssessment';
@@ -53,6 +53,14 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
   const openEntity = (id: string) => id && setSelectedEntityId?.(id);
   const handleBack = () => { setSelectedEntityId?.(null); setActiveTab?.('entities'); };
 
+  // EAPA is an enforcement action against ENTITIES (actors) — surface a
+  // prominent, entity-targeted referral action from the workspace.
+  const entityName = detail?.entity?.name || 'this entity';
+  const buildEapaReferral = () => {
+    if (setActiveTab) setActiveTab('investigations');
+    else console.log('[EAPA Referral] Build referral for entity:', selectedEntityId, entityName);
+  };
+
   const parties = detail?.parties || [];
   const related = parties.length
     ? parties.map((p: any) => ({ id: p.entity_id || p.id, name: p.name || p.entity_name || p.entity_id, sub: p.relationship || p.type || 'related', score: Math.round((p.confidence ?? 0.5) * 100), real: true }))
@@ -61,9 +69,20 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC]">
       {/* Back bar */}
-      <div className="bg-white border-b border-[#D0D7DE] px-6 py-2">
-        <button onClick={handleBack} className="flex items-center gap-2 text-[12px] font-bold text-[#005EA2] hover:underline focus:outline-none focus:ring-2 focus:ring-[#005EA2] rounded px-1">
-          <ArrowLeft className="w-4 h-4" /> Back to Watchlist
+      <div className="bg-white border-b border-[#D0D7DE] px-6 py-2 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={handleBack} className="flex items-center gap-2 text-[12px] font-bold text-[#005EA2] hover:underline focus:outline-none focus:ring-2 focus:ring-[#005EA2] rounded px-1">
+            <ArrowLeft className="w-4 h-4" /> Back to Watchlist
+          </button>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-[#005EA2] truncate">
+            Entity Resolution · H2 (actor intelligence)
+          </span>
+        </div>
+        <button
+          onClick={buildEapaReferral}
+          title={`Build an EAPA referral for ${entityName}`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#D83933] hover:bg-[#b32b27] text-white rounded text-[11px] font-bold shrink-0 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#D83933]">
+          <FileText className="w-3.5 h-3.5" /> Build EAPA Referral
         </button>
       </div>
 

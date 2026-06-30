@@ -173,7 +173,25 @@ def score_corridor(
     ))
 
     subtotal = sum(c.weighted_result for c in components)
-    final_score = max(0.0, min(100.0, subtotal))
+
+    # Provisional corridor severity floor (provisional; D2 calibration) — mirrors
+    # entity_scorer's SEVERITY_FLOOR approach. A single flagged actor lights only
+    # the Party factor (1 of 5), so the raw additive subtotal tops out at MEDIUM
+    # even when an EAPA/OFAC/UFLPA actor (entity_score >= 80) is in the lane —
+    # which kills relevance. A flagged actor therefore sets a tier FLOOR; the
+    # additive subtotal still wins when it already exceeds the floor.
+    #   - top actor CRITICAL (max actor entity_score >= 80) -> floor 78 (HIGH);
+    #   - AND a critical commodity regime (Commodity component >= 9, i.e. AD/CVD
+    #     or UFLPA) on the same lane -> floor 85 (CRITICAL).
+    #   - no flagged actor in the lane -> no floor (pure additive).
+    max_actor = max((esc for (_, esc, _) in actor_scores), default=0.0)
+    floor = 0.0
+    if max_actor >= 80.0:
+        floor = 78.0  # flagged actor in the lane -> at least HIGH
+        if comm >= 9.0:
+            floor = 85.0  # flagged actor + AD/CVD or UFLPA regime -> CRITICAL
+    final_score = max(subtotal, floor)
+    final_score = max(0.0, min(100.0, final_score))
     return ScoreBreakdownV4(
         subject_id=cid,
         subject_type="corridor",

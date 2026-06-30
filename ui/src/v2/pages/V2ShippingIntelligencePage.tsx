@@ -278,7 +278,12 @@ export default function V2ShippingIntelligencePage({
 
               {activeTab === 'trade-analysis' && (
                 <div className="space-y-4 overflow-y-auto flex-1">
+                  {/* Routing + geography map */}
                   <CorridorTradeAnalysis corridor={selectedCorridor} shipments={corridorShipments} />
+                  {/* Risk model + assessment sit next to the geography they describe.
+                      Scoped to this default tab only — not on the other sub-tabs. */}
+                  <CorridorRiskScoreV4 corridor={selectedCorridor} shipments={corridorShipments} />
+                  <CorridorAssessment corridor={selectedCorridor} shipments={corridorShipments} />
                 </div>
               )}
 
@@ -331,12 +336,6 @@ export default function V2ShippingIntelligencePage({
                 </div>
               )}
 
-            </div>
-
-            {/* Corridor-level assessment — shown outside the tabs, like the top summary */}
-            <div className="shrink-0 px-4 pt-2 pb-4 bg-[#F7F9FC] border-t border-[#D0D7DE] space-y-3">
-              <CorridorRiskScoreV4 corridor={selectedCorridor} shipments={corridorShipments} />
-              <CorridorAssessment corridor={selectedCorridor} shipments={corridorShipments} />
             </div>
           </div>
         )}

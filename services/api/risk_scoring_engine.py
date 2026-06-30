@@ -37,6 +37,18 @@ except Exception as _ref_err:
     def get_adcvd_order(hs_code): return None
     def get_adcvd_order_by_country(origin_country, hs_code): return None
 
+# Gate-1 scope reference data (VN->US, HS 7604/8541). Public-record seeded;
+# live fetch via fetch_adcvd/comtrade/entities is a later swap. Import is
+# defensive: if reference_data is unavailable the engine falls back to its
+# existing behavior with no crash.
+try:
+    import reference_data as _refdata
+    _REFDATA_LOADED = True
+except Exception as _rd_err:  # pragma: no cover - pure defensiveness
+    logger.warning(f"reference_data not available (Gate-1 scope scoring disabled): {_rd_err}")
+    _refdata = None
+    _REFDATA_LOADED = False
+
 
 def _calibrate_prob_to_score(prob: float, cal: dict) -> float:
     """
@@ -619,6 +631,46 @@ class RiskScoringEngine:
             if active_order.get("source_url"):
                 tariff_evidence.append(f"Source: {active_order['source_url']}")
 
+        # ── Gate-1 scope reference-data lift (additive, defensive) ──────────
+        # When the seeded public-record AD/CVD reference shows an active order
+        # for this (HS, origin) — including the VN/MY/TH/KH transshipment hubs
+        # for the China orders — raise the Commodity component. This fixes the
+        # ZERO Commodity factor on the VN->US 7604/8541 scope corridor.
+        rd_uflpa_hit = False
+        if _refdata is not None:
+            try:
+                rd = _refdata.adcvd_for(commodity_code_val, shipment.get("origin_country"))
+                if rd:
+                    # Effective ad-valorem exposure = AD + CVD + Section 301 (decimals).
+                    eff_rate = (
+                        float(rd.get("ad_rate") or 0)
+                        + float(rd.get("cvd_rate") or 0)
+                        + float(rd.get("section_301") or 0)
+                    )
+                    # Map effective rate to a 0-10 floor: 100%+ combined → near 10.
+                    rd_floor = min(6.0 + eff_rate * 1.0, 10.0)
+                    if rd.get("uflpa"):
+                        rd_floor = min(rd_floor + 0.5, 10.0)
+                        rd_uflpa_hit = True
+                    if rd_floor > tariff_score:
+                        tariff_score = rd_floor
+                    hub_note = (
+                        " via transshipment hub" if rd.get("origin_is_transship_hub") else ""
+                    )
+                    tariff_rationale = (
+                        f"Active AD/CVD order ({rd.get('order')}) for "
+                        f"{rd.get('commodity')} from {shipment.get('origin_country')}{hub_note} "
+                        f"— AD {float(rd.get('ad_rate') or 0)*100:.0f}%, "
+                        f"CVD {float(rd.get('cvd_rate') or 0)*100:.0f}%, "
+                        f"§301 {float(rd.get('section_301') or 0)*100:.0f}%"
+                    )
+                    tariff_evidence.append(
+                        f"reference_data: {rd.get('order')} "
+                        f"(public-record seed; transship_hubs={rd.get('transship_hubs')})"
+                    )
+            except Exception as _rd_e:  # pragma: no cover - defensiveness
+                logger.debug(f"reference_data commodity lift skipped: {_rd_e}")
+
         components.append(
             RiskComponentScore(
                 component="Tariff Rate / AD-CVD Exposure",
@@ -650,7 +702,9 @@ class RiskScoringEngine:
         )
 
         # UFLPA Risk (20% of commodity risk)
-        uflpa_score = 8.0 if sensitivity.get("uflpa_exposure", False) else 3.0
+        # reference_data UFLPA flag (e.g. solar polysilicon / Xinjiang) lifts this
+        # even when the config sensitivity_matrix has no UFLPA exposure recorded.
+        uflpa_score = 8.0 if (sensitivity.get("uflpa_exposure", False) or rd_uflpa_hit) else 3.0
         components.append(
             RiskComponentScore(
                 component="UFLPA Forced Labor Risk",
@@ -933,6 +987,33 @@ class RiskScoringEngine:
                 if baseline and baseline > 0:
                     price_variance = ((unit_price - baseline) / baseline) * 100
                     price_source = f"HS-{hs4} benchmark ${baseline:.2f}/kg"
+            # Final fallback: Gate-1 scope reference_data price norm (public-record
+            # seed; live fetch via comtrade is a later swap).
+            if not price_variance and _refdata is not None:
+                try:
+                    norm = _refdata.price_norm(hs_code)
+                    if norm and norm > 0:
+                        price_variance = ((unit_price - norm) / norm) * 100
+                        price_source = f"reference_data norm ${norm:.2f}/kg (public-record seed)"
+                except Exception as _rd_pe:  # pragma: no cover - defensiveness
+                    logger.debug(f"reference_data price norm skipped: {_rd_pe}")
+
+        # ── Gate-1 scope undervaluation lift (additive, defensive) ──────────
+        # When the declared unit price is >15% below the seeded reference norm
+        # for this HS family, raise the pricing score. This fixes the ZERO
+        # Pattern factor for undervalued scope shipments.
+        if _refdata is not None and unit_price and float(unit_price) > 0:
+            try:
+                norm = _refdata.price_norm(hs_code)
+                if norm and norm > 0:
+                    pct_below = (norm - float(unit_price)) / norm * 100.0
+                    if pct_below > 15.0 and (not price_variance or price_variance > -pct_below):
+                        # Reflect the undervaluation in the variance so downstream
+                        # categorization and rationale are consistent.
+                        price_variance = -pct_below
+                        price_source = f"reference_data norm ${norm:.2f}/kg (public-record seed)"
+            except Exception as _rd_uv:  # pragma: no cover - defensiveness
+                logger.debug(f"reference_data undervaluation lift skipped: {_rd_uv}")
 
         if price_variance < -50:
             pricing_score = 9.0
