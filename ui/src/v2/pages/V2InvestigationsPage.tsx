@@ -11,7 +11,6 @@ import { EntityRelationshipGraph } from '../components/EntityRelationshipGraph';
 import ComprehensiveReferralViewer from '../components/ComprehensiveReferralViewer';
 import ReferralPackageGenerationTab from '../../components/referral-generation/ReferralPackageGenerationTab';
 import { TabNavigation, TabConfig } from '../components/TabNavigation';
-import InvestigationQueueCard from '../components/InvestigationQueueCard';
 import InvestigationTimeline from '../components/InvestigationTimeline';
 import RiskHeatmap from '../components/RiskHeatmap';
 import MaturityBadge from '../components/MaturityBadge';
@@ -20,7 +19,7 @@ import EvidenceTab from '../components/EvidenceTab';
 import ReferralPackageV2 from '../components/ReferralPackageV2';
 import OfficerDispositionBar from '../components/OfficerDispositionBar';
 import ModelBadge from '../components/ModelBadge';
-import { StatStrip } from '../../components/ui';
+import { Panel, SectionHeader, StatStrip, DataTable, Column } from '../../components/ui';
 
 interface V2InvestigationsPageProps {
   cases?: Case[];
@@ -36,6 +35,23 @@ interface V2InvestigationsPageProps {
   draftNarrative?: string;
   setDraftNarrative?: (narrative: string) => void;
 }
+
+// Case lifecycle: data uses these case_status values; the UI shows friendly labels.
+const STATUS_LABEL: Record<string, string> = {
+  'Active': 'New',
+  'Under Audit': 'In Progress',
+  'Referral Prepared': 'Review',
+  'Closed': 'Closed',
+};
+const statusLabel = (s: string) => STATUS_LABEL[s] || s || '—';
+const QUEUE_STATUSES = ['New', 'In Progress', 'Review', 'Closed'];
+const corridorKey = (c: { origin_country?: string; destination_country?: string }) => `${c.origin_country || '?'}→${c.destination_country || '?'}`;
+const scoreColorQ = (s: number) => (s >= 80 ? '#D83933' : s >= 50 ? '#C7791B' : '#15803D');
+const statusBadgeClass = (label: string) =>
+  label === 'New' ? 'bg-slate-100 text-slate-700'
+  : label === 'In Progress' ? 'bg-blue-100 text-blue-700'
+  : label === 'Review' ? 'bg-amber-100 text-amber-700'
+  : 'bg-green-100 text-green-700';
 
 export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
   const navigate = useNavigate();
@@ -112,21 +128,19 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
 
   // Filter & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('all');
-  const [riskFilter, setRiskFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [corridorFilter, setCorridorFilter] = useState('all');
 
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
       const matchesSearch = c.case_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            c.target_entity.toLowerCase().includes(searchQuery.toLowerCase()) ||
                            c.case_id.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesPriority = priorityFilter === 'all' || c.priority.toLowerCase() === priorityFilter;
-      const matchesRisk = riskFilter === 'all' ||
-                         (riskFilter === 'critical' && c.risk_score >= 80) ||
-                         (riskFilter === 'elevated' && c.risk_score >= 50 && c.risk_score < 80);
-      return matchesSearch && matchesPriority && matchesRisk;
+      const matchesStatus = statusFilter === 'all' || statusLabel(c.case_status) === statusFilter;
+      const matchesCorridor = corridorFilter === 'all' || corridorKey(c) === corridorFilter;
+      return matchesSearch && matchesStatus && matchesCorridor;
     });
-  }, [cases, searchQuery, priorityFilter, riskFilter]);
+  }, [cases, searchQuery, statusFilter, corridorFilter]);
 
   // Referral state
   const [selectedReferral, setSelectedReferral] = useState<ReferralPackage | null>(null);
@@ -305,129 +319,95 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
     }
   };
 
-  // LIST VIEW
+  // LIST VIEW — Referral Queue (clean shared-kit table)
   if (!selectedCase) {
-    console.log('[V2InvestigationsPage] Showing LIST view, selectedCaseId:', selectedCaseId);
+    const columns: Column[] = [
+      {
+        key: 'risk_score', label: 'Risk', render: (c: Case) => {
+          const sc = c.calculated_risk_score ?? c.risk_score;
+          return (
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-1.5 bg-slate-200 rounded-sm overflow-hidden"><div className="h-full" style={{ width: `${sc}%`, background: scoreColorQ(sc) }} /></div>
+              <span className="font-mono font-bold" style={{ color: scoreColorQ(sc) }}>{sc}</span>
+            </div>
+          );
+        },
+      },
+      {
+        key: 'target_entity', label: 'Case / Entity', render: (c: Case) => (
+          <div><div className="font-semibold text-[#0B1F33]">{c.target_entity.split('/')[0]}</div><div className="text-[10px] font-mono text-[#5C5C5C]">{c.case_id}</div></div>
+        ),
+      },
+      {
+        key: 'corridor', label: 'Corridor / Category', render: (c: Case) => (
+          <div><div className="text-[#0B1F33] font-mono text-[11px]">{c.origin_country} → {c.destination_country}</div><div className="text-[10px] text-[#5C5C5C]">{c.product_category}</div></div>
+        ),
+      },
+      {
+        key: 'case_status', label: 'Status', render: (c: Case) => {
+          const lbl = statusLabel(c.case_status);
+          return <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${statusBadgeClass(lbl)}`}>{lbl}</span>;
+        },
+      },
+      { key: 'sla_timer', label: 'SLA', align: 'right', render: (c: Case) => <span className={`font-mono font-bold text-[11px] ${String(c.sla_timer).toLowerCase().includes('overdue') ? 'text-[#D83933]' : 'text-[#5C5C5C]'}`}>{c.sla_timer}</span> },
+      {
+        key: 'action', label: '', align: 'right', render: (c: Case) => (
+          <button onClick={() => setSelectedCaseId(c.case_id)} className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#005EA2] hover:bg-[#0b4f86] text-white text-[10px] font-bold rounded focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#005EA2] whitespace-nowrap">Open <ChevronRight className="w-3 h-3" /></button>
+        ),
+      },
+    ];
+    const corridorOptions = Array.from(new Set(cases.map(corridorKey))).sort();
+    const queueRows = [...filteredCases].sort((a, b) => (b.calculated_risk_score ?? b.risk_score) - (a.calculated_risk_score ?? a.risk_score));
     return (
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 p-5 flex flex-col space-y-4 overflow-y-auto bg-[#F7F9FC]">
         {/* Header */}
-        <div className={`${DESIGN.bgWhite} p-4 border ${DESIGN.borderColor} rounded-sm flex justify-between items-center mb-4 shadow-sm`}>
+        <div className="shrink-0 flex items-start justify-between gap-3">
           <div>
-            <h2 className={`${TYPOGRAPHY.sectionTitle} uppercase flex items-center space-x-2 mb-0`}>
-              <span>ACTIVE INVESTIGATIONS</span>
-            </h2>
-            <p className={`${TYPOGRAPHY.smallText} mt-1`}>Evaluate current trade targets or launch secure forensic analysis.</p>
+            <h2 className="text-lg font-black text-[#0B1F33] uppercase tracking-wide">Active Investigations</h2>
+            <p className="text-[12px] text-[#5C5C5C] mt-0.5">Referral queue — triage flagged cases and build referral packages.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <ModelBadge />
-            <button
-              onClick={() => { setSearchQuery(''); setPriorityFilter('all'); setRiskFilter('all'); }}
-              className={`px-3 py-1.5 border ${DESIGN.borderColor} hover:${DESIGN.bgLight} text-xs font-bold rounded-sm ${DESIGN.textDark} cursor-pointer`}
-            >
-              CLEAR ALL
-            </button>
-          </div>
-        </div>
-
-        {/* Filter Controls */}
-        <div className={`${DESIGN.bgWhite} p-3.5 rounded-sm border ${DESIGN.borderColor} flex flex-col md:flex-row md:items-center gap-4 mb-4 shadow-sm`}>
-          <div className="flex-1 relative flex items-center">
-            <Search className="h-4 w-4 text-slate-400 absolute left-3" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter by case name, entity, or ID..."
-              className={`w-full ${DESIGN.bgLight} border ${DESIGN.borderColor} rounded-sm pl-9 pr-4 py-1.5 text-xs ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2]`}
-            />
-          </div>
-
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className={`${DESIGN.bgLight} border ${DESIGN.borderColor} rounded px-2.5 py-1.5 text-xs ${DESIGN.textDark} focus:outline-none focus:border-[#005EA2] font-bold`}
-          >
-            <option value="all">PRIORITY: ALL</option>
-            <option value="critical">CRITICAL</option>
-            <option value="high">HIGH</option>
-            <option value="medium">MEDIUM</option>
-          </select>
-
-          <select
-            value={riskFilter}
-            onChange={(e) => setRiskFilter(e.target.value)}
-            className="bg-slate-50 border border-[#D0D7DE] rounded px-2.5 py-1.5 text-xs text-[#0B1F33] focus:outline-none focus:border-[#005EA2] font-mono"
-          >
-            <option value="all">RISK MATRIX: ALL</option>
-            <option value="critical">CRITICAL (≥80)</option>
-            <option value="elevated">ELEVATED (50-79)</option>
-          </select>
+          <ModelBadge className="shrink-0 mt-0.5" />
         </div>
 
         {/* KPI strip */}
-        <div className="mb-4">
-          <StatStrip items={[
-            { label: 'Total Cases', value: filteredCases.length },
-            { label: 'Critical', value: filteredCases.filter(c => c.priority === 'Critical').length, color: '#D83933' },
-            { label: 'High Risk ≥80', value: filteredCases.filter(c => c.risk_score >= 80).length, color: '#C7791B' },
-            { label: 'Active', value: filteredCases.filter(c => c.case_status === 'Active').length },
-            { label: 'Closed', value: filteredCases.filter(c => c.case_status === 'Closed').length },
-          ]} />
+        <StatStrip items={[
+          { label: 'Total Cases', value: filteredCases.length },
+          { label: 'Critical', value: filteredCases.filter(c => c.priority === 'Critical').length, color: '#D83933' },
+          { label: 'High Risk ≥80', value: filteredCases.filter(c => (c.calculated_risk_score ?? c.risk_score) >= 80).length, color: '#C7791B' },
+          { label: 'In Progress', value: filteredCases.filter(c => statusLabel(c.case_status) === 'In Progress').length },
+          { label: 'Closed', value: filteredCases.filter(c => statusLabel(c.case_status) === 'Closed').length },
+        ]} />
+
+        {/* Search + Status + Corridor filters */}
+        <div className="bg-white p-3 rounded-sm border border-[#D0D7DE] flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
+          <div className="flex-1 relative flex items-center min-w-[220px]">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3" />
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by case, entity, or ID…" className="w-full bg-white border border-[#D0D7DE] rounded-sm pl-9 pr-4 py-1.5 text-[12px] text-[#0B1F33] focus:outline-none focus:ring-2 focus:ring-[#005EA2]" />
+          </div>
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-[#5C5C5C]">STATUS
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="bg-white border border-[#D0D7DE] rounded px-2 py-1 text-[11px] text-[#0B1F33] focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
+              <option value="all">All</option>
+              {QUEUE_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </label>
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-[#5C5C5C]">CORRIDOR
+            <select value={corridorFilter} onChange={e => setCorridorFilter(e.target.value)} className="bg-white border border-[#D0D7DE] rounded px-2 py-1 text-[11px] text-[#0B1F33] font-mono focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
+              <option value="all">All corridors</option>
+              {corridorOptions.map(cor => <option key={cor} value={cor}>{cor}</option>)}
+            </select>
+          </label>
+          <button onClick={() => { setSearchQuery(''); setStatusFilter('all'); setCorridorFilter('all'); }} className="px-3 py-1.5 border border-[#D0D7DE] hover:bg-slate-50 text-[11px] font-bold rounded-sm text-[#0B1F33]">CLEAR</button>
         </div>
 
-        {/* Kanban-Style Queue View */}
-        <div className="flex-1 overflow-auto bg-[#F0F4F8] p-4">
-          <div className="grid grid-cols-4 gap-4 h-full auto-rows-max">
-            {['Active', 'Under Audit', 'Referral Prepared', 'Closed'].map((status) => {
-              const statusMap: Record<string, 'New' | 'In Progress' | 'Review' | 'Closed'> = {
-                'Active': 'New',
-                'Under Audit': 'In Progress',
-                'Referral Prepared': 'Review',
-                'Closed': 'Closed',
-              };
-              return (
-                <div key={status} className="flex flex-col">
-                  <div className="text-[9px] font-bold text-[#5C5C5C] uppercase mb-3 sticky top-0 bg-[#F0F4F8] py-2">
-                    {statusMap[status]}
-                  </div>
-                  <div className="space-y-2 flex flex-col">
-                    {filteredCases
-                      .filter(c => c.case_status === status)
-                      .map((c) => (
-                        <InvestigationQueueCard
-                          key={c.case_id}
-                          case_id={c.case_id}
-                          case_name={c.case_name}
-                          target_entity={c.target_entity}
-                          priority={c.priority}
-                          risk_score={c.risk_score}
-                          calculated_risk_score={c.calculated_risk_score}
-                          model_maturity={c.model_maturity}
-                          model_version={c.model_version}
-                          risk_score_calculated_at={c.risk_score_calculated_at}
-                          case_status={statusMap[status]}
-                          opened_date={c.opened_date}
-                          days_open={Math.floor((new Date().getTime() - new Date(c.opened_date).getTime()) / (1000 * 60 * 60 * 24))}
-                          risk_trend={[
-                            { day: 1, score: Math.max(0, c.risk_score - 12) },
-                            { day: 2, score: Math.max(0, c.risk_score - 8) },
-                            { day: 3, score: Math.max(0, c.risk_score - 5) },
-                            { day: 4, score: Math.max(0, c.risk_score - 2) },
-                            { day: 5, score: c.risk_score },
-                            { day: 6, score: c.risk_score },
-                          ]}
-                          onClick={() => setSelectedCaseId(c.case_id)}
-                        />
-                      ))}
-                    {filteredCases.filter(c => c.case_status === status).length === 0 && (
-                      <div className="text-[8px] text-[#5C5C5C] text-center py-8 italic">No cases</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        {/* Referral queue table */}
+        <Panel className="flex-1 flex flex-col min-h-[300px]">
+          <SectionHeader title="Referral Queue" subtitle={`${queueRows.length} case${queueRows.length === 1 ? '' : 's'} · sorted by risk`} />
+          <div className="overflow-y-auto">
+            {loading
+              ? <p className="text-[12px] text-[#5C5C5C] py-6 text-center">Loading cases…</p>
+              : <DataTable columns={columns} rows={queueRows} caption="Referral queue" empty="No cases match the current filters." />}
           </div>
-        </div>
+        </Panel>
       </div>
     );
   }
