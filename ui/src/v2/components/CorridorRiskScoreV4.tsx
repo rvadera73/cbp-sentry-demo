@@ -47,7 +47,7 @@ export default function CorridorRiskScoreV4({ corridor, shipments = [] }: Props)
   return (
     <Panel className="border-l-4" style={{ borderLeftColor: riskColor(final) }}>
       <SectionHeader
-        title="v4.0 Corridor Risk"
+        title="Corridor Risk Model"
         icon={<Gauge className="w-4 h-4" />}
         action={<StatusPill status={score.tier} />}
       />

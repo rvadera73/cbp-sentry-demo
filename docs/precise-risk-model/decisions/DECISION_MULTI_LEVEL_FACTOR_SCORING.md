@@ -162,3 +162,34 @@ The referral (14-section CSOP doc) is the output surface of H2. It already organ
 2. Edge-materialization approach (Senzing load expansion vs shared-identifier derivation vs both).
 3. Confirm **k** (top-k) default = 5 and the blend-weight curve on a validation split.
 4. Where corridor/entity score computation lives (extend the existing engine to emit corridor/entity `RiskScoreBreakdown` — recommended — vs a separate aggregation pass).
+
+---
+
+## 11. Versioning strategy (gate-anchored) — supersedes the "v4.0" version line
+
+**MAJOR version = the gate; MINOR version = an iteration within the gate.** A gate
+closes (major bump) only when its PPV target is met on **real CBP outcomes**; within
+a gate a *candidate* minor version is promoted to that gate's *production* when it
+improves the gate's metric on real data.
+
+Registry (`risk_scoring.model_versions`), aligned 2026-06-29:
+- **v1.0** (`gate0-1.0`) — Gate 1 — **production** — rules + XGBoost baseline (real metrics)
+- **v1.1** — Gate 1 — **candidate** — entity-resolution + corridor scoring make the
+  Party/Corridor factors **real** (were zero/synthetic); promotion pending real PPV
+- **v2.0** — Gate 2 — candidate — LightGBM track (opens when Gate 1 closes)
+- v2.1 — deprecated (legacy rules)
+
+The entity/corridor scoring of this record folds in as **Gate 1 v1.1** — not a new
+gate, not a separate production model. **Entity Resolution is Gate 1 scope** (Rule 2
+entity/OFAC screening; EAPA is entity-targeted). The retired "v4.0" naming is
+superseded by this scheme.
+
+### To CLOSE Gate 1 (exit = PPV >= 10% on real outcomes)
+- **A. Zero-factor fix** (scope VN->US, HS 7604+8541): Commodity <- `fetch_adcvd`
+  (Federal Register); Party <- entity resolution (v1.1) + `fetch_entities`
+  (OpenCorporates VN); Pattern <- `fetch_comtrade` (UN Comtrade price norms).
+- **B.** Score write-back + provenance columns + batch rescore.
+- **C.** Officer feedback loop (Hold/Examine/Clear -> `gate1_outcomes`) — measures
+  PPV, triggers Gate 2 at >=200 confirmed.
+- **D.** MLOps tabs wired (model toggle + per-model data).
+- **E.** PPV >= 10%, 2-3 referrals/week, >=70% EAPA backtest -> Gate 1 closes -> v2.0.

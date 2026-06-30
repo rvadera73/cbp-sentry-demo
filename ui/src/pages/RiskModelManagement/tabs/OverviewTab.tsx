@@ -19,11 +19,13 @@ const readMetric = (model: any, keys: string[]): number | null => {
   return null
 }
 
-const OverviewTab: React.FC = () => {
+const OverviewTab: React.FC<{ selectedVersion?: string }> = ({ selectedVersion }) => {
   const [gatesData, setGatesData] = useState<GatesResponse | null>(null)
   const [model, setModel] = useState<any | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const withModel = (p: string) => (selectedVersion ? `${p}${p.includes('?') ? '&' : '?'}model_version=${encodeURIComponent(selectedVersion)}` : p)
 
   useEffect(() => {
     let cancelled = false
@@ -31,8 +33,8 @@ const OverviewTab: React.FC = () => {
       setLoading(true); setError(null)
       try {
         const [gRes, mRes] = await Promise.all([
-          fetch(getMLOpsEndpoint('/metrics/gates')),
-          fetch(getMLOpsEndpoint('/models/production')),
+          fetch(getMLOpsEndpoint(withModel('/metrics/gates'))),
+          fetch(getMLOpsEndpoint(withModel('/models/production'))),
         ])
         if (!gRes.ok) throw new Error(`Gate metrics request failed (${gRes.status})`)
         const gates = await gRes.json()
@@ -42,7 +44,7 @@ const OverviewTab: React.FC = () => {
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVersion])
 
   if (loading) return <LoadingState label="Loading gate status…" />
   if (error || !gatesData) return <ErrorState title="Unable to load overview" detail={error} />

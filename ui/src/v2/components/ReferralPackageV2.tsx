@@ -924,7 +924,7 @@ export default function ReferralPackageV2({ selectedCase, selectedCaseShipments 
               {entityRisk.length > 0 && (
                 <div className="mt-4">
                   <p className="text-[10px] font-bold text-[#005EA2] uppercase tracking-wide mb-2">
-                    Per-Entity Risk (Model v4.0 — Factor Attribution)
+                    Per-Entity Risk (Factor Attribution)
                   </p>
                   <div className="space-y-3">
                     {entityRisk.map((block: any, i: number) => (

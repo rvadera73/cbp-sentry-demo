@@ -138,7 +138,7 @@ export default function V2EntityResolutionPanel({
           <Panel>
             <SectionHeader
               title="Risk Profile"
-              subtitle={`${scoreBreakdown ? 'v4.0 model score' : 'Resolved risk'} ${score}/100 (${tier})`}
+              subtitle={`${scoreBreakdown ? 'Model risk score' : 'Resolved risk'} ${score}/100 (${tier})`}
               icon={<TrendingUp className="w-4 h-4" />}
               action={<StatusPill status={tier.toLowerCase()} />}
             />
@@ -152,7 +152,7 @@ export default function V2EntityResolutionPanel({
                     score={Math.round((c.score || 0) * 10)}
                   />
                 ))}
-                <p className="mt-2 text-[10px] text-[#5C5C5C]">Factor-attributed v4.0 entity score (provisional weights — pinned at calibration).</p>
+                <p className="mt-2 text-[10px] text-[#5C5C5C]">Factor-attributed entity risk score (provisional weights — pinned at calibration).</p>
               </div>
             ) : signals.length ? (
               <ul className="space-y-1.5">

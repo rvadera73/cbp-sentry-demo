@@ -18,11 +18,13 @@ interface DriftResponse {
 interface FactorSummary { factor: string; override_count: number; avg_delta: number | null; positive_overrides: number; negative_overrides: number }
 interface FeedbackSummary { total_feedback: number; factor_summary: FactorSummary[] }
 
-const MonitoringTab: React.FC = () => {
+const MonitoringTab: React.FC<{ selectedVersion?: string }> = ({ selectedVersion }) => {
   const [drift, setDrift] = useState<DriftResponse | null>(null)
   const [feedback, setFeedback] = useState<FeedbackSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const withModel = (p: string) => (selectedVersion ? `${p}${p.includes('?') ? '&' : '?'}model_version=${encodeURIComponent(selectedVersion)}` : p)
 
   useEffect(() => {
     let cancelled = false
@@ -30,8 +32,8 @@ const MonitoringTab: React.FC = () => {
       setLoading(true); setError(null)
       try {
         const [dRes, fRes] = await Promise.all([
-          fetch(getMLOpsEndpoint('/metrics/drift')),
-          fetch(getMLOpsEndpoint('/feedback/summary')),
+          fetch(getMLOpsEndpoint(withModel('/metrics/drift'))),
+          fetch(getMLOpsEndpoint(withModel('/feedback/summary'))),
         ])
         if (!dRes.ok) throw new Error(`Drift request failed (${dRes.status})`)
         if (!cancelled) {
@@ -42,7 +44,7 @@ const MonitoringTab: React.FC = () => {
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVersion])
 
   if (loading) return <LoadingState label="Loading monitoring data…" />
   if (error || !drift) return <ErrorState title="Unable to load monitoring data" detail={error} />

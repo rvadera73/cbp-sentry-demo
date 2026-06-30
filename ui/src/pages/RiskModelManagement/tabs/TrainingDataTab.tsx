@@ -18,17 +18,19 @@ interface TrainingJob {
 const n = (v: any) => (Number.isFinite(Number(v)) ? Number(v).toLocaleString() : '—')
 const f = (v: any, d = 3) => { const x = Number(v); return Number.isFinite(x) ? x.toFixed(d) : '—' }
 
-const TrainingDataTab: React.FC = () => {
+const TrainingDataTab: React.FC<{ selectedVersion?: string }> = ({ selectedVersion }) => {
   const [jobs, setJobs] = useState<TrainingJob[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const withModel = (p: string) => (selectedVersion ? `${p}${p.includes('?') ? '&' : '?'}model_version=${encodeURIComponent(selectedVersion)}` : p)
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       setLoading(true); setError(null)
       try {
-        const res = await fetch(getMLOpsEndpoint('/jobs'))
+        const res = await fetch(getMLOpsEndpoint(withModel('/jobs')))
         if (!res.ok) throw new Error(`Jobs request failed (${res.status})`)
         const data = await res.json()
         if (!cancelled) setJobs(Array.isArray(data.jobs) ? data.jobs : [])
@@ -36,7 +38,7 @@ const TrainingDataTab: React.FC = () => {
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVersion])
 
   if (loading) return <LoadingState label="Loading training jobs…" />
   if (error) return <ErrorState title="Unable to load training jobs" detail={error} />

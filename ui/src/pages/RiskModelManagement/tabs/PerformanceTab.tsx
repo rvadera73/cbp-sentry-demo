@@ -17,11 +17,13 @@ const pct = (v: number | null) => (v == null || Number.isNaN(v) ? '—' : `${(v 
 const num = (v: number | null) => (v == null || Number.isNaN(v) ? '—' : v.toLocaleString())
 const fixed = (v: number | null, d = 3) => (v == null || Number.isNaN(v) ? '—' : v.toFixed(d))
 
-const PerformanceTab: React.FC = () => {
+const PerformanceTab: React.FC<{ selectedVersion?: string }> = ({ selectedVersion }) => {
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [importance, setImportance] = useState<ImportanceItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const withModel = (p: string) => (selectedVersion ? `${p}${p.includes('?') ? '&' : '?'}model_version=${encodeURIComponent(selectedVersion)}` : p)
 
   useEffect(() => {
     let cancelled = false
@@ -29,8 +31,8 @@ const PerformanceTab: React.FC = () => {
       setLoading(true); setError(null)
       try {
         const [perfRes, impRes] = await Promise.all([
-          fetch(getMLOpsEndpoint('/metrics/performance')),
-          fetch(getMLOpsEndpoint('/features/importance')),
+          fetch(getMLOpsEndpoint(withModel('/metrics/performance'))),
+          fetch(getMLOpsEndpoint(withModel('/features/importance'))),
         ])
         if (!perfRes.ok) throw new Error(`Performance request failed (${perfRes.status})`)
         const m = (await perfRes.json()).metrics || {}
@@ -48,7 +50,7 @@ const PerformanceTab: React.FC = () => {
       finally { if (!cancelled) setLoading(false) }
     })()
     return () => { cancelled = true }
-  }, [])
+  }, [selectedVersion])
 
   if (loading) return <LoadingState label="Loading performance metrics…" />
   if (error || !metrics) return <ErrorState title="Unable to load performance metrics" detail={error} />

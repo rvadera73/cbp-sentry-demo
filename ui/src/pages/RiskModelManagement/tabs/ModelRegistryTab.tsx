@@ -50,17 +50,19 @@ const accentFor = (status: string) =>
 const fmtMetric = (v: any) => (typeof v === 'number' ? (v < 1 ? v.toFixed(3) : v.toLocaleString()) : String(v))
 const KEY_METRICS = ['auc', 'f1_score', 'accuracy', 'precision', 'recall']
 
-const ModelRegistryTab: React.FC = () => {
+const ModelRegistryTab: React.FC<{ selectedVersion?: string; onSelectVersion?: (v: string) => void }> = ({ selectedVersion }) => {
   const [versions, setVersions] = useState<ModelVersion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  const withModel = (p: string) => (selectedVersion ? `${p}${p.includes('?') ? '&' : '?'}model_version=${encodeURIComponent(selectedVersion)}` : p)
+
   const loadModels = async () => {
     setLoading(true); setError(null)
     try {
-      const res = await fetch(getMLOpsEndpoint('/models'))
+      const res = await fetch(getMLOpsEndpoint(withModel('/models')))
       if (!res.ok) throw new Error(`Models request failed (${res.status})`)
       const data = await res.json()
       setVersions(Array.isArray(data.versions) ? data.versions : [])
@@ -68,7 +70,7 @@ const ModelRegistryTab: React.FC = () => {
       setError(e instanceof Error ? e.message : 'Failed to load models')
     } finally { setLoading(false) }
   }
-  useEffect(() => { loadModels() }, [])
+  useEffect(() => { loadModels() }, [selectedVersion])
 
   const flash = (type: 'success' | 'error', text: string) => { setMsg({ type, text }); setTimeout(() => setMsg(null), 3500) }
 
