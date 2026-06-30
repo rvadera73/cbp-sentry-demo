@@ -72,6 +72,70 @@ POST /why/{entity_id_a}/{entity_id_b}
 ```
 Returns: Why two entities are connected (evidence, confidence)
 
+## Senzing: current state & production path
+
+Entity resolution sits behind a small pluggable interface
+(`ResolutionBackend` in `resolver.py`) so the engine can be swapped without
+touching `main.py` or the rest of the service.
+
+### Current state (default) — SQLite mock + CORD-derived relationships
+
+- **Backend:** `EntityResolver` (the `SqliteBackend`) over the local
+  `/app/data/senzing.db`. This is a *mock* of Senzing: it stores the CORD
+  entities and serves 3-level chains, related parties, and ownership walks
+  with SQLite queries.
+- **Relationships are heuristically derived** by `derive_relationships.py`
+  from the CORD records already loaded into `senzing_entities`
+  (`raw_data` carries the frozen IDENTIFIERS / ADDRESSES / RELATIONSHIPS
+  shapes). Edge types produced:
+  - `SHARED_IDENTIFIER` — same normalized strong id (LEI, tax id, passport,
+    OFAC id, …).
+  - `SHARED_ADDRESS` — same normalized address, **with hub down-weighting**:
+    an address shared by many entities is almost always a registered-agent /
+    incorporation mill, not a genuine co-location, so confidence is scaled
+    down as the cluster grows and clusters above a hard cap are dropped
+    entirely. This is the main precision fix against false-positive address
+    links.
+  - `SHARED_NAME` — fuzzy normalized name match. Names are lowercased,
+    stripped of punctuation and corporate suffixes
+    (CO/LTD/LLC/INC/CORP/JSC/GMBH/SA/BV/PLC/…), then compared by token-set.
+    Blocked by a core-token key (so it stays bounded, no all-pairs scan) and
+    emitted only on a strong overlap at a moderate ~0.6 confidence.
+  - `OWNED_BY` / `OFFICER` — directional pointers from the CORD
+    `RELATIONSHIPS[]` (GLEIF / OPEN-OWNERSHIP / OPEN-SANCTIONS), role text
+    deciding ownership vs officer.
+
+  The pass is **idempotent** (a `__DERIVED_MARKER__` row records the edge
+  count; re-running is a no-op unless `--force` is passed).
+
+### Production path — real Senzing SDK
+
+The real Senzing SDK cannot be deployed in the current sandbox
+(license + internet + compute constraints), so the seam is prepared for a
+clean swap:
+
+1. Deploy the **real Senzing SDK** and provision its repository.
+2. **Ingest the CORD list** into Senzing (`addRecord` / `redoRecord`), letting
+   Senzing perform entity resolution instead of the SQLite mock.
+3. Set **`SENZING_ENABLED=1`**. `get_backend()` in `resolver.py` then returns
+   `SenzingSdkBackend` instead of `EntityResolver` — same
+   `ResolutionBackend` method surface (`resolve_shipper_chain`,
+   `get_related_parties`, `get_ownership_chain`), so `main.py` is unchanged.
+   `SenzingSdkBackend` is currently a stub whose methods raise
+   `NotImplementedError` until the SDK calls (`searchByAttributes`,
+   `getEntityByEntityID`, `findNetwork`, `whyEntities`) are wired in.
+
+### What real Senzing buys over the heuristic
+
+- **Probabilistic resolution** — Senzing decides whether two records are the
+  *same* real-world entity, instead of our pairwise shared-attribute edges.
+- **Name transliteration / cultural name handling** — cross-script and
+  multi-cultural name matching beyond our ASCII token-set normalization.
+- **Calibrated confidence** — match scores tuned against Senzing's models
+  rather than our hand-set base/penalty constants.
+- **Why-paths** — first-class `whyEntities` explanations of *why* two records
+  resolved (or did not), richer than our evidence blobs.
+
 ## Architecture
 
 ### 5 Core Components

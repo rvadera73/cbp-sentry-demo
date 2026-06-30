@@ -1,10 +1,70 @@
-"""3-Level Entity Resolution + Risk Scoring."""
+"""3-Level Entity Resolution + Risk Scoring.
+
+Pluggable resolution layer
+==========================
+The service talks to a *resolution backend* through the small
+``ResolutionBackend`` Protocol defined below. Today that backend is the
+SQLite ``EntityResolver`` (a mock of Senzing backed by CORD-derived
+relationships). When a real Senzing SDK deployment is available, set
+``SENZING_ENABLED=1`` and ``get_backend()`` returns ``SenzingSdkBackend``
+instead — same method surface, different engine. See README.md
+("Senzing: current state & production path").
+
+``EntityResolver`` remains the default and is imported/instantiated directly
+by main.py exactly as before; the Protocol is a structural seam, not a
+behavior change.
+"""
 import logging
+import os
 import sqlite3
 from typing import Dict, List, Optional, Any
 import json
 
+try:
+    # Protocol is stdlib from py3.8; runtime_checkable lets isinstance work.
+    from typing import Protocol, runtime_checkable
+except ImportError:  # pragma: no cover - very old interpreters
+    Protocol = object  # type: ignore
+
+    def runtime_checkable(cls):  # type: ignore
+        return cls
+
 logger = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class ResolutionBackend(Protocol):
+    """Interface every resolution backend must satisfy.
+
+    These are exactly the methods the cord-integration service calls on a
+    resolver. The default ``EntityResolver`` (SQLite) implements them against
+    a local mock DB; ``SenzingSdkBackend`` would implement the same surface
+    against the real Senzing SDK. main.py depends only on this surface.
+    """
+
+    db_path: str
+
+    def resolve_shipper_chain(
+        self,
+        shipper_name: str,
+        shipper_country: Optional[str] = None,
+        consignee_name: Optional[str] = None,
+        consignee_country: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Resolve a 3-level shipper -> parent -> ultimate-owner chain."""
+        ...
+
+    def get_related_parties(
+        self, entity_id: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """All related parties incident to an entity."""
+        ...
+
+    def get_ownership_chain(
+        self, entity_id: str, max_depth: int = 4
+    ) -> List[Dict[str, Any]]:
+        """Walk OWNED_BY / PARENT_COMPANY pointers upward."""
+        ...
 
 
 class EntityResolver:
@@ -417,20 +477,25 @@ class EntityResolver:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
+            # Edges are undirected for "related parties": match the entity on
+            # either end and return the OTHER end as the related party.
             cursor.execute("""
-                SELECT r.entity_id_a AS a, r.entity_id_b AS b,
+                SELECT CASE WHEN r.entity_id_a = ? THEN r.entity_id_b
+                            ELSE r.entity_id_a END AS other_id,
                        r.relationship_type AS rtype, r.confidence AS conf,
                        r.evidence AS evidence,
                        e.name_primary AS name, e.country AS country,
                        e.data_source AS data_source, e.entity_type AS entity_type,
                        e.raw_data AS raw_data
                 FROM senzing_relationships r
-                LEFT JOIN senzing_entities e ON e.entity_id = r.entity_id_b
-                WHERE r.entity_id_a = ?
+                LEFT JOIN senzing_entities e ON e.entity_id =
+                    (CASE WHEN r.entity_id_a = ? THEN r.entity_id_b
+                          ELSE r.entity_id_a END)
+                WHERE (r.entity_id_a = ? OR r.entity_id_b = ?)
                   AND r.relationship_type != '__DERIVED_MARKER__'
                 ORDER BY r.confidence DESC
                 LIMIT ?
-            """, (entity_id, limit))
+            """, (entity_id, entity_id, entity_id, entity_id, limit))
             parties: List[Dict[str, Any]] = []
             for row in cursor.fetchall():
                 try:
@@ -439,9 +504,9 @@ class EntityResolver:
                     ev = []
                 name = row["name"]
                 if not name or not name.strip():
-                    name = self._name_from_raw(row["raw_data"]) or row["b"]
+                    name = self._name_from_raw(row["raw_data"]) or row["other_id"]
                 parties.append({
-                    "entity_id": row["b"],
+                    "entity_id": row["other_id"],
                     "name": name,
                     "country": row["country"] or "",
                     "data_source": row["data_source"] or "",
@@ -513,6 +578,68 @@ class EntityResolver:
                 "risk_indicator": "RESOLUTION_FAILED"
             }
         }
+
+
+# EntityResolver IS the default (SQLite) backend; it conforms to the
+# ResolutionBackend Protocol structurally. Expose an alias so call sites that
+# want the role name rather than the concrete class can use it.
+SqliteBackend = EntityResolver
+
+
+class SenzingSdkBackend:
+    """Stub backend for the real Senzing SDK.
+
+    Same method surface as ``EntityResolver`` so it is a drop-in replacement,
+    but every method raises ``NotImplementedError`` until the real Senzing SDK
+    is deployed and the CORD list ingested. Selected when ``SENZING_ENABLED=1``.
+
+    To make this real (see README "Senzing: current state & production path"):
+      * install the Senzing SDK + provision the Senzing repository,
+      * ingest the CORD records (addRecord / redoRecord),
+      * implement the methods below via searchByAttributes / getEntityByEntityID
+        / findNetwork / whyEntities, mapping Senzing's resolved entities and
+        calibrated match scores onto the dicts this service already returns.
+    """
+
+    _MSG = "Deploy the real Senzing SDK + ingest CORD; see README"
+
+    def __init__(self, db_path: str = "/app/data/senzing.db"):
+        self.db_path = db_path
+
+    def resolve_shipper_chain(
+        self,
+        shipper_name: str,
+        shipper_country: Optional[str] = None,
+        consignee_name: Optional[str] = None,
+        consignee_country: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        raise NotImplementedError(self._MSG)
+
+    def get_related_parties(
+        self, entity_id: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        raise NotImplementedError(self._MSG)
+
+    def get_ownership_chain(
+        self, entity_id: str, max_depth: int = 4
+    ) -> List[Dict[str, Any]]:
+        raise NotImplementedError(self._MSG)
+
+
+def get_backend(db_path: str = "/app/data/senzing.db") -> ResolutionBackend:
+    """Return the active resolution backend.
+
+    Default: the SQLite ``EntityResolver`` (mock Senzing over CORD-derived
+    relationships). If ``SENZING_ENABLED=1`` in the environment, return the
+    real-Senzing ``SenzingSdkBackend`` instead (currently a stub that raises
+    until the SDK is deployed). This is the single swap point for going to
+    production Senzing — main.py and everything else keep using the same
+    method surface (``ResolutionBackend``).
+    """
+    if os.environ.get("SENZING_ENABLED") == "1":
+        logger.info("SENZING_ENABLED=1 -> using SenzingSdkBackend (real Senzing)")
+        return SenzingSdkBackend(db_path)
+    return EntityResolver(db_path)
 
 
 if __name__ == "__main__":

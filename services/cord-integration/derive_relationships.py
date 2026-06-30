@@ -8,6 +8,13 @@ Edge derivation mirrors services/api/entity_edges.py:
   * SHARED_IDENTIFIER  — two entities carry the same *normalized* strong
     identifier (LEI, tax id, national id, passport, OFAC id, ...).
   * SHARED_ADDRESS     — two entities carry the same *normalized* address.
+    High-degree address hubs (many entities at one address = likely
+    registered agent) are confidence-down-weighted and, above a hard cap,
+    dropped entirely — the main precision fix.
+  * SHARED_NAME        — fuzzy normalized name match (corporate suffixes
+    CO/LTD/LLC/INC/CORP/JSC/GMBH/SA/BV/PLC... stripped, compared by
+    token-set), blocked by a core-token key and emitted only on a strong
+    overlap at moderate (~0.6) confidence.
   * OWNED_BY / OFFICER — drawn from RELATIONSHIPS[] directional REL_POINTER_KEY
     pointers (GLEIF / OPEN-OWNERSHIP / OPEN-SANCTIONS). Role text decides
     ownership (-> OWNED_BY, the type the resolver chain reads) vs officer.
@@ -52,6 +59,7 @@ SEED_SOURCES = (
     "OPEN-SANCTIONS",
     "US-LABOR-VIOLATIONS",
     "NOMINO-RISK",
+    "CBP-EAPA",          # EAPA respondents (so their curated overlaps materialize)
     "CBP-SHIPPER",
     "CBP-CONSIGNEE",
     "CBP-DEMO",
@@ -78,6 +86,30 @@ _OFFICER_ROLE_RE = re.compile(
     r"director|officer|manager|secretary|signator|board|partner|executive|"
     r"acting for", re.IGNORECASE)
 
+# --- fuzzy name match (SHARED_NAME) tuning ------------------------------------
+# Corporate suffix / legal-form tokens stripped before comparing names. These
+# carry no discriminating signal (every "... LTD" would otherwise look related).
+_CORP_SUFFIXES = {
+    "CO", "COMPANY", "LTD", "LIMITED", "LLC", "LLP", "INC", "INCORPORATED",
+    "CORP", "CORPORATION", "JSC", "OJSC", "PJSC", "GMBH", "AG", "SA", "SAS",
+    "SARL", "SRL", "SPA", "BV", "NV", "PLC", "PTE", "PVT", "PT", "OOO", "AO",
+    "ZAO", "KG", "OY", "AB", "AS", "GROUP", "HOLDING", "HOLDINGS", "TRADING",
+    "INTERNATIONAL", "INTL", "INDUSTRIES", "INDUSTRIAL", "ENTERPRISE",
+    "ENTERPRISES", "IMPORT", "EXPORT", "TRADE", "THE", "AND",
+}
+# Generic single tokens that should never alone constitute a "rare" name core.
+_NAME_STOPWORDS = _CORP_SUFFIXES
+# token-set overlap (Jaccard on cores) above this => strong fuzzy name match
+_NAME_OVERLAP_THRESHOLD = 0.80
+_SHARED_NAME_CONF = 0.6
+
+# --- shared-address hub down-weighting ----------------------------------------
+# An address shared by many entities is almost always a registered-agent /
+# incorporation-mill hub, not a genuine co-location signal. Scale confidence
+# down as the cluster grows, and drop clusters above the hard cap entirely.
+_ADDR_HUB_SOFT = 5      # clusters >= this size start losing confidence
+_ADDR_HUB_HARD = 25     # clusters >= this size are dropped (pure agent hubs)
+
 
 # --------------------------------------------------------------------------- #
 # normalization helpers (mirror entity_edges.py)
@@ -95,6 +127,69 @@ def _norm_addr(value: object) -> str:
     s = re.sub(r"[^A-Z0-9 ]", " ", str(value).upper())
     s = re.sub(r"\s+", " ", s).strip()
     return s if len(s) >= 10 else ""
+
+
+def _name_from_raw(raw: Dict) -> str:
+    """Best-effort primary name from a raw CORD record (name_primary is blank
+    for several sources). Mirrors resolver.EntityResolver._name_from_raw."""
+    if not isinstance(raw, dict):
+        return ""
+    for key in ("NAMES", "NAME_LIST"):
+        arr = raw.get(key)
+        if isinstance(arr, list) and arr:
+            prim = next((n for n in arr
+                         if isinstance(n, dict) and n.get("NAME_TYPE") == "PRIMARY"),
+                        arr[0])
+            if isinstance(prim, dict):
+                org = prim.get("NAME_ORG") or prim.get("NAME_FULL")
+                if org:
+                    return str(org)
+                full = " ".join(str(prim.get(k, "")) for k in
+                                ("PRIMARY_NAME_FIRST", "PRIMARY_NAME_MIDDLE",
+                                 "PRIMARY_NAME_LAST")).strip()
+                if full:
+                    return full
+    for key in ("PRIMARY_NAME_ORG", "LEGAL_NAME_ORG", "NAME", "name", "Title"):
+        if raw.get(key):
+            return str(raw[key])
+    return ""
+
+
+def _name_tokens(value: object) -> Tuple[str, ...]:
+    """Normalize a name to a tuple of core tokens for token-set comparison.
+
+    Lowercase -> uppercase, strip punctuation, drop corporate suffix / legal-
+    form / generic trade words. The remaining tokens are the discriminating
+    "core" of the name (e.g. "Greenfield Industrial Trading Co., Ltd." ->
+    ("GREENFIELD",)).
+    """
+    if not value:
+        return ()
+    s = re.sub(r"[^A-Z0-9 ]", " ", str(value).upper())
+    s = re.sub(r"\s+", " ", s).strip()
+    toks = [t for t in s.split(" ") if t and t not in _CORP_SUFFIXES and len(t) > 1]
+    return tuple(toks)
+
+
+def _name_core_key(value: object) -> str:
+    """Blocking key for fuzzy name match: sorted core tokens joined.
+
+    Two names only get compared if they share this key, which keeps the pass
+    bounded (blocked) instead of all-pairs. Returns "" for names with no
+    discriminating core (all-suffix / too short) so they are never blocked on.
+    """
+    toks = _name_tokens(value)
+    if not toks:
+        return ""
+    return " ".join(sorted(set(toks)))
+
+
+def _name_overlap(a: Tuple[str, ...], b: Tuple[str, ...]) -> float:
+    """Token-set Jaccard overlap of two normalized name cores."""
+    sa, sb = set(a), set(b)
+    if not sa or not sb:
+        return 0.0
+    return len(sa & sb) / len(sa | sb)
 
 
 def _extract_identifiers(raw: Dict) -> List[Tuple[str, str]]:
@@ -198,6 +293,9 @@ class RelationshipDeriver:
         self.db_path = db_path
         # cap on how many candidate (seed + neighbour) records we scan
         self.neighbor_cap = neighbor_cap
+        # entity_id -> best-effort primary name (populated by _load_records,
+        # consumed by the SHARED_NAME pass in derive()).
+        self._names: Dict[str, str] = {}
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -227,13 +325,23 @@ class RelationshipDeriver:
 
         # Pass 1 — seeds.
         cur.execute(
-            f"SELECT entity_id, data_source, raw_data FROM senzing_entities "
+            f"SELECT entity_id, data_source, name_primary, raw_data "
+            f"FROM senzing_entities "
             f"WHERE data_source IN ({placeholders})", SEED_SOURCES)
         seed_rows = cur.fetchall()
 
         seed_tokens: set = set()          # id/addr tokens carried by seeds
         pointer_keys: set = set()         # ownership pointer targets to resolve
         records: Dict[str, Tuple[str, str, Dict]] = {}
+
+        def _record_name(row, raw: Dict) -> str:
+            try:
+                np = row["name_primary"]
+            except (IndexError, KeyError):
+                np = None
+            if np and str(np).strip():
+                return str(np).strip()
+            return _name_from_raw(raw)
 
         for row in seed_rows:
             eid = row["entity_id"]
@@ -242,6 +350,7 @@ class RelationshipDeriver:
             except (json.JSONDecodeError, TypeError):
                 raw = {}
             records[eid] = (eid, row["data_source"], raw)
+            self._names[eid] = _record_name(row, raw)
             for _, val in _extract_identifiers(raw):
                 seed_tokens.add(val)
             for addr in _extract_addresses(raw):
@@ -256,7 +365,7 @@ class RelationshipDeriver:
         # Pass 2 — scan the rest, keeping only records that share a seed token
         # or are a pointer target. Bounded scan over a window of all entities.
         cur.execute(
-            "SELECT entity_id, data_source, record_id, raw_data "
+            "SELECT entity_id, data_source, record_id, name_primary, raw_data "
             "FROM senzing_entities LIMIT ?", (self.neighbor_cap,))
         for row in cur.fetchall():
             eid = row["entity_id"]
@@ -289,6 +398,7 @@ class RelationshipDeriver:
                             break
             if keep:
                 records[eid] = (eid, row["data_source"], raw)
+                self._names[eid] = _record_name(row, raw)
 
         logger.info("working set = %d records (seeds + neighbours)", len(records))
         return list(records.values())
@@ -305,6 +415,9 @@ class RelationshipDeriver:
         addr_index: Dict[str, List[str]] = defaultdict(list)
         anchor_to_entity: Dict[str, str] = {}
         rel_pointers: List[Tuple[str, str, str, str]] = []  # src, type, role, ptr
+        # SHARED_NAME: block by sorted-core-token key; each entry keeps the
+        # entity id and its (unsorted) core token tuple for overlap scoring.
+        name_index: Dict[str, List[Tuple[str, Tuple[str, ...]]]] = defaultdict(list)
 
         for eid, _src, raw in recs:
             rid = eid.split(":", 1)[1] if ":" in eid else eid
@@ -319,6 +432,11 @@ class RelationshipDeriver:
                 addr_index[addr].append(eid)
             for etype, role, ptr in _extract_relationships(raw):
                 rel_pointers.append((eid, etype, role, ptr))
+            # name blocking
+            nm = self._names.get(eid) or _name_from_raw(raw)
+            core_key = _name_core_key(nm)
+            if core_key:
+                name_index[core_key].append((eid, _name_tokens(nm)))
 
         edges: List[Tuple[str, str, str, float, str]] = []
         seen_pair: set = set()
@@ -344,18 +462,65 @@ class RelationshipDeriver:
                 emit(a, b, "SHARED_IDENTIFIER", conf, ev)
                 emit(b, a, "SHARED_IDENTIFIER", conf, ev)
 
-        # SHARED_ADDRESS
+        # SHARED_ADDRESS — with hub down-weighting. A normalized address shared
+        # by many entities is almost always a registered-agent / incorporation
+        # mill, not a genuine co-location. Scale confidence down as the cluster
+        # grows and drop pure-hub clusters above the hard cap. This is the main
+        # precision fix against false-positive address links.
         for addr, members in addr_index.items():
             uniq = sorted(set(members))
-            if len(uniq) < 2 or len(uniq) > 40:
+            n = len(uniq)
+            if n < 2 or n > 40:
+                continue
+            if n >= _ADDR_HUB_HARD:
+                # registered-agent hub: too noisy to assert any relationship
                 continue
             short = (addr[:60] + "...") if len(addr) > 60 else addr
-            conf = _group_confidence(len(uniq), base=0.6)
+            conf = _group_confidence(n, base=0.6)
+            hub = n >= _ADDR_HUB_SOFT
+            if hub:
+                # extra linear down-weight across the [soft, hard) band
+                span = max(1, _ADDR_HUB_HARD - _ADDR_HUB_SOFT)
+                conf = round(max(0.15, conf * (1.0 - 0.7 * (n - _ADDR_HUB_SOFT) / span)), 3)
             for a, b in _pairs(uniq):
+                detail = f"Shared business address: {short}"
+                if hub:
+                    detail += f" (shared by {n} entities — likely registered agent)"
                 ev = {"type": "shared_address", "value": short,
-                      "detail": f"Shared business address: {short}"}
+                      "cluster_size": n, "hub": hub, "detail": detail}
                 emit(a, b, "SHARED_ADDRESS", conf, ev)
                 emit(b, a, "SHARED_ADDRESS", conf, ev)
+
+        # SHARED_NAME — fuzzy normalized name match. Names are blocked by their
+        # sorted core-token key (corporate suffixes / generic trade words
+        # stripped), then only emitted on a strong token-set overlap. This
+        # catches "Acme Trading Co. Ltd" <-> "Acme Trading LLC" while staying
+        # bounded (no all-pairs scan) and never firing on suffix-only matches.
+        for core_key, members in name_index.items():
+            # require a discriminating core: at least one rare/non-stopword token
+            core_tokens = set(core_key.split(" "))
+            if not (core_tokens - _NAME_STOPWORDS):
+                continue
+            uniq: Dict[str, Tuple[str, ...]] = {}
+            for eid, toks in members:
+                uniq.setdefault(eid, toks)
+            ids = sorted(uniq)
+            if len(ids) < 2 or len(ids) > 40:
+                continue
+            for a, b in _pairs(ids):
+                overlap = _name_overlap(uniq[a], uniq[b])
+                # strong match = high token-set overlap on a multi-token core,
+                # or an exact shared rare multi-token core.
+                strong = overlap >= _NAME_OVERLAP_THRESHOLD and len(core_tokens) >= 2
+                if not strong:
+                    continue
+                disp = " ".join(t.title() for t in sorted(core_tokens))
+                ev = {"type": "shared_name", "core": disp,
+                      "overlap": round(overlap, 3),
+                      "detail": f"Normalized name match on core '{disp}' "
+                                f"(token-set overlap {overlap:.0%})"}
+                emit(a, b, "SHARED_NAME", _SHARED_NAME_CONF, ev)
+                emit(b, a, "SHARED_NAME", _SHARED_NAME_CONF, ev)
 
         # OWNED_BY / OFFICER from RELATIONSHIPS pointers (directional)
         for src_id, etype, role, ptr in rel_pointers:
@@ -393,8 +558,9 @@ class RelationshipDeriver:
             if force:
                 cur.execute(
                     "DELETE FROM senzing_relationships WHERE relationship_type "
-                    "IN ('SHARED_IDENTIFIER','SHARED_ADDRESS','OFFICER',"
-                    "'__DERIVED_MARKER__') OR (relationship_type='OWNED_BY' AND "
+                    "IN ('SHARED_IDENTIFIER','SHARED_ADDRESS','SHARED_NAME',"
+                    "'OFFICER','__DERIVED_MARKER__') OR "
+                    "(relationship_type='OWNED_BY' AND "
                     "evidence LIKE '%\"type\": \"owned_by\"%')")
 
             cur.executemany(
