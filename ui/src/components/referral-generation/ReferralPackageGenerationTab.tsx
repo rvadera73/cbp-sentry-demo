@@ -205,6 +205,7 @@ export default function ReferralPackageGenerationTab({ shipmentId, onClose, case
           <ProfessionalOfficerAnalysisForm
             referralId={tabState.referralData.referral_id}
             referralData={tabState.referralData}
+            subjectId={tabState.referralData.shipment_id || shipmentId}
             onSubmit={handleAnalysisSubmit}
             onCancel={() => handleSwitchTab('display')}
           />

@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, FileText } from 'lucide-react';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import EntitySummary from '../components/EntitySummary';
+import ModelBadge from '../components/ModelBadge';
 import { cordEntityDetail, cordEntityScore, cordSearch, EntityDetail, CordMatch } from '../services/cordApi';
 
 interface Props {
@@ -76,6 +77,7 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
           <span className="text-[11px] font-semibold uppercase tracking-wide text-[#005EA2] truncate">
             Entity Resolution · H2 (actor intelligence)
           </span>
+          <ModelBadge className="shrink-0" />
         </div>
         <button
           onClick={buildEapaReferral}

@@ -229,13 +229,6 @@ Uses:
 - `TYPOGRAPHY` for consistent text styling
 - `COLORS.status*` for risk levels
 
-### AI Tuning Page
-Uses:
-- Horizontal tabs (similar to workflow tabs)
-- `COMPONENTS.card` for each tab's content
-- `TYPOGRAPHY` for all text
-- `COMPONENTS.button.*` for Apply/Save buttons
-
 ## Maintenance
 
 When you need to update styling across all pages:

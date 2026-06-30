@@ -9,7 +9,17 @@ interface UseV2ThreatFeedReturn {
 }
 
 /**
- * Derives threat feed events from risk corridors and shipment anomalies
+ * Live Threat Feed source.
+ *
+ * A "threat" = a new or escalating high-risk event in the 72-hour pipeline:
+ *  - an arriving/recent manifest whose corridor or parties hit an AD/CVD lane
+ *    or a flagged actor (kind: 'manifest'), or
+ *  - a high-risk trade corridor lighting up (kind: 'corridor').
+ *
+ * Every event is tagged with a `kind` so the Command Center can route a click
+ * to the matching horizon tab (corridor → shipments, manifest → its case,
+ * entity → entities). Resilient: if an endpoint fails we degrade gracefully and
+ * the caller shows an empty state rather than crashing.
  */
 export function useV2ThreatFeed(): UseV2ThreatFeedReturn {
   const [threatFeed, setThreatFeed] = useState<ThreatFeedEvent[]>([]);
@@ -30,11 +40,13 @@ export function useV2ThreatFeed(): UseV2ThreatFeedReturn {
               .filter((c: any) => c.risk_level === 'High' || c.risk_level === 'Critical')
               .map((c: any, idx: number): ThreatFeedEvent => ({
                 id: `evt_${idx}`,
+                kind: 'corridor',
                 severity: c.risk_level === 'Critical' ? 'Critical' : 'High',
-                title: `Risk Corridor Alert: ${c.industry_segment || 'Unknown'}`,
-                description: `${c.shipment_count || 0} shipments detected in ${c.origin_country} → ${c.destination_country} corridor with elevated risk metrics.`,
+                title: `Risk Corridor Escalating: ${c.display_name || c.industry_segment || c.id || 'Corridor'}`,
+                description: `${c.shipment_count || 0} shipments in ${c.origin_country} → ${c.destination_country} hitting an elevated-risk / AD-CVD lane.`,
                 timestamp: new Date(Date.now() - idx * 3600000).toLocaleTimeString(),
                 confidence: Math.min(100, 80 + Math.random() * 20),
+                related_corridor: c.id || c.corridor_id,
               }));
           }
         } catch (err) {
@@ -50,9 +62,10 @@ export function useV2ThreatFeed(): UseV2ThreatFeedReturn {
             .filter((s: any) => s.risk_score >= 80)
             .map((s: any, idx: number): ThreatFeedEvent => ({
               id: `evt_ship_${idx}`,
+              kind: 'manifest',
               severity: s.risk_score >= 90 ? 'Critical' : 'High',
-              title: `Anomaly Detected: ${s.shipper_name || 'Unknown Shipper'}`,
-              description: `Shipment ${s.id} from ${s.shipper_country} shows ${s.h2_signals?.length || 0} suspicious routing patterns and manifest inconsistencies.`,
+              title: `High-Risk Manifest: ${s.shipper_name || 'Unknown Shipper'}`,
+              description: `Inbound shipment ${s.id} from ${s.shipper_country} — ${s.h2_signals?.length || 0} routing/manifest anomalies${s.ad_cvd_applicable ? ', AD/CVD lane' : ''}.`,
               timestamp: new Date(Date.now() - (idx + 10) * 600000).toLocaleTimeString(),
               confidence: Math.min(100, Math.round(s.risk_score || 0)),
               related_case_id: s.id,
@@ -72,9 +85,10 @@ export function useV2ThreatFeed(): UseV2ThreatFeedReturn {
         setThreatFeed([
           {
             id: 'demo_1',
+            kind: 'manifest',
             severity: 'Critical',
             title: 'Sanctioned Mill Correlation Detected',
-            description: 'Container TGBU-9021810 linked to restricted steel manufacturer.',
+            description: 'Inbound container TGBU-9021810 linked to a restricted steel manufacturer (72h pipeline).',
             timestamp: 'Just now',
             confidence: 96,
           },

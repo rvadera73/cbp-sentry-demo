@@ -19,6 +19,7 @@ import RiskExplainabilityTab from '../components/RiskExplainabilityTab';
 import EvidenceTab from '../components/EvidenceTab';
 import ReferralPackageV2 from '../components/ReferralPackageV2';
 import OfficerDispositionBar from '../components/OfficerDispositionBar';
+import ModelBadge from '../components/ModelBadge';
 import { StatStrip } from '../../components/ui';
 
 interface V2InvestigationsPageProps {
@@ -317,12 +318,15 @@ export default function V2InvestigationsPage(props: V2InvestigationsPageProps) {
             </h2>
             <p className={`${TYPOGRAPHY.smallText} mt-1`}>Evaluate current trade targets or launch secure forensic analysis.</p>
           </div>
-          <button
-            onClick={() => { setSearchQuery(''); setPriorityFilter('all'); setRiskFilter('all'); }}
-            className={`px-3 py-1.5 border ${DESIGN.borderColor} hover:${DESIGN.bgLight} text-xs font-bold rounded-sm ${DESIGN.textDark} cursor-pointer`}
-          >
-            CLEAR ALL
-          </button>
+          <div className="flex items-center gap-3">
+            <ModelBadge />
+            <button
+              onClick={() => { setSearchQuery(''); setPriorityFilter('all'); setRiskFilter('all'); }}
+              className={`px-3 py-1.5 border ${DESIGN.borderColor} hover:${DESIGN.bgLight} text-xs font-bold rounded-sm ${DESIGN.textDark} cursor-pointer`}
+            >
+              CLEAR ALL
+            </button>
+          </div>
         </div>
 
         {/* Filter Controls */}

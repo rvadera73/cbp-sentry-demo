@@ -241,7 +241,14 @@ async def approve_model(model_id: str, data: dict):
 
 @router.post("/{model_id}/promote")
 async def promote_model(model_id: str, data: Optional[dict] = None):
-    """Promote model version to production."""
+    """Promote model version to production, then rescore shipments under it.
+
+    After a successful promotion the registry's production model changes, so we
+    trigger a deterministic rescore (POST /api/rescore) on this same sentry-api so
+    the tabs immediately reflect the newly-promoted model's scores. The rescore is
+    best-effort and never fails the promotion; the UI may also call /api/rescore
+    itself. The response carries a `rescore` block with the rescore summary.
+    """
     try:
         logger.info(f"Promoting model {model_id}")
 
@@ -254,6 +261,18 @@ async def promote_model(model_id: str, data: Optional[dict] = None):
             result = response.json()
 
         logger.info(f"Model {model_id} promoted")
+
+        # Promotion -> rescore: recompute scores under the newly-promoted model.
+        rescore_summary = None
+        try:
+            from main import rescore_under_production_model, RescoreBody
+            rescore_summary = await rescore_under_production_model(RescoreBody())
+        except Exception as rs_err:
+            logger.warning(f"post-promotion rescore skipped for {model_id}: {rs_err}")
+            rescore_summary = {"status": "skipped", "detail": str(rs_err)}
+
+        if isinstance(result, dict):
+            result["rescore"] = rescore_summary
         return result
 
     except httpx.HTTPError as e:

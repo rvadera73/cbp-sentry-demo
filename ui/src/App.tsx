@@ -17,7 +17,6 @@ import V2EntitiesPage from './v2/pages/V2EntitiesPage'
 import V2EntityResolutionPage from './v2/pages/V2EntityResolutionPage'
 import V2EntityWorkspacePage from './v2/pages/V2EntityWorkspacePage'
 import V2WatchlistsPage from './v2/pages/V2WatchlistsPage'
-import V2AITuningPage from './v2/pages/V2AITuningPage'
 import RiskModelManagementV2 from './pages/RiskModelManagement/RiskModelManagementV2'
 import { CBPOfficer, AIFinding, ReferralPackage, Case, Shipment } from './v2/types/v2.types'
 import { useV2Cases } from './v2/hooks/useV2Cases'
@@ -45,7 +44,6 @@ function V2AppWrapper() {
       entities: 'entities',
       'entity-workspace': 'entity-workspace',
       watchlists: 'watchlists',
-      'ai-tuning': 'ai-tuning',
       'risk-models': 'risk-models',
       referrals: 'referrals',
     };
@@ -302,7 +300,6 @@ function V2AppWrapper() {
       setActiveTab={setActiveTab}
     />,
     watchlists: <V2WatchlistsPage />,
-    'ai-tuning': <V2AITuningPage />,
     'risk-models': <RiskModelManagementV2 />,
   }
 
@@ -395,10 +392,6 @@ function App() {
             <Route
               path="/watchlists"
               element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['cbp_officer', 'analyst']} />}
-            />
-            <Route
-              path="/ai-tuning"
-              element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['analyst']} />}
             />
             <Route
               path="/risk-models"

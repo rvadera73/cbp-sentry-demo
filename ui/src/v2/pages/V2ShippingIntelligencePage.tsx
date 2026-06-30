@@ -12,6 +12,7 @@ import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import CorridorTradeAnalysis from '../components/CorridorTradeAnalysis';
 import CorridorAssessment from '../components/CorridorAssessment';
 import CorridorRiskScoreV4 from '../components/CorridorRiskScoreV4';
+import ModelBadge from '../components/ModelBadge';
 import { TYPOGRAPHY, DESIGN } from '../styles/typography';
 import { COLORS, PATTERNS } from '../styles/designSystem';
 import { API_BASE_URL } from '../../services/apiUrl';
@@ -167,6 +168,7 @@ export default function V2ShippingIntelligencePage({
             <p className={TYPOGRAPHY.pageSubtitle}>Corridor Intelligence • Pre-Manifest Vessels • Trade Compliance</p>
           </div>
           <div className="flex items-center space-x-4">
+            <ModelBadge />
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}

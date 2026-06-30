@@ -348,6 +348,14 @@ export interface ReferralPackage {
   }>;
 }
 
+/**
+ * A "threat" = a new or escalating high-risk event in the 72-hour pipeline.
+ * Examples: an arriving manifest whose corridor/parties hit a flagged actor or
+ * an AD/CVD lane, or a newly-flagged entity. Each event is ACTIONABLE — `kind`
+ * tells the Command Center which tab to route the click to.
+ */
+export type ThreatKind = 'corridor' | 'entity' | 'manifest';
+
 export interface ThreatFeedEvent {
   id: string;
   severity: 'Critical' | 'High' | 'Medium' | 'Low';
@@ -355,6 +363,10 @@ export interface ThreatFeedEvent {
   description: string;
   timestamp: string;
   confidence: number;
+  /** What the threat is about, so the UI can route the click to the right horizon. */
+  kind?: ThreatKind;
   related_entity?: string;
   related_case_id?: string;
+  /** Corridor id/route this event maps to (kind === 'corridor' | 'manifest'). */
+  related_corridor?: string;
 }

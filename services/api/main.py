@@ -3622,6 +3622,438 @@ async def get_weight_suggestions(
         return {"error": str(e), "status": "failed"}
 
 
+# ============= GATE-1 CLOSE: MODEL PROVENANCE + RESCORE + MODEL-VERSIONED REVIEWS =============
+# Single source of truth for the production model is the cbp-risk-engine MLOps
+# registry (risk_scoring.model_versions, status='production'). The engine stores
+# version strings WITHOUT a leading 'v' (e.g. "1.1"); the UI/contract uses "v1.1".
+# Shipment scores live in the data service (shipments.calculated_risk_score /
+# model_version / model_maturity / risk_score_calculated_at); a rescore stamps
+# those columns under the production model and applies its calibration so the
+# effect is visible. Rescore is DETERMINISTIC given (shipment, model config):
+# raw = risk_scoring_engine.score_shipment(shipment).final_score (depends only on
+# the shipment) times the production model's calibration_multiplier (depends only
+# on the model). Reverting the production model and rescoring restores prior scores.
+
+MCP_ENGINE_URL = os.getenv("MCP_ENGINE_URL", "http://cbp-risk-engine:8010")
+
+
+def _normalize_model_version(version: Optional[str]) -> Optional[str]:
+    """Return the UI/display form of a registry version string: prefix 'v' if absent.
+
+    Registry stores '1.1'; the contract uses 'v1.1'. Idempotent: 'v1.1' -> 'v1.1'.
+    """
+    if not version:
+        return None
+    v = str(version).strip()
+    if not v:
+        return None
+    return v if v[:1].lower() == "v" else f"v{v}"
+
+
+def _calibration_multiplier_for(model: Dict[str, Any]) -> float:
+    """Derive a deterministic, per-model calibration multiplier from the registry
+    model object so a rescore is VISIBLE and model-specific.
+
+    Priority:
+      1. explicit metadata.calibration_multiplier (if the registry carries one)
+      2. derived from referral_threshold: lower referral threshold => more
+         aggressive model => higher multiplier. Anchored so referral_threshold=70
+         maps to ~1.0 (the historical default 1.2x lives in metadata when present).
+    Always returns a float in [0.5, 2.0]; defaults to 1.0 when nothing is known.
+    """
+    meta = (model or {}).get("metadata") or {}
+    raw = meta.get("calibration_multiplier")
+    if raw is None:
+        raw = (model or {}).get("calibration_multiplier")
+    if raw is not None:
+        try:
+            return max(0.5, min(2.0, float(raw)))
+        except (TypeError, ValueError):
+            pass
+    referral = (model or {}).get("referral_threshold") or meta.get("referral_threshold")
+    try:
+        if referral is not None:
+            # 70 -> 1.0 ; every 10 pts lower referral threshold => +0.1 multiplier
+            mult = 1.0 + (70.0 - float(referral)) / 100.0
+            return max(0.5, min(2.0, mult))
+    except (TypeError, ValueError):
+        pass
+    return 1.0
+
+
+async def _fetch_production_model() -> Optional[Dict[str, Any]]:
+    """Read the current production model from the cbp-risk-engine registry."""
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as eng:
+            resp = await eng.get(f"{MCP_ENGINE_URL}/api/models/production")
+            if resp.status_code == 200:
+                return resp.json()
+            logger.warning(f"production-model read HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.warning(f"production-model read failed: {e}")
+    return None
+
+
+def _production_model_contract(model: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Shape the registry model into the stable UI contract for GET /api/model/production."""
+    meta = (model or {}).get("metadata") or {} if model else {}
+    version = _normalize_model_version((model or {}).get("version")) if model else None
+    gate = None
+    maturity = (model or {}).get("maturity_pct") if model else None
+    try:
+        if maturity is not None:
+            # Gate-1 close: maturity < 100 => gate 1, else gate >= 2. Best-effort.
+            gate = 1 if float(maturity) < 100 else 2
+    except (TypeError, ValueError):
+        gate = 1
+    if gate is None:
+        gate = 1
+    return {
+        "version": version,
+        "model_id": (model or {}).get("model_id") if model else None,
+        "gate": gate,
+        "status": (model or {}).get("status") if model else "unknown",
+        "calibration": {
+            "calibration_multiplier": _calibration_multiplier_for(model or {}),
+            "referral_threshold": (model or {}).get("referral_threshold") if model else None,
+            "critical_threshold": (model or {}).get("critical_threshold") if model else None,
+        },
+        "maturity_pct": maturity,
+        "confidence_interval_pts": (model or {}).get("confidence_interval_pts") if model else None,
+    }
+
+
+@app.get("/api/model/production")
+async def get_production_model() -> Dict[str, Any]:
+    """Return the current production model (registry source of truth).
+
+    Response: { version: "v1.1", model_id, gate: 1, status: "production",
+                calibration: { calibration_multiplier, referral_threshold,
+                critical_threshold }, maturity_pct, confidence_interval_pts }
+    """
+    model = await _fetch_production_model()
+    if model is None:
+        # Defensive default so the UI never hard-fails the Gate-1 close.
+        return _production_model_contract({"version": "1.1", "status": "production", "maturity_pct": 50})
+    return _production_model_contract(model)
+
+
+def _deterministic_score_under_model(shipment: Dict[str, Any], multiplier: float) -> float:
+    """Compute a deterministic final score for a shipment under a model's calibration.
+
+    raw breakdown (deterministic per shipment) * model calibration_multiplier,
+    capped at 100. Falls back to the seeded risk_score if the engine errors.
+    """
+    try:
+        breakdown = risk_scoring_engine.score_shipment(shipment)
+        raw = float(breakdown.final_score)
+    except Exception as e:
+        logger.debug(f"rescore raw-score fallback for {shipment.get('id')}: {e}")
+        raw = float(shipment.get("risk_score") or 0)
+    return round(min(raw * float(multiplier), 100.0), 1)
+
+
+class RescoreBody(BaseModel):
+    shipment_ids: Optional[List[str]] = None  # subset; omitted/empty => all in-scope
+    limit: int = 1000
+
+
+@app.post("/api/rescore")
+@app.post("/api/model/rescore")
+async def rescore_under_production_model(body: Optional[RescoreBody] = Body(None)) -> Dict[str, Any]:
+    """Recompute and persist shipment scores UNDER the current production model.
+
+    Deterministic: stamps shipments.calculated_risk_score = raw_breakdown *
+    production_model.calibration_multiplier, plus model_version / model_maturity /
+    risk_score_calculated_at. Reverting the production model and calling this
+    again restores the prior scores (no history table needed).
+
+    Body (optional): { shipment_ids?: [..], limit?: 1000 }. Omit to rescore all.
+    The UI calls this right after promoting a model to production.
+    """
+    body = body or RescoreBody()
+    model = await _fetch_production_model()
+    contract = _production_model_contract(model or {"version": "1.1", "status": "production"})
+    model_version = contract["version"] or "v1.1"
+    multiplier = contract["calibration"]["calibration_multiplier"]
+    maturity = contract.get("maturity_pct")
+    try:
+        maturity = int(float(maturity)) if maturity is not None else None
+    except (TypeError, ValueError):
+        maturity = None
+
+    rescored = 0
+    failed = 0
+    scored_at = datetime.utcnow().isoformat()
+    try:
+        async with await get_data_service_client() as client:
+            # Resolve the target shipment set.
+            shipments: List[Dict[str, Any]] = []
+            if body.shipment_ids:
+                for sid in body.shipment_ids[: body.limit]:
+                    r = await client.get(f"/shipments/{sid}")
+                    if r.status_code == 200:
+                        shipments.append(r.json())
+            else:
+                resp = await client.get("/shipments", params={"limit": body.limit, "offset": 0})
+                if resp.status_code == 200:
+                    shipments = resp.json().get("data", [])
+
+            for shipment in shipments:
+                sid = shipment.get("id") or shipment.get("shipment_id")
+                if not sid:
+                    continue
+                try:
+                    final_score = _deterministic_score_under_model(shipment, multiplier)
+                    patch = await client.patch(
+                        f"/shipments/{sid}",
+                        json={
+                            "calculated_risk_score": final_score,
+                            "model_version": model_version,
+                            "model_maturity": maturity,
+                            "risk_score_calculated_at": scored_at,
+                        },
+                    )
+                    if patch.status_code in (200, 204):
+                        rescored += 1
+                    else:
+                        failed += 1
+                except Exception as one_err:
+                    failed += 1
+                    logger.debug(f"rescore failed for {sid}: {one_err}")
+    except Exception as e:
+        logger.error(f"rescore failed: {e}")
+        return {"status": "error", "detail": str(e), "model_version": model_version}
+
+    return {
+        "status": "success",
+        "model_version": model_version,
+        "calibration_multiplier": multiplier,
+        "rescored": rescored,
+        "failed": failed,
+        "scored_at": scored_at,
+    }
+
+
+def _coerce_review_into_gate1(body: Dict[str, Any]) -> Dict[str, Any]:
+    """Map a ProfessionalOfficerAnalysisForm payload (or a flat review) into the
+    gate1_outcomes column shape.
+
+    The form submits {step1..step4}. step3.action drives officer_action:
+      trled/hold_examine -> Hold (referred), release_monitor -> Clear.
+    A flat body {action/decision/outcome, notes, officer, predicted_risk} is also
+    accepted. Returns dict with keys: officer_action, outcome, predicted_risk,
+    analyst_id, notes.
+    """
+    # Flat form first.
+    action = body.get("action") or body.get("decision") or body.get("disposition")
+    notes = body.get("notes")
+    officer = body.get("officer") or body.get("analyst_id") or body.get("officerName")
+    predicted_risk = body.get("predicted_risk")
+    outcome = body.get("outcome")
+
+    form = body.get("formData") if isinstance(body.get("formData"), dict) else None
+    if form is None and isinstance(body.get("step3"), dict):
+        form = body  # body itself is the 4-step formData
+    if form is not None:
+        step1 = form.get("step1") or {}
+        step3 = form.get("step3") or {}
+        step4 = form.get("step4") or {}
+        raw_action = (step3.get("action") or "").lower()
+        if raw_action in ("trled", "hold_examine"):
+            action = "Hold"
+        elif raw_action == "release_monitor":
+            action = "Clear"
+        else:
+            action = action or "Examine"
+        if predicted_risk is None:
+            predicted_risk = step1.get("adjustedScore")
+        officer = officer or step4.get("officerName")
+        note_bits = [
+            step1.get("reasoning"),
+            (form.get("step2") or {}).get("notes"),
+            step3.get("reasoning"),
+            step4.get("caseNarrative"),
+        ]
+        notes = notes or "; ".join([b for b in note_bits if b]) or None
+
+    # Normalize action to the Hold|Examine|Clear vocabulary gate1 expects.
+    norm = (str(action or "").strip().capitalize())
+    if norm not in ("Hold", "Examine", "Clear"):
+        mapping = {
+            "Hold_examine": "Hold", "Hold-examine": "Hold", "Trled": "Hold",
+            "Release_monitor": "Clear", "Release": "Clear", "Examine": "Examine",
+        }
+        norm = mapping.get(norm, "Examine")
+    return {
+        "officer_action": norm,
+        "outcome": outcome,
+        "predicted_risk": predicted_risk,
+        "analyst_id": officer,
+        "notes": notes,
+    }
+
+
+@app.get("/api/review/{subject_id}")
+async def get_officer_review(
+    subject_id: str,
+    model_version: Optional[str] = Query(None),
+) -> Dict[str, Any]:
+    """Return the most recent officer review for a subject UNDER a model version.
+
+    The UI loads this when the Officer Analysis form opens so a submitted review
+    reappears instead of a blank form. 200 with {found:false} when none exists.
+    model_version is normalized ('1.1' or 'v1.1' both accepted).
+    """
+    norm_version = _normalize_model_version(model_version)
+    conn = None
+    try:
+        conn = _gate1_conn()
+        cur = conn.cursor()
+        _ensure_gate1_table(cur)
+        params: List[Any] = [subject_id]
+        ver_clause = ""
+        if norm_version:
+            # Match either the normalized 'v1.1' or the bare '1.1' that may have been stored.
+            ver_clause = " AND (model_version = %s OR model_version = %s)"
+            params.append(norm_version)
+            params.append(norm_version[1:] if norm_version[:1].lower() == "v" else norm_version)
+        cur.execute(
+            f"""
+            SELECT id, shipment_id, officer_action, outcome, predicted_risk,
+                   model_version, analyst_id, notes, created_at
+            FROM risk_scoring.gate1_outcomes
+            WHERE shipment_id = %s{ver_clause}
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            params,
+        )
+        row = cur.fetchone()
+        if not row:
+            return {"found": False, "subject_id": subject_id, "model_version": norm_version}
+        return {
+            "found": True,
+            "subject_id": subject_id,
+            "review": {
+                "id": int(row[0]),
+                "shipment_id": row[1],
+                "officer_action": row[2],
+                "outcome": row[3],
+                "predicted_risk": row[4],
+                "model_version": _normalize_model_version(row[5]),
+                "analyst_id": row[6],
+                "notes": row[7],
+                "created_at": row[8].isoformat() if hasattr(row[8], "isoformat") else row[8],
+            },
+        }
+    except Exception as e:
+        logger.error(f"get_officer_review failed for {subject_id}: {e}")
+        return {"found": False, "subject_id": subject_id, "detail": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+class OfficerReviewBody(BaseModel):
+    subject_id: Optional[str] = None
+    shipment_id: Optional[str] = None
+    case_id: Optional[str] = None
+    model_version: Optional[str] = None
+    # Either a flat decision/outcome/notes/officer, or the 4-step form payload.
+    decision: Optional[str] = None
+    action: Optional[str] = None
+    outcome: Optional[str] = None
+    notes: Optional[str] = None
+    officer: Optional[str] = None
+    predicted_risk: Optional[float] = None
+    formData: Optional[Dict[str, Any]] = None
+    step1: Optional[Dict[str, Any]] = None
+    step2: Optional[Dict[str, Any]] = None
+    step3: Optional[Dict[str, Any]] = None
+    step4: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "allow"
+
+
+@app.post("/api/review")
+async def post_officer_review(body: OfficerReviewBody = Body(...)) -> Dict[str, Any]:
+    """Persist a model-versioned officer review into risk_scoring.gate1_outcomes.
+
+    Keyed by (subject_id, model_version) so it feeds that model's PPV/Performance.
+    If the production model changed since the last review, a new review for the
+    new model is allowed; the old one stays attached to its model_version.
+
+    Accepts the ProfessionalOfficerAnalysisForm payload ({step1..step4} or
+    {formData:{...}}) or a flat {subject_id, model_version, decision/action,
+    outcome, notes, officer, predicted_risk}.
+    """
+    raw = body.model_dump(exclude_none=False)
+    subject_id = body.subject_id or body.shipment_id or body.case_id
+    if not subject_id:
+        return {"status": "error", "detail": "subject_id (or shipment_id/case_id) required"}
+
+    # Resolve model_version: explicit on the body wins, else current production.
+    norm_version = _normalize_model_version(body.model_version)
+    if not norm_version:
+        prod = _production_model_contract(await _fetch_production_model() or {"version": "1.1"})
+        norm_version = prod["version"] or "v1.1"
+
+    mapped = _coerce_review_into_gate1(raw)
+    conn = None
+    try:
+        conn = _gate1_conn()
+        cur = conn.cursor()
+        _ensure_gate1_table(cur)
+        cur.execute(
+            """
+            INSERT INTO risk_scoring.gate1_outcomes (
+                shipment_id, officer_action, outcome, predicted_risk,
+                model_version, analyst_id, notes, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                subject_id,
+                mapped["officer_action"],
+                mapped["outcome"],
+                mapped["predicted_risk"],
+                norm_version,
+                mapped["analyst_id"],
+                mapped["notes"],
+                datetime.utcnow(),
+            ),
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        return {
+            "status": "success",
+            "id": int(new_id),
+            "subject_id": subject_id,
+            "model_version": norm_version,
+            "officer_action": mapped["officer_action"],
+        }
+    except Exception as e:
+        logger.error(f"post_officer_review failed for {subject_id}: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return {"status": "error", "detail": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.post("/api/weight-suggestions/{suggestion_id}/approve")
 async def approve_weight_suggestion(
     suggestion_id: str,
