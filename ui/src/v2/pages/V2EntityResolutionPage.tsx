@@ -6,7 +6,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Search, ChevronRight, Users } from 'lucide-react';
 import { Panel, SectionHeader, StatStrip, StatusPill, DataTable, Column, LoadingState } from '../../components/ui';
-import { cordWatchlist, cordSearch, flagRisk, CordMatch } from '../services/cordApi';
+import { cordWatchlist, cordSearch, flagRisk, CordMatch, WatchlistMode } from '../services/cordApi';
 
 interface Props {
   selectedEntityId?: string | null;
@@ -19,27 +19,37 @@ interface Row extends CordMatch { score: number; tier: string }
 const riskColor = (t: string) => (t === 'CRITICAL' ? '#D83933' : t === 'HIGH' ? '#C7791B' : t === 'MEDIUM' ? '#B8860B' : '#15803D');
 const FLAG_LABEL: Record<string, string> = { eapa_respondent: 'EAPA respondent', uflpa_listed: 'UFLPA listed', sanctioned: 'Sanctioned', forced_labor: 'Forced labor', offshore: 'Offshore leak', high_risk: 'Risk-flagged' };
 
+// Watchlist filter chips. Active Shipment is the H2-operational default.
+const WATCHLIST_FILTERS: { value: WatchlistMode; label: string }[] = [
+  { value: 'active_shipments', label: 'Active Shipment' },
+  { value: 'ofac', label: 'OFAC' },
+  { value: 'eapa', label: 'EAPA' },
+];
+
 export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveTab }: Props) {
   const [query, setQuery] = useState('');
-  const [flagFilter, setFlagFilter] = useState('all');
+  const [watchlistMode, setWatchlistMode] = useState<WatchlistMode>('active_shipments');
   const [page, setPage] = useState(1);
   const [matches, setMatches] = useState<CordMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<'watchlist' | 'search'>('watchlist');
   const perPage = 12;
 
-  // Initial flagged watchlist.
+  // Flagged watchlist — refetched whenever the filter mode changes. Skipped
+  // while a search is active (search overrides the watchlist, as before).
   useEffect(() => {
+    if (mode === 'search') return;
     let cancelled = false;
-    (async () => { const w = await cordWatchlist(40); if (!cancelled) { setMatches(w); setLoading(false); } })();
+    setLoading(true);
+    (async () => { const w = await cordWatchlist(watchlistMode, 40); if (!cancelled) { setMatches(w); setLoading(false); setPage(1); } })();
     return () => { cancelled = true; };
-  }, []);
+  }, [watchlistMode, mode]);
 
   // Debounced search across all entities; empty query falls back to the watchlist.
   useEffect(() => {
     const q = query.trim();
     if (q.length < 2) {
-      if (mode === 'search') { setMode('watchlist'); setLoading(true); cordWatchlist(40).then((w) => { setMatches(w); setLoading(false); }); }
+      if (mode === 'search') { setMode('watchlist'); }
       return;
     }
     setLoading(true); setMode('search');
@@ -53,10 +63,7 @@ export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveT
     return { ...m, score, tier };
   }), [matches]);
 
-  const filtered = useMemo(() => {
-    const r = flagFilter === 'all' ? rows : rows.filter((x) => (x.flag || (x.tier === 'CRITICAL' ? 'sanctioned' : '')) === flagFilter);
-    return [...r].sort((a, b) => b.score - a.score);
-  }, [rows, flagFilter]);
+  const filtered = useMemo(() => [...rows].sort((a, b) => b.score - a.score), [rows]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
@@ -70,39 +77,52 @@ export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveT
 
   const open = useCallback((id: string) => { setSelectedEntityId?.(id); setActiveTab?.('entity-workspace'); }, [setSelectedEntityId, setActiveTab]);
 
-  const columns: Column[] = [
-    {
-      key: 'risk', label: 'Risk', render: (e: Row) => (
-        <div className="flex items-center gap-2">
-          <div className="w-12 h-1.5 bg-slate-200 rounded-sm overflow-hidden">
-            <div className="h-full" style={{ width: `${e.score}%`, background: riskColor(e.tier) }} />
+  // The Active Shipment view carries a shipment_count; show it only there.
+  const showShipments = mode === 'watchlist' && watchlistMode === 'active_shipments';
+
+  const columns: Column[] = useMemo(() => {
+    const cols: Column[] = [
+      {
+        key: 'risk', label: 'Risk', render: (e: Row) => (
+          <div className="flex items-center gap-2">
+            <div className="w-12 h-1.5 bg-slate-200 rounded-sm overflow-hidden">
+              <div className="h-full" style={{ width: `${e.score}%`, background: riskColor(e.tier) }} />
+            </div>
+            <span className="font-mono font-bold text-[#0B1F33]">{e.score}</span>
+            <StatusPill status={e.tier} />
           </div>
-          <span className="font-mono font-bold text-[#0B1F33]">{e.score}</span>
-          <StatusPill status={e.tier} />
-        </div>
-      ),
-    },
-    {
-      key: 'name', label: 'Entity', render: (e: Row) => (
-        <div><div className="font-semibold text-[#0B1F33]">{e.name}</div><div className="text-[10px] font-mono text-[#5C5C5C]">{e.entity_id}</div></div>
-      ),
-    },
-    { key: 'data_source', label: 'Source', render: (e: Row) => <span className="text-[10px] font-bold uppercase text-[#5C5C5C]">{e.data_source || '—'}</span> },
-    { key: 'country', label: 'Country', render: (e: Row) => <span className="font-mono text-[#5C5C5C]">{(e.country || '—') || '—'}</span> },
-    {
-      key: 'flag', label: 'Flag', render: (e: Row) => (
-        e.flag ? <span className="text-[#5C5C5C]">{FLAG_LABEL[e.flag] || e.flag}</span> : <span className="text-[#5C5C5C]">{e.program || '—'}</span>
-      ),
-    },
-    {
+        ),
+      },
+      {
+        key: 'name', label: 'Entity', render: (e: Row) => (
+          <div><div className="font-semibold text-[#0B1F33]">{e.name}</div><div className="text-[10px] font-mono text-[#5C5C5C]">{e.entity_id}</div></div>
+        ),
+      },
+      { key: 'data_source', label: 'Source', render: (e: Row) => <span className="text-[10px] font-bold uppercase text-[#5C5C5C]">{e.data_source || '—'}</span> },
+      { key: 'country', label: 'Country', render: (e: Row) => <span className="font-mono text-[#5C5C5C]">{(e.country || '—') || '—'}</span> },
+      {
+        key: 'flag', label: 'Flag', render: (e: Row) => (
+          e.flag ? <span className="text-[#5C5C5C]">{FLAG_LABEL[e.flag] || e.flag}</span> : <span className="text-[#5C5C5C]">{e.program || '—'}</span>
+        ),
+      },
+    ];
+    if (showShipments) {
+      cols.push({
+        key: 'shipment_count', label: 'Shipments', render: (e: Row) => (
+          <span className="font-mono font-bold text-[#0B1F33]">{e.shipment_count ?? '—'}</span>
+        ),
+      });
+    }
+    cols.push({
       key: 'action', label: '', align: 'right', render: (e: Row) => (
         <button onClick={() => open(e.entity_id)}
           className="inline-flex items-center gap-1 px-2.5 py-1 bg-[#005EA2] hover:bg-[#0b4f86] text-white rounded text-[10px] font-bold focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#005EA2]">
           Workspace <ChevronRight className="w-3 h-3" />
         </button>
       ),
-    },
-  ];
+    });
+    return cols;
+  }, [showShipments, open]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-[#F7F9FC]">
@@ -124,17 +144,22 @@ export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveT
               className="w-full pl-9 pr-4 py-1.5 border border-[#D0D7DE] rounded-sm text-[12px] text-[#0B1F33] focus:outline-none focus:ring-2 focus:ring-[#005EA2]"
             />
           </div>
-          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-[#5C5C5C]">
-            FLAG
-            <select value={flagFilter} onChange={(e) => { setFlagFilter(e.target.value); setPage(1); }}
-              className="bg-white border border-[#D0D7DE] rounded px-2 py-1 text-[11px] text-[#0B1F33] focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
-              <option value="all">All</option>
-              <option value="sanctioned">Sanctioned</option>
-              <option value="forced_labor">Forced labor</option>
-              <option value="offshore">Offshore leak</option>
-              <option value="high_risk">Risk-flagged</option>
-            </select>
-          </label>
+          <div role="group" aria-label="Watchlist filter" className="inline-flex items-center rounded-sm border border-[#D0D7DE] overflow-hidden">
+            {WATCHLIST_FILTERS.map((f, i) => {
+              const active = mode === 'watchlist' && watchlistMode === f.value;
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => { setQuery(''); setMode('watchlist'); setWatchlistMode(f.value); setPage(1); }}
+                  className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide focus:outline-none focus:ring-2 focus:ring-[#005EA2] ${i > 0 ? 'border-l border-[#D0D7DE]' : ''} ${active ? 'bg-[#005EA2] text-white' : 'bg-white text-[#5C5C5C] hover:bg-slate-50'}`}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <StatStrip items={[
@@ -148,7 +173,7 @@ export default function V2EntityResolutionPage({ setSelectedEntityId, setActiveT
       <div className="flex-1 overflow-y-auto px-6 pb-6">
         <Panel>
           <SectionHeader
-            title={mode === 'search' ? 'Search Results' : 'Flagged Watchlist'}
+            title={mode === 'search' ? 'Search Results' : `${WATCHLIST_FILTERS.find((f) => f.value === watchlistMode)?.label} Watchlist`}
             subtitle={`${filtered.length} entit${filtered.length === 1 ? 'y' : 'ies'}`}
             icon={<Users className="w-4 h-4" />}
           />

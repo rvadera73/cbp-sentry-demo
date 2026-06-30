@@ -573,12 +573,152 @@ class CORDEngine:
             "route": rec.get("ROUTE") or None,
         }
 
-    def watchlist(self, limit: int = 50) -> List[Dict]:
-        """Default flagged/sanctioned Entity Resolution watchlist drawn from the
-        real flagged CORD sources (OFAC + OpenSanctions, US forced-labor, ICIJ
-        offshore leaks, risk data) PLUS the T-Data flag sources CBP-EAPA (A1)
-        and UFLPA-ENTITY-LIST (A2). Identity-only sources (A3, NPI-PROVIDERS /
-        GLOBALDATA) are always excluded. Shown before any search.
+    # ----------------------------------------------------------------------
+    # Active-Shipment resolution — H2-operational watchlist view.
+    # ----------------------------------------------------------------------
+    def _shipment_party_counts(self) -> "Dict[str, Tuple[str, int]]":
+        """Distinct shipper/consignee names on real shipments, mapped from a
+        lowercased key to ``(display_name, shipment_count)``.
+
+        Reads the ``cbp_sentry.shipments`` Postgres table (sentry-db). Returns
+        an empty dict if Postgres / psycopg2 is unreachable so callers can fall
+        back to a non-shipment source."""
+        counts: "Dict[str, Tuple[str, int]]" = {}
+        try:
+            import psycopg2  # noqa: WPS433 — optional dependency, DB-only path
+            dsn = os.environ.get(
+                "DATABASE_URL", "postgresql://sentry:sentry-secret@sentry-db:5432/sentry"
+            )
+            conn = psycopg2.connect(dsn, options="-c search_path=cbp_sentry")
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT n, COUNT(*) FROM ("
+                    "  SELECT shipper_name AS n FROM shipments "
+                    "  UNION ALL "
+                    "  SELECT consignee_name AS n FROM shipments"
+                    ") q WHERE n IS NOT NULL AND n <> '' GROUP BY n"
+                )
+                for name, cnt in cur.fetchall():
+                    key = str(name).strip().lower()
+                    if not key:
+                        continue
+                    # If a name shows up as both shipper and consignee its two
+                    # GROUP BY rows collapse here; sum the counts.
+                    prev = counts.get(key)
+                    counts[key] = (str(name).strip(), (prev[1] if prev else 0) + int(cnt))
+                cur.close()
+            finally:
+                conn.close()
+        except Exception as exc:  # psycopg2 missing or DB unreachable
+            logger.warning("Shipments party load unavailable (%s)", exc)
+        return counts
+
+    def _ofac_names(self) -> "Dict[str, Tuple[str, str, str]]":
+        """OFAC / OpenSanctions primary names from the CORD FTS index, keyed by
+        lowercased name -> ``(record_id, data_source, country)``."""
+        out: "Dict[str, Tuple[str, str, str]]" = {}
+        try:
+            conn = sqlite3.connect(self.index_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT record_id, data_source, name_primary, country "
+                    "FROM cord_fts WHERE data_source IN ('OFAC', 'OPEN-SANCTIONS') "
+                    "AND name_primary <> ''"
+                )
+                for row in cur.fetchall():
+                    key = (row["name_primary"] or "").strip().lower()
+                    if key and key not in out:
+                        out[key] = (row["record_id"], row["data_source"], row["country"] or "")
+            finally:
+                conn.close()
+        except Exception as exc:
+            logger.warning("OFAC name load unavailable (%s)", exc)
+        return out
+
+    def active_shipment_entities(self, limit: int = 40) -> List[Dict]:
+        """H2-operational view: flagged entities (EAPA via ``is_eapa_respondent``,
+        UFLPA via ``is_uflpa_listed``, OFAC via the OFAC/OpenSanctions source)
+        whose NAME appears as a shipper or consignee on a real shipment.
+
+        Joins distinct shipment party names against the flagged sets and returns
+        watchlist-shaped rows carrying a ``shipment_count``. Defensive: if the
+        shipments table is unreachable, falls back to the EAPA respondents (they
+        are seeded as shippers), so the view is never empty when EAPA exists."""
+        party_counts = self._shipment_party_counts()
+        rows: List[Dict] = []
+        seen: set = set()
+
+        if party_counts:
+            ofac_names = self._ofac_names()
+            for key, (display, cnt) in party_counts.items():
+                if key in seen:
+                    continue
+                row: Optional[Dict] = None
+                # Priority: EAPA -> UFLPA -> OFAC (matches flagRisk CRITICAL order).
+                if self.is_eapa_respondent(display):
+                    rec = next(
+                        (r for r in self._eapa_records
+                         if (r.get("PRIMARY_NAME_ORG") or "").strip().lower() == key),
+                        None,
+                    )
+                    if rec:
+                        row = self._flag_record_to_watchlist(rec, EAPA_FLAG)
+                elif self.is_uflpa_listed(display):
+                    rec = next(
+                        (r for r in self._uflpa_records
+                         if (r.get("PRIMARY_NAME_ORG") or "").strip().lower() == key),
+                        None,
+                    )
+                    if rec:
+                        row = self._flag_record_to_watchlist(rec, UFLPA_FLAG)
+                elif key in ofac_names:
+                    rid, src, country = ofac_names[key]
+                    row = {
+                        "entity_id": f"{src}:{rid}",
+                        "name": display,
+                        "country": (country or "").upper(),
+                        "data_source": src,
+                        "flag": "sanctioned",
+                        "program": None,
+                    }
+                if row:
+                    row["name"] = display  # canonical shipment-party spelling
+                    row["shipment_count"] = cnt
+                    rows.append(row)
+                    seen.add(key)
+
+        # Defensive fallback: no shipment join available -> surface EAPA
+        # respondents (seeded as shippers) so the operational view isn't empty.
+        if not rows:
+            for rec in self._eapa_records:
+                if not rec.get("PRIMARY_NAME_ORG"):
+                    continue
+                row = self._flag_record_to_watchlist(rec, EAPA_FLAG)
+                row["shipment_count"] = 0
+                rows.append(row)
+
+        # Highest shipment activity first, then name for stability.
+        rows.sort(key=lambda r: (-int(r.get("shipment_count") or 0), r.get("name") or ""))
+        return rows[:limit]
+
+    def watchlist(self, limit: int = 50, mode: str = "active_shipments") -> List[Dict]:
+        """Flagged/sanctioned Entity Resolution watchlist.
+
+        ``mode`` selects the view:
+          * ``'active_shipments'`` (default, H2-operational): flagged entities
+            (EAPA/UFLPA/OFAC) that appear as a shipper or consignee on a real
+            shipment — see :meth:`active_shipment_entities`.
+          * ``'ofac'``: only OFAC / OPEN-SANCTIONS rows.
+          * ``'eapa'``: only CBP-EAPA rows.
+          * any other value (e.g. ``'balanced'``): the original balanced mix
+            across every flagged source (kept available).
+
+        The balanced view is drawn from the real flagged CORD sources (OFAC +
+        OpenSanctions, US forced-labor, ICIJ offshore leaks, risk data) PLUS the
+        T-Data flag sources CBP-EAPA (A1) and UFLPA-ENTITY-LIST (A2).
 
         The list is balanced so no single source floods it: each flagged source
         is capped at a fair per-source share (``ceil(limit / num_sources)``) and
@@ -587,6 +727,59 @@ class CORDEngine:
         NOMINO-RISK."""
         import math
 
+        mode = (mode or "active_shipments").strip().lower()
+
+        # H2-operational default: flagged actors on real shipments.
+        if mode == "active_shipments":
+            return self.active_shipment_entities(limit=limit)
+
+        # Single-source filters.
+        if mode == "ofac":
+            rows: List[Dict] = []
+            conn = sqlite3.connect(self.index_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT record_id, data_source, name_primary, country, "
+                    "ofac_program, sanctions_topic, raw_json FROM cord_fts "
+                    "WHERE data_source IN ('OFAC', 'OPEN-SANCTIONS') LIMIT ?",
+                    (limit * 4,),
+                )
+                for row in cur.fetchall():
+                    if len(rows) >= limit:
+                        break
+                    name = row["name_primary"]
+                    country = row["country"]
+                    if not name or not country:
+                        try:
+                            raw = json.loads(row["raw_json"])
+                        except Exception:
+                            raw = {}
+                        name = name or self._name_from_raw(raw)
+                        country = country or self._country_from_raw(raw)
+                    if not name:
+                        continue
+                    rows.append({
+                        "entity_id": f"{row['data_source']}:{row['record_id']}",
+                        "name": name,
+                        "country": (country or "").upper(),
+                        "data_source": row["data_source"],
+                        "flag": "sanctioned",
+                        "program": row["ofac_program"] or row["sanctions_topic"] or None,
+                    })
+            finally:
+                conn.close()
+            return rows[:limit]
+
+        if mode == "eapa":
+            rows = [
+                self._flag_record_to_watchlist(r, EAPA_FLAG)
+                for r in self._eapa_records if r.get("PRIMARY_NAME_ORG")
+            ]
+            return rows[:limit]
+
+        # ---- balanced (legacy) view -----------------------------------------
         # Buckets keyed by source, each holding already-shaped watchlist rows.
         # A1/A2 overlay flag sources (in-memory CordFlagRecords) ...
         buckets: "Dict[str, List[Dict]]" = {}

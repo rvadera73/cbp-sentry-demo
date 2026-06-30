@@ -372,6 +372,132 @@ class EntityResolver:
             "entity_type": entity.get("entity_type")
         }
 
+    # ===================================================================== #
+    # Related-parties / chain serving (reads derived senzing_relationships)  #
+    # ===================================================================== #
+    @staticmethod
+    def _name_from_raw(raw_json: Optional[str]) -> str:
+        """Best-effort primary name from a raw CORD record (index name_primary
+        is blank for OFAC/OPEN-SANCTIONS/labor sources)."""
+        if not raw_json:
+            return ""
+        try:
+            raw = json.loads(raw_json)
+        except (json.JSONDecodeError, TypeError):
+            return ""
+        for key in ("NAMES", "NAME_LIST"):
+            arr = raw.get(key)
+            if isinstance(arr, list) and arr:
+                prim = next((n for n in arr
+                             if isinstance(n, dict) and n.get("NAME_TYPE") == "PRIMARY"),
+                            arr[0])
+                if isinstance(prim, dict):
+                    org = prim.get("NAME_ORG") or prim.get("NAME_FULL")
+                    if org:
+                        return str(org)
+                    full = " ".join(str(prim.get(k, "")) for k in
+                                    ("PRIMARY_NAME_FIRST", "PRIMARY_NAME_MIDDLE",
+                                     "PRIMARY_NAME_LAST")).strip()
+                    if full:
+                        return full
+        for key in ("PRIMARY_NAME_ORG", "LEGAL_NAME_ORG", "NAME", "name", "Title"):
+            if raw.get(key):
+                return str(raw[key])
+        return ""
+
+    def get_related_parties(self, entity_id: str, limit: int = 50
+                            ) -> List[Dict[str, Any]]:
+        """All related parties for an entity from senzing_relationships.
+
+        Returns every relationship incident to ``entity_id`` (any type), joined
+        with the related entity's name/country/source so the workspace can show
+        a real resolved network. Excludes the internal derived marker.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT r.entity_id_a AS a, r.entity_id_b AS b,
+                       r.relationship_type AS rtype, r.confidence AS conf,
+                       r.evidence AS evidence,
+                       e.name_primary AS name, e.country AS country,
+                       e.data_source AS data_source, e.entity_type AS entity_type,
+                       e.raw_data AS raw_data
+                FROM senzing_relationships r
+                LEFT JOIN senzing_entities e ON e.entity_id = r.entity_id_b
+                WHERE r.entity_id_a = ?
+                  AND r.relationship_type != '__DERIVED_MARKER__'
+                ORDER BY r.confidence DESC
+                LIMIT ?
+            """, (entity_id, limit))
+            parties: List[Dict[str, Any]] = []
+            for row in cursor.fetchall():
+                try:
+                    ev = json.loads(row["evidence"]) if row["evidence"] else []
+                except (json.JSONDecodeError, TypeError):
+                    ev = []
+                name = row["name"]
+                if not name or not name.strip():
+                    name = self._name_from_raw(row["raw_data"]) or row["b"]
+                parties.append({
+                    "entity_id": row["b"],
+                    "name": name,
+                    "country": row["country"] or "",
+                    "data_source": row["data_source"] or "",
+                    "entity_type": row["entity_type"] or "",
+                    "relationship_type": row["rtype"],
+                    "confidence": row["conf"],
+                    "evidence": ev,
+                })
+            conn.close()
+            return parties
+        except Exception as e:
+            logger.error(f"get_related_parties failed: {e}")
+            return []
+
+    def get_ownership_chain(self, entity_id: str, max_depth: int = 4
+                            ) -> List[Dict[str, Any]]:
+        """Walk OWNED_BY / PARENT_COMPANY pointers up to ``max_depth`` levels."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            chain: List[Dict[str, Any]] = []
+            current = entity_id
+            seen = {entity_id}
+            for level in range(1, max_depth + 1):
+                rels = self._get_parent_relationships(cursor, current)
+                if not rels:
+                    break
+                rel = rels[0]
+                target = rel["target_entity_id"]
+                if target in seen:
+                    break
+                seen.add(target)
+                ent = self._get_entity(cursor, target) or {}
+                ename = ent.get("name")
+                if not ename or not str(ename).strip():
+                    ename = self._name_from_raw(
+                        json.dumps(ent.get("raw_data")) if ent.get("raw_data") else None
+                    ) or target
+                chain.append({
+                    "level": level,
+                    "entity_id": target,
+                    "name": ename,
+                    "country": ent.get("country") or "",
+                    "data_source": ent.get("data_source") or "",
+                    "relationship_type": rel["relationship_type"],
+                    "confidence": rel["confidence"],
+                    "evidence": rel["evidence"],
+                })
+                current = target
+            conn.close()
+            return chain
+        except Exception as e:
+            logger.error(f"get_ownership_chain failed: {e}")
+            return []
+
     def _error_response(self, error_msg: str) -> Dict[str, Any]:
         """Return error response."""
         return {

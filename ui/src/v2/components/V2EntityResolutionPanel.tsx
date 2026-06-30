@@ -7,11 +7,13 @@ import React, { useState } from 'react';
 import { Network, Globe, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
 import { Tabs, Panel, SectionHeader, StatusPill, DataTable, ScoreBar, Column } from '../../components/ui';
 import { EntityDetail, entityRisk } from '../services/cordApi';
+import EntityNetworkGraph from './EntityNetworkGraph';
 
 type TabId = 'network' | 'geography' | 'intelligence' | 'risk';
 
 const partyName = (r: any) => r.name || r.entity_name || r.NAME || r.entity_id || r.id || '—';
 const partyId = (r: any) => r.entity_id || r.id || r.related_entity_id || '';
+const prettyRel = (t?: string) => (t || 'related').replace(/_/g, ' ').toLowerCase();
 
 export default function V2EntityResolutionPanel({
   detail,
@@ -48,6 +50,38 @@ export default function V2EntityResolutionPanel({
   const parties = detail.parties || [];
   const chain = detail.chain || [];
 
+  // Network graph shape: root entity + each resolved party as nodes, with one
+  // directed edge (root -> party) carrying the relationship type. Confidence
+  // maps onto each party node's "risk" border just to give visual weight.
+  const rootId = e.entity_id || e.id || 'root';
+  const networkEntities = parties.length
+    ? [
+        {
+          entity_id: rootId,
+          name: e.name || rootId,
+          entity_type: e.entity_type || 'entity',
+          country: e.country || '',
+          risk_score: score,
+          relationships: parties
+            .map((p: any) => ({
+              target_id: partyId(p) || '',
+              type: prettyRel(p.relationship_type || p.relationship || p.type),
+              confidence: p.confidence ?? 0.5,
+            }))
+            .filter((r) => r.target_id && r.target_id !== rootId),
+        },
+        ...parties
+          .filter((p: any) => partyId(p) && partyId(p) !== rootId)
+          .map((p: any) => ({
+            entity_id: partyId(p),
+            name: partyName(p),
+            entity_type: p.entity_type || p.data_source || 'related',
+            country: p.country || '',
+            risk_score: Math.round((p.confidence ?? 0.5) * 100),
+          })),
+      ]
+    : [];
+
   const tabs = [
     { id: 'network', label: 'Network', icon: <Network className="w-3.5 h-3.5" /> },
     { id: 'geography', label: 'Geography', icon: <Globe className="w-3.5 h-3.5" /> },
@@ -63,7 +97,7 @@ export default function V2EntityResolutionPanel({
         </button>
       ),
     },
-    { key: 'relationship', label: 'Relationship', render: (r) => r.relationship || r.type || r.role || r.match_key || '—' },
+    { key: 'relationship', label: 'Relationship', render: (r) => prettyRel(r.relationship_type || r.relationship || r.type || r.role || r.match_key) },
     { key: 'confidence', label: 'Confidence', align: 'right', mono: true, render: (r) => (r.confidence != null ? `${Math.round(r.confidence * 100)}%` : '—') },
   ];
 
@@ -75,9 +109,12 @@ export default function V2EntityResolutionPanel({
       <div className="flex-1 overflow-y-auto p-4 bg-[#F7F9FC] space-y-4">
         {tab === 'network' && (
           <Panel>
-            <SectionHeader title="Resolved Relationships" subtitle={`${parties.length} related part${parties.length === 1 ? 'y' : 'ies'}`} icon={<Network className="w-4 h-4" />} />
+            <SectionHeader title="Resolved Relationship Network" subtitle={`${parties.length} related part${parties.length === 1 ? 'y' : 'ies'}`} icon={<Network className="w-4 h-4" />} />
             {parties.length ? (
-              <DataTable columns={relColumns} rows={parties} caption="Related parties" empty="No related parties resolved." />
+              <div className="space-y-3">
+                <EntityNetworkGraph entities={networkEntities} height={320} />
+                <DataTable columns={relColumns} rows={parties} caption="Related parties" empty="No related parties resolved." />
+              </div>
             ) : (
               <p className="text-[12px] text-[#5C5C5C]">No resolved relationships for this entity in CORD. See the Related &amp; Similar panel for name-network matches.</p>
             )}

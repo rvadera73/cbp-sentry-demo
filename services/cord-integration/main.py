@@ -471,6 +471,32 @@ async def get_entity(entity_id: str):
     }
 
 
+@app.get("/entity/{entity_id}/parties")
+async def get_entity_parties(entity_id: str, limit: int = Query(50, ge=1, le=200)):
+    """Real related parties for an entity from derived senzing_relationships.
+
+    Returns a JSON array (the api gateway wraps it as {"parties": [...]}).
+    """
+    if not _senzing_engine:
+        raise HTTPException(status_code=503, detail="Senzing engine not available")
+    resolver = EntityResolver("/app/data/senzing.db")
+    parties = await asyncio.to_thread(resolver.get_related_parties, entity_id, limit)
+    return parties
+
+
+@app.get("/entity/{entity_id}/chain")
+async def get_entity_chain(entity_id: str):
+    """Real ownership chain for an entity (walks OWNED_BY/PARENT_COMPANY).
+
+    Returns a JSON array (the api gateway wraps it as {"chain": [...]}).
+    """
+    if not _senzing_engine:
+        raise HTTPException(status_code=503, detail="Senzing engine not available")
+    resolver = EntityResolver("/app/data/senzing.db")
+    chain = await asyncio.to_thread(resolver.get_ownership_chain, entity_id)
+    return chain
+
+
 @app.post("/resolve")
 async def resolve_entity_chain(request: ResolveRequest):
     """3-level entity resolution: shipper → parent → ultimate owner.

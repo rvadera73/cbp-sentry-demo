@@ -84,10 +84,24 @@ export default function EntityNetworkGraph({
   entities,
   height = 400,
 }: EntityNetworkGraphProps) {
-  // Build nodes from entities
-  const initialNodes: Node[] = useMemo(
-    () =>
-      entities.map((entity, idx) => ({
+  // Build nodes from entities. The first entity is treated as the root and
+  // pinned at the centre; the rest are laid out radially around it so a
+  // root -> related-parties star reads cleanly. Falls back to a simple row
+  // when there is only one node.
+  const initialNodes: Node[] = useMemo(() => {
+    const n = entities.length;
+    const radius = Math.max(220, 70 * Math.max(1, n - 1));
+    return entities.map((entity, idx) => {
+      let position: { x: number; y: number };
+      if (n <= 1) {
+        position = { x: 0, y: 0 };
+      } else if (idx === 0) {
+        position = { x: 0, y: 0 }; // root at centre
+      } else {
+        const angle = (2 * Math.PI * (idx - 1)) / (n - 1);
+        position = { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+      }
+      return {
         id: entity.entity_id,
         data: {
           label: entity.name,
@@ -95,11 +109,11 @@ export default function EntityNetworkGraph({
           country: entity.country,
           risk_score: entity.risk_score,
         },
-        position: { x: idx * 180, y: 0 },
+        position,
         type: 'entityNode',
-      })),
-    [entities]
-  );
+      };
+    });
+  }, [entities]);
 
   // Build edges from relationships
   const initialEdges: Edge[] = useMemo(() => {

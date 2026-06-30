@@ -20,6 +20,10 @@ interface CorridorSummaryCardProps {
   riskProfile?: string;
   corridors?: Corridor[];
   onCorridorChange?: (corridorId: string) => void;
+  /** Factor-model corridor risk (single source of truth). When present, the
+   * tier/score shown here come from this — NOT the static risk_level. */
+  modelScore?: number | null;
+  modelTier?: string | null;
 }
 
 export default function CorridorSummaryCard({
@@ -34,7 +38,13 @@ export default function CorridorSummaryCard({
   riskProfile = '',
   corridors = [],
   onCorridorChange,
+  modelScore = null,
+  modelTier = null,
 }: CorridorSummaryCardProps) {
+  // Single source of truth: the factor-model tier when available, else the
+  // static risk_level (defensive fallback while the model score loads).
+  const effectiveTier = (modelTier && modelTier.trim()) ? modelTier.toUpperCase() : riskLevel;
+  const hasModel = modelScore != null && Number.isFinite(modelScore);
   const getRiskLevelColor = (level: string) => {
     switch (level) {
       case 'CRITICAL':
@@ -57,7 +67,9 @@ export default function CorridorSummaryCard({
   };
 
   const hsChapters = JSON.parse(primaryHsChapters || '[]');
-  const riskScoreColor = getRiskScoreColor(avgRiskScore);
+  // Headline score = the factor model when present; shipment average otherwise.
+  const headlineScore = hasModel ? (modelScore as number) : avgRiskScore;
+  const riskScoreColor = getRiskScoreColor(headlineScore);
 
   return (
     <div className="bg-white border-b border-[#D0D7DE] flex items-center px-6 h-[72px] shadow-sm shrink-0 gap-0">
@@ -75,24 +87,32 @@ export default function CorridorSummaryCard({
               </option>
             ))}
           </select>
-          <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded-sm shrink-0 ${getRiskLevelColor(riskLevel)}`}>
-            {riskLevel}
+          <span
+            className={`px-1.5 py-0.5 text-[9px] font-bold rounded-sm shrink-0 ${getRiskLevelColor(effectiveTier)}`}
+            title={hasModel ? 'Corridor risk (factor model)' : 'Static corridor risk level'}
+          >
+            {effectiveTier}
           </span>
         </div>
       </div>
 
-      {/* Col 2: Avg Risk Score with mini bar */}
+      {/* Col 2: Corridor Risk (factor model when available) with mini bar */}
       <div className="border-r border-[#D0D7DE] px-6 shrink-0">
-        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">Avg Risk</div>
+        <div className="text-[10px] text-[#5C5C5C] font-semibold uppercase tracking-wide mb-0.5">
+          {hasModel ? 'Corridor Risk' : 'Avg Risk'}
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="text-[15px] font-bold font-mono" style={{ color: riskScoreColor }}>
-            {avgRiskScore.toFixed(0)}
+            {headlineScore.toFixed(0)}
           </span>
           <span className="text-[10px] text-[#5C5C5C]">/100</span>
           <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div className="h-1.5 rounded-full" style={{ width: `${Math.min(avgRiskScore, 100)}%`, backgroundColor: riskScoreColor }}></div>
+            <div className="h-1.5 rounded-full" style={{ width: `${Math.min(headlineScore, 100)}%`, backgroundColor: riskScoreColor }}></div>
           </div>
         </div>
+        {hasModel && (
+          <div className="text-[8px] text-[#8C8C8C] mt-0.5">Shipment avg {avgRiskScore.toFixed(0)}</div>
+        )}
       </div>
 
       {/* Col 3: Shipments */}

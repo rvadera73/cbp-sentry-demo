@@ -47,6 +47,20 @@ export default function V2ShippingIntelligencePage({
   const [activeTab, setActiveTab] = useState<TabType>('trade-analysis');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Single source of truth: the factor-model corridor score, lifted from
+  // CorridorRiskScoreV4 so the top Summary card + Assessment show the SAME
+  // number. Reset whenever the selected corridor changes (no stale carry-over).
+  const [corridorModelScore, setCorridorModelScore] = useState<number | null>(null);
+  const [corridorModelTier, setCorridorModelTier] = useState<string | null>(null);
+  React.useEffect(() => {
+    setCorridorModelScore(null);
+    setCorridorModelTier(null);
+  }, [selectedCorridorId]);
+  const handleCorridorScore = useCallback((finalScore: number, tier: string) => {
+    setCorridorModelScore(finalScore);
+    setCorridorModelTier(tier);
+  }, []);
+
   // Search and filter state for Active Shipments tab
   const [shipmentSearchQuery, setShipmentSearchQuery] = useState('');
   const [shipmentPriorityFilter, setShipmentPriorityFilter] = useState('all');
@@ -190,6 +204,8 @@ export default function V2ShippingIntelligencePage({
               primaryHsChapters={selectedCorridor.primary_hs_chapters}
               riskProfile={selectedCorridor.risk_profile}
               corridors={corridors}
+              modelScore={corridorModelScore}
+              modelTier={corridorModelTier}
               onCorridorChange={(corridorId: string) => {
                 setSelectedCorridorId(corridorId);
                 setActiveTab('trade-analysis');
@@ -282,8 +298,8 @@ export default function V2ShippingIntelligencePage({
                   <CorridorTradeAnalysis corridor={selectedCorridor} shipments={corridorShipments} />
                   {/* Risk model + assessment sit next to the geography they describe.
                       Scoped to this default tab only — not on the other sub-tabs. */}
-                  <CorridorRiskScoreV4 corridor={selectedCorridor} shipments={corridorShipments} />
-                  <CorridorAssessment corridor={selectedCorridor} shipments={corridorShipments} />
+                  <CorridorRiskScoreV4 corridor={selectedCorridor} shipments={corridorShipments} onScore={handleCorridorScore} />
+                  <CorridorAssessment corridor={selectedCorridor} shipments={corridorShipments} modelScore={corridorModelScore} modelTier={corridorModelTier} />
                 </div>
               )}
 

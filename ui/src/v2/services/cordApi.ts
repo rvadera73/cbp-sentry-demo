@@ -19,7 +19,11 @@ export interface CordMatch {
   confidence?: number;
   flag?: string;       // watchlist only: sanctioned | forced_labor | offshore | high_risk
   program?: string;
+  shipment_count?: number;  // active_shipments mode: # shipments this party appears on
 }
+
+/** Watchlist view selector. */
+export type WatchlistMode = 'active_shipments' | 'ofac' | 'eapa';
 
 export interface EntityDetail {
   entity: any;     // full resolved record (name, country, entity_type, raw_data: NAMES/ADDRESSES/SDN_PROGRAM…)
@@ -54,10 +58,11 @@ function countryFromRaw(raw: any): string {
   return raw?.COUNTRY_CODE || raw?.BUSINESS_ADDR_STATE || '';
 }
 
-/** Default flagged/sanctioned watchlist (no search). */
-export async function cordWatchlist(limit = 40): Promise<CordMatch[]> {
+/** Flagged/sanctioned watchlist (no search). ``mode`` selects the view:
+ * Active Shipment (default, flagged actors on real shipments), OFAC, or EAPA. */
+export async function cordWatchlist(mode: WatchlistMode = 'active_shipments', limit = 40): Promise<CordMatch[]> {
   try {
-    const r = await fetch(`/api/cord/watchlist?limit=${limit}`);
+    const r = await fetch(`/api/cord/watchlist?limit=${limit}&mode=${encodeURIComponent(mode)}`);
     if (!r.ok) return [];
     const d = await r.json();
     return (d.entities || []).filter(hasName);

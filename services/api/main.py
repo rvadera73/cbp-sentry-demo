@@ -4000,13 +4000,19 @@ async def cord_search(
 
 
 @app.get("/api/cord/watchlist")
-async def cord_watchlist(limit: int = Query(50, ge=1, le=200)) -> Dict[str, Any]:
-    """Default flagged/sanctioned Entity Resolution watchlist from the local CORD
-    index: CBP-DEMO high-risk supply-chain entities + OFAC SDN matches."""
+async def cord_watchlist(
+    limit: int = Query(50, ge=1, le=200),
+    mode: str = Query("active_shipments"),
+) -> Dict[str, Any]:
+    """Flagged/sanctioned Entity Resolution watchlist from the local CORD index.
+
+    ``mode`` selects the view: ``active_shipments`` (default, H2-operational —
+    flagged EAPA/UFLPA/OFAC actors on real shipments), ``ofac`` (OFAC /
+    OpenSanctions only), or ``eapa`` (CBP-EAPA only)."""
     try:
         from cord_engine import get_cord_engine
         cord = get_cord_engine()
-        items = cord.watchlist(limit=limit)
+        items = cord.watchlist(limit=limit, mode=mode)
         return {"status": "success", "count": len(items), "entities": items}
     except Exception as e:
         logger.error(f"CORD watchlist error: {e}")

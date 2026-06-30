@@ -21,6 +21,7 @@ COPY services/cord-integration/cbp_augmentor.py .
 COPY services/cord-integration/resolver.py .
 COPY services/cord-integration/demo_entities.py .
 COPY services/cord-integration/seed_cbp_entities.py .
+COPY services/cord-integration/derive_relationships.py .
 
 # Copy database files
 COPY data/ /app/data/
@@ -32,5 +33,6 @@ RUN echo '#!/bin/bash\ncurl -f http://localhost:8004/health || exit 1' > /health
 # Expose port
 EXPOSE 8004
 
-# Run application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004"]
+# Run application — derive CORD relationships into senzing_relationships on
+# startup (idempotent, backgrounded so it doesn't block serving), then serve.
+CMD ["sh", "-c", "python3 derive_relationships.py >/tmp/derive.log 2>&1 & exec uvicorn main:app --host 0.0.0.0 --port 8004"]

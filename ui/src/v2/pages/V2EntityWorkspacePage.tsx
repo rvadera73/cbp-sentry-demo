@@ -62,8 +62,10 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
   };
 
   const parties = detail?.parties || [];
-  const related = parties.length
-    ? parties.map((p: any) => ({ id: p.entity_id || p.id, name: p.name || p.entity_name || p.entity_id, sub: p.relationship || p.type || 'related', score: Math.round((p.confidence ?? 0.5) * 100), real: true }))
+  const prettyRel = (t?: string) => (t || 'related').replace(/_/g, ' ').toLowerCase();
+  const usingResolved = parties.length > 0;
+  const related = usingResolved
+    ? parties.map((p: any) => ({ id: p.entity_id || p.id, name: p.name || p.entity_name || p.entity_id, sub: prettyRel(p.relationship_type || p.relationship || p.type), score: Math.round((p.confidence ?? 0.5) * 100), real: true }))
     : similar.map((m) => ({ id: m.entity_id, name: m.name, sub: `${m.data_source || 'match'}${m.country ? ' · ' + m.country : ''}`, score: null as number | null, real: false }));
 
   return (
@@ -100,8 +102,13 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
         <div className="w-72 bg-white rounded-sm border border-[#D0D7DE] flex flex-col overflow-hidden">
           <div className="bg-[#F0F4F8] px-3 py-2.5 border-b border-[#D0D7DE]">
             <h3 className="text-[11px] font-bold uppercase tracking-wide text-[#0B1F33]">
-              {parties.length ? 'Related Entities' : 'Related & Similar'} ({related.length})
+              {usingResolved ? 'Resolved Relationships' : 'Similar (name match)'} ({related.length})
             </h3>
+            <p className="text-[9px] text-[#5C5C5C] mt-0.5 leading-tight">
+              {usingResolved
+                ? 'Real CORD relationships (shared IDs, address, ownership)'
+                : 'No resolved links — showing name-network matches'}
+            </p>
           </div>
           <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
             {related.length ? related.map((r, i) => (

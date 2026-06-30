@@ -452,6 +452,86 @@ def _seed_scope_corridor_shipments(cursor) -> None:
     logger.info("✓ Seeded %d Gate-1 scope corridor (VN->US 7604/8541) demo shipments", len(scope_rows))
 
 
+def _seed_cn_us_corridor_shipments(cursor) -> None:
+    """Seed CN->US HS-7604/8541/7306 demo shipments whose shipper IS a CBP-EAPA
+    respondent, so the CN->US corridor (the default-shown corridor — CRITICAL
+    risk_level sorts first) lights up the factor model's Party factor and scores
+    HIGH/CRITICAL.
+
+    The corridor scorer cross-references EAPA respondent names via cord_engine,
+    which loads from ``cbp_sentry.eapa_cases`` (seeded above). Every shipper here
+    is one of those CN respondents, so each resolves to a flagged actor.
+
+    Guarded by a count check on the marker shippers so re-running init_db does
+    not duplicate these rows. Public-record-flavored demo data.
+    """
+    marker_shippers = (
+        "Shanghai Pacific Metals Ltd.",
+        "Foshan Global Import",
+        "Guangdong Hongtai Aluminum",
+        "Jiangmen Sunrise Aluminium",
+        "Tianjin Boiler Pipe Holdings",
+    )
+    cursor.execute(
+        "SELECT COUNT(*) AS count FROM shipments WHERE shipper_name = ANY(%s) "
+        "AND origin_country = 'CN' AND destination_country = 'US'",
+        (list(marker_shippers),),
+    )
+    if (cursor.fetchone() or {}).get("count", 0) > 0:
+        return
+
+    # (shipper [EAPA respondent], consignee, hs_code, value_usd, weight_kg,
+    #  age_months, ad_cvd_rate, description).
+    cn_rows = [
+        ("Foshan Global Import", "Newark Metals Inc.",
+         "7604.21", 528000.0, 198000.0, 8, 0.86, "Aluminum extrusions, 6063-T5 profiles"),
+        ("Guangdong Hongtai Aluminum", "Pacific Coast Traders",
+         "7604.29", 612000.0, 224000.0, 11, 0.86, "Aluminum extrusions, anodized"),
+        ("Jiangmen Sunrise Aluminium", "SunPath Energy Distributors LLC",
+         "7616.99", 374000.0, 131000.0, 6, 0.86, "Aluminum pallets / extruded shapes"),
+        ("Tianjin Boiler Pipe Holdings", "Georgia Steel Imports",
+         "7306.30", 905000.0, 410000.0, 9, 0.0, "Circular welded carbon-steel pipe"),
+        ("Shanghai Pacific Metals Ltd.", "California Solar Solutions",
+         "8541.43", 1340000.0, 88000.0, 5, 0.238, "Crystalline-silicon PV cells"),
+    ]
+
+    manifest_id = "SEED-GATE1-CNUS"
+    for shipper, consignee, hs, value, weight, age, adcvd, desc in cn_rows:
+        unit_price = round(value / weight, 4) if weight else None
+        cursor.execute(
+            """
+            INSERT INTO shipments (
+                id, manifest_id, shipper_name, consignee_name,
+                origin_country, destination_country, hs_code, commodity_code,
+                declared_value_usd, declared_weight_kg, unit_price_per_kg,
+                description, shipper_age_months, ad_cvd_rate, ad_cvd_applicable,
+                status, created_at
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                str(uuid.uuid4()),
+                manifest_id,
+                shipper,
+                consignee,
+                "CN",
+                "US",
+                hs,
+                hs,
+                value,
+                weight,
+                unit_price,
+                desc,
+                age,
+                adcvd,
+                adcvd > 0,
+                "received",
+                datetime.utcnow(),
+            ),
+        )
+    logger.info("✓ Seeded %d Gate-1 CN->US (7604/8541/7306) flagged-actor demo shipments", len(cn_rows))
+
+
 def _ensure_gate1_outcomes(cursor) -> None:
     """Ensure the Gate-1 PPV feedback table exists (CREATE IF NOT EXISTS).
 
@@ -599,6 +679,7 @@ def init_db() -> None:
         _ensure_gate1_outcomes(cursor)
         _seed_reference_data(cursor)
         _seed_scope_corridor_shipments(cursor)
+        _seed_cn_us_corridor_shipments(cursor)
         conn.commit()
     finally:
         cursor.close()
