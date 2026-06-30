@@ -8,7 +8,6 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, FileText } from 'lucide-react';
 import V2EntityResolutionPanel from '../components/V2EntityResolutionPanel';
 import EntitySummary from '../components/EntitySummary';
-import EntityAssessment from '../components/EntityAssessment';
 import { cordEntityDetail, cordEntityScore, cordSearch, EntityDetail, CordMatch } from '../services/cordApi';
 
 interface Props {
@@ -16,8 +15,6 @@ interface Props {
   setSelectedEntityId?: (id: string | null) => void;
   setActiveTab?: (tab: string) => void;
 }
-
-const riskDot = (s: number) => (s >= 80 ? 'bg-[#D83933]' : s >= 60 ? 'bg-orange-600' : s >= 40 ? 'bg-amber-600' : 'bg-green-600');
 
 export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEntityId, setActiveTab }: Props) {
   const [detail, setDetail] = useState<EntityDetail | null>(null);
@@ -91,48 +88,23 @@ export default function V2EntityWorkspacePage({ selectedEntityId, setSelectedEnt
       {/* Entity summary — outside the tabs, changes with selection */}
       <EntitySummary detail={detail} loading={loading} scoreBreakdown={scoreBreakdown} />
 
-      {/* Panel + Related sidebar */}
-      <div className="flex-1 flex overflow-hidden gap-4 p-4">
-        <div className="flex-1 bg-white rounded-sm border border-[#D0D7DE] overflow-hidden flex flex-col">
+      {/* Single content pane — the 3-tab panel (full width), mirroring the
+          Shipment Intelligence single-pane layout. Related entities live in the
+          Network tab; the assessment is folded into the Risk Profile tab. */}
+      <div className="flex-1 overflow-hidden p-4">
+        <div className="h-full bg-white rounded-sm border border-[#D0D7DE] overflow-hidden flex flex-col">
           {loading && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Resolving entity…</div>}
-          {!loading && detail && <V2EntityResolutionPanel detail={detail} onOpenEntity={openEntity} scoreBreakdown={scoreBreakdown} />}
+          {!loading && detail && (
+            <V2EntityResolutionPanel
+              detail={detail}
+              onOpenEntity={openEntity}
+              scoreBreakdown={scoreBreakdown}
+              related={related}
+              usingResolved={usingResolved}
+            />
+          )}
           {!loading && !detail && <div className="flex-1 flex items-center justify-center text-[12px] text-[#5C5C5C]">Select an entity from the watchlist.</div>}
         </div>
-
-        <div className="w-72 bg-white rounded-sm border border-[#D0D7DE] flex flex-col overflow-hidden">
-          <div className="bg-[#F0F4F8] px-3 py-2.5 border-b border-[#D0D7DE]">
-            <h3 className="text-[11px] font-bold uppercase tracking-wide text-[#0B1F33]">
-              {usingResolved ? 'Resolved Relationships' : 'Similar (name match)'} ({related.length})
-            </h3>
-            <p className="text-[9px] text-[#5C5C5C] mt-0.5 leading-tight">
-              {usingResolved
-                ? 'Real CORD relationships (shared IDs, address, ownership)'
-                : 'No resolved links — showing name-network matches'}
-            </p>
-          </div>
-          <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-            {related.length ? related.map((r, i) => (
-              <button key={i} onClick={() => openEntity(r.id)}
-                className="w-full text-left p-2 bg-slate-50 hover:bg-[#E3F2FD] border border-slate-200 hover:border-[#005EA2] rounded transition-colors focus:outline-none focus:ring-2 focus:ring-[#005EA2]">
-                <div className="flex items-start justify-between gap-1.5">
-                  <span className="text-[11px] font-bold text-[#0B1F33] line-clamp-2">{r.name}</span>
-                  {r.score != null && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded text-white shrink-0 ${riskDot(r.score)}`}>{r.score}</span>}
-                </div>
-                <div className="flex items-center justify-between mt-0.5">
-                  <span className="text-[10px] text-[#5C5C5C] truncate">{r.sub}</span>
-                  <span className="text-[10px] text-[#005EA2] font-bold shrink-0">→ Open</span>
-                </div>
-              </button>
-            )) : (
-              <p className="text-[11px] text-[#5C5C5C] text-center py-8">No related or similar entities resolved.</p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Assessment & recommendation — outside the tabs, at the bottom */}
-      <div className="shrink-0 px-4 pb-4 pt-1 border-t border-[#D0D7DE] bg-[#F7F9FC]">
-        <EntityAssessment detail={detail} scoreBreakdown={scoreBreakdown} />
       </div>
     </div>
   );
