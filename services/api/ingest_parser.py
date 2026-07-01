@@ -1,5 +1,6 @@
 """Excel manifest parsing and normalization"""
 
+import re
 import pandas as pd
 from io import BytesIO
 from typing import List, Dict, Any, Tuple
@@ -93,23 +94,28 @@ def parse_excel_manifest(file_content: bytes) -> Tuple[List[Dict[str, Any]], Lis
         "dwell_days": ["dwell_days", "dwell days", "dwell_time"],
         "ais_stuffing_country": ["ais_stuffing_country", "ais stuffing country", "ais_country", "stuffing_country"],
         "port_calls": ["port_calls", "port calls", "ports", "port_list"],
-        "element9_is_mismatch": ["element9_is_mismatch", "element9 is mismatch", "isf_mismatch", "isf element 9"],
+        "element9_is_mismatch": ["element9_is_mismatch", "element9 is mismatch", "isf_mismatch", "isf element 9", "isf element 9 mismatch"],
         "element9_declared_country": ["element9_declared_country", "element9 declared country", "isf_declared_country"],
         "element9_actual_country": ["element9_actual_country", "element9 actual country", "isf_actual_country"],
         "shipper_age_months": ["shipper_age_months", "shipper age months", "shipper age", "entity age"],
         "ad_cvd_rate": ["ad_cvd_rate", "ad cvd rate", "duty_rate", "duty rate"],
         "ad_cvd_applicable": ["ad_cvd_applicable", "ad cvd applicable", "duty_applicable", "has_duty"],
+        "risk_score": ["risk_score", "risk score", "score"],
     }
 
-    # Find actual columns in the dataframe (normalize spaces to match aliases)
-    df_columns_normalized = {col.lower().replace("_", " "): col for col in df.columns}
+    # Normalize column names: lowercase + strip ALL punctuation to single spaces
+    # (handles "AD/CVD Rate", "ISF Element 9 Mismatch", underscores, double spaces)
+    # so aliases match reliably regardless of header formatting.
+    def _norm(s: Any) -> str:
+        return re.sub(r"[^a-z0-9]+", " ", str(s).lower()).strip()
+
+    df_columns_normalized = {_norm(col): col for col in df.columns}
     found_columns = {}
 
     for target, aliases in column_map.items():
         for alias in aliases:
-            normalized_alias = alias.lower().replace("_", " ")
-            if normalized_alias in df_columns_normalized:
-                found_columns[target] = df_columns_normalized[normalized_alias]
+            if _norm(alias) in df_columns_normalized:
+                found_columns[target] = df_columns_normalized[_norm(alias)]
                 break
 
     if "shipper" not in found_columns or "consignee" not in found_columns:
@@ -164,7 +170,12 @@ def parse_excel_manifest(file_content: bytes) -> Tuple[List[Dict[str, Any]], Lis
                 "shipper_age_months": safe_int(row.get(found_columns.get("shipper_age_months", ""), None)),
                 "ad_cvd_rate": safe_float(row.get(found_columns.get("ad_cvd_rate", ""), None)),
                 "ad_cvd_applicable": safe_int(row.get(found_columns.get("ad_cvd_applicable", ""), 0), 0),
+                "risk_score": safe_float(row.get(found_columns.get("risk_score", ""), None)),
             }
+
+            # Derive AD/CVD applicability from a positive duty rate when no explicit column
+            if not parsed_row["ad_cvd_applicable"] and (parsed_row.get("ad_cvd_rate") or 0) > 0:
+                parsed_row["ad_cvd_applicable"] = 1
 
             # Basic validation
             if not parsed_row["shipper"]:

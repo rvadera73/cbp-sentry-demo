@@ -79,11 +79,36 @@ def _jsonify(value: Any) -> Any:
     return value
 
 
+_BOOLEAN_COLUMNS = {
+    "ad_cvd_applicable", "element9_is_mismatch", "isf_element_mismatch",
+    "isf_late_filing", "ofac_match",
+}
+
+
+def _to_bool(value: Any) -> Optional[bool]:
+    """Coerce manifest 0/1, "0"/"1", "true"/"false" into a real bool for boolean columns."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    try:
+        return bool(int(value))
+    except (ValueError, TypeError):
+        s = str(value).strip().lower()
+        if s in ("true", "yes", "y", "t"):
+            return True
+        if s in ("false", "no", "n", "f"):
+            return False
+        return None
+
+
 def _coerce_value(column: str, value: Any) -> Any:
     if column in JSONB_COLUMNS:
         return _jsonify(value)
     if column in TEXT_SERIALIZED_COLUMNS and value is not None and not isinstance(value, str):
         return json.dumps(value)
+    if column in _BOOLEAN_COLUMNS:
+        return _to_bool(value)
     return value
 
 
