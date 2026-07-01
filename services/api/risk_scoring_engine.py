@@ -50,6 +50,18 @@ except Exception as _rd_err:  # pragma: no cover - pure defensiveness
     _REFDATA_LOADED = False
 
 
+# Gate-1 commodity dwell baselines (days) for Rule 4 (dwell > 5x baseline).
+GATE1_DWELL_BASELINE = {
+    "7604": 3.2,  # aluminum extrusions
+    "8541": 2.8,  # solar cells/panels
+    "7210": 3.0, "7225": 3.0,  # steel flat-rolled
+    "4011": 4.0,  # tires
+    "4412": 3.5,  # plywood
+}
+GATE1_HIGH_RISK_ORIGINS = ("CN", "VN", "MY", "TH", "ID", "KH")
+GATE1_TRANSSHIP_HUBS = ("SG", "HK", "BKK", "PA", "CCS", "MYKTK", "VNSGN", "THBKK", "KHPNH")
+
+
 def _calibrate_prob_to_score(prob: float, cal: dict) -> float:
     """
     Map XGBoost probability to risk score [5,95].
@@ -366,6 +378,14 @@ class RiskScoringEngine:
         # Cap at 100
         final_score = min(max(final_score, 0.0), 100.0)
 
+        # ── Gate-1 deterministic rule floor ─────────────────────────────
+        # The 8-rule additive stack (GATES_DEFINITION) is the real Gate-1 model;
+        # apply it as a floor so a strong rule stack isn't diluted by the
+        # weighted 7-factor average.
+        gate1 = self._score_gate1_rules(shipment)
+        if gate1["score"] > final_score:
+            final_score = gate1["score"]
+
         # ── Maturity-aware Confidence Interval ──────────────────────────
         # At 15% maturity → ±17 pts. At 90% maturity → ±2 pts.
         raw_maturity = float(shipment.get("model_maturity") or 15)
@@ -394,6 +414,7 @@ class RiskScoringEngine:
             critical_indicators=critical_indicators,
             rule_engine_score=rule_engine_score,
         )
+        breakdown.calculation_table["gate1_rules"] = gate1
 
         return breakdown
 
@@ -425,6 +446,87 @@ class RiskScoringEngine:
             indicators.append(f"Undervalued pricing ({price_var:.0f}% below benchmark)")
 
         return indicators
+
+    def _score_gate1_rules(self, shipment: Dict) -> Dict[str, Any]:
+        """Deterministic Gate-1 rule stack (8 rules, additive points + referral
+        decision per GATES_DEFINITION). Applied as a FLOOR on the weighted score:
+        a real rule stack must not be diluted by the 7-factor average. Reference
+        lookups (AD/CVD orders, price norms) come from the live reference data."""
+        origin = (shipment.get("origin_country") or "").upper()[:2]
+        dest = (shipment.get("destination_country") or "").upper()[:2]
+        hs4 = str(shipment.get("hs_code") or shipment.get("commodity_code") or "")[:4]
+        dwell = float(shipment.get("dwell_days") or 0)
+        pts = 0
+        fired: List[str] = []
+
+        # R1 — ISF Element 9 origin mismatch (+20)
+        r1 = bool(shipment.get("element9_is_mismatch") or shipment.get("isf_element_mismatch"))
+        if r1:
+            pts += 20; fired.append("R1: ISF Element 9 origin mismatch (+20)")
+
+        # R2 — OFAC / SDN hit (+25)
+        r2 = bool(shipment.get("ofac_match")) or shipment.get("ofac_status") == "BLOCKED"
+        if r2:
+            pts += 25; fired.append("R2: OFAC/SDN hit (+25)")
+
+        # R3 — high-risk corridor + active AD/CVD order (or rate > 15%) (+15)
+        adcvd = float(shipment.get("ad_cvd_rate") or 0)  # decimal (0.15 == 15%)
+        has_order = False
+        if _refdata is not None:
+            try:
+                has_order = bool(_refdata.adcvd_for(shipment.get("hs_code") or hs4, origin))
+            except Exception:
+                has_order = False
+        if origin in GATE1_HIGH_RISK_ORIGINS and dest == "US" and (adcvd > 0.15 or has_order):
+            pts += 15; fired.append("R3: high-risk corridor + AD/CVD order (+15)")
+
+        # R4 — AIS dwell > 5x commodity baseline (+18)
+        baseline = GATE1_DWELL_BASELINE.get(hs4, 3.0)
+        if dwell > 5 * baseline:
+            pts += 18; fired.append(f"R4: dwell {dwell:.0f}d > 5x baseline {baseline}d (+18)")
+
+        # R5 — new shipper (<24mo) + high value (>$100K) (+10)
+        age = int(shipment.get("shipper_age_months") or 99)
+        val = float(shipment.get("declared_value_usd") or shipment.get("declared_value") or 0)
+        if age < 24 and val > 100000:
+            pts += 10; fired.append(f"R5: new shipper {age}mo + ${val:,.0f} (+10)")
+
+        # R6 — pricing > 15% below market (+12)
+        pv = float(shipment.get("price_variance_percent") or 0)
+        if pv == 0 and _refdata is not None:
+            try:
+                norm = _refdata.price_norm(shipment.get("hs_code") or hs4)
+                up = float(shipment.get("unit_price_per_kg") or 0)
+                if norm and up:
+                    pv = (up - norm) / norm * 100.0
+            except Exception:
+                pv = 0.0
+        if pv < -15:
+            pts += 12; fired.append(f"R6: unit price {pv:.0f}% below market (+12)")
+
+        # R7 — transshipment hub call + dwell > 3d (+14)
+        ports = str(shipment.get("port_calls") or "").upper()
+        if any(h in ports for h in GATE1_TRANSSHIP_HUBS) and dwell > 3:
+            pts += 14; fired.append("R7: transshipment hub call + dwell (+14)")
+
+        # R8 — ISF amendments > 3 (+12)
+        if int(shipment.get("isf_amendments") or 0) > 3:
+            pts += 12; fired.append("R8: ISF amendments > 3 (+12)")
+
+        score = float(min(pts, 100))
+        # Referral decision (GATES): OFAC alone, or Element-9 + >=1 corroborating rule.
+        corroborated = len(fired) >= 2
+        referral = bool(r2 or (r1 and corroborated))
+        # A Gate-1 referral IS the critical determination -> floor to the critical
+        # tier (GATES: OFAC = 100% critical; Element-9 + corroboration = HIGH 90%+).
+        # PPV on real outcomes then measures how many of these confirm.
+        if referral:
+            score = max(score, 95.0 if r2 else 90.0)
+        reason = ("OFAC/SDN hit" if r2 else
+                  "Element-9 mismatch + corroboration" if referral else
+                  "insufficient corroboration for referral")
+        return {"score": score, "points": pts, "rules_fired": fired,
+                "referral": referral, "referral_reason": reason}
 
     def _generate_calculation_table(
         self,
