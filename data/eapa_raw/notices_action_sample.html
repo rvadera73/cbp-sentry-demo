@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<!--
+  SAMPLE / FIXTURE ONLY. This is a small hand-built approximation of the
+  structure of the real CBP "Notices of Action" EAPA page
+  (https://www.cbp.gov/trade/eapa/notices-action), used to exercise the
+  parser in scripts/fetch_eapa.py when the live site returns HTTP 403.
+
+  Replace this with real pages saved manually from a browser
+  ("Save Page As -> Web Page, HTML only") to extract genuine data.
+-->
+<html lang="en">
+<head><title>EAPA Notices of Action | U.S. Customs and Border Protection</title></head>
+<body>
+  <main>
+    <h1>Notices of Action</h1>
+
+    <!-- Real CBP pages present these as a table on some views -->
+    <table>
+      <thead>
+        <tr>
+          <th>EAPA Case Number</th>
+          <th>Importer / Respondent</th>
+          <th>Commodity</th>
+          <th>Country of Origin</th>
+          <th>Determination Date</th>
+          <th>Notice</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>EAPA Case 7181</td>
+          <td>Global Aluminum Extrusions, Inc.</td>
+          <td>Aluminum Extrusions (7604)</td>
+          <td>China</td>
+          <td>March 12, 2021</td>
+          <td><a href="/document/notices/eapa-7181-notice-of-action.pdf">Notice of Action</a></td>
+        </tr>
+        <tr>
+          <td>EAPA Case 7457</td>
+          <td>Sunrise Solar Imports LLC; Bright Panel Trading Co.</td>
+          <td>Crystalline Silicon Photovoltaic Cells (8541)</td>
+          <td>Vietnam</td>
+          <td>08/19/2022</td>
+          <td><a href="/document/notices/eapa-7457-notice-of-action.pdf">Notice of Action</a></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- and as a link list on other views -->
+    <ul>
+      <li>
+        <a href="/document/notices/eapa-7501-notice-of-action.pdf">
+          EAPA Consolidated Case Number 7501 - Notice of Action - Hardwood Plywood Distributors, Inc.
+        </a>
+        Country of origin: China. Determination date: January 5, 2023.
+      </li>
+      <li>
+        <a href="/document/notices/eapa-7654-notice-of-action.pdf">
+          EAPA Case 7654 - Notice of Action - Mekong Steel Pipe JSC
+        </a>
+        Merchandise transshipped through Vietnam. December 15, 2022.
+      </li>
+      <li>
+        <a href="https://www.cbp.gov/document/notices/eapa-7185-final-determination.pdf">
+          EAPA 7185 Final Determination as to Evasion - Pacific Wire &amp; Nail Company
+        </a>
+      </li>
+    </ul>
+  </main>
+</body>
+</html>

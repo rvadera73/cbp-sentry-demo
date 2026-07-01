@@ -3842,6 +3842,241 @@ async def rescore_under_production_model(body: Optional[RescoreBody] = Body(None
     }
 
 
+# ============= DATA PIPELINES (source registry + run ledger) =============
+# Backs the "Data Pipelines" admin tab. Uses the same direct-psycopg2 pattern as
+# the Gate-1 feedback loop (data_pipelines._pipelines_conn mirrors _gate1_conn).
+
+import data_pipelines as _pipelines
+
+
+async def _current_shipment_count() -> Optional[int]:
+    """Cheap total shipment count via the data service /shipments (uses `count`).
+
+    Returns None on any failure so callers can degrade gracefully.
+    """
+    try:
+        async with await get_data_service_client() as client:
+            resp = await client.get("/shipments", params={"limit": 1, "offset": 0})
+            if resp.status_code == 200:
+                return int(resp.json().get("count") or 0)
+    except Exception as e:
+        logger.warning(f"pipeline shipment-count lookup failed: {e}")
+    return None
+
+
+@app.get("/api/pipelines")
+async def get_pipelines() -> Dict[str, Any]:
+    """List all data sources with live status + row counts (Data Pipelines tab).
+
+    Response: { "sources": [ {id,name,dataset_type,mode,status,last_run_at,
+                rows_last_run,total_rows,schedule,endpoint_or_path,detail,
+                gap_note,enabled} ] }
+    """
+    shipment_count = await _current_shipment_count()
+    conn = None
+    try:
+        conn = _pipelines._pipelines_conn()
+        cur = conn.cursor()
+        _pipelines._ensure_pipeline_tables(cur)
+        _pipelines.seed_sources(cur)
+        conn.commit()
+
+        sources = _pipelines.fetch_sources(cur)
+        latest = _pipelines.latest_run_map(cur)
+
+        out = []
+        for s in sources:
+            total_rows, status = _pipelines.compute_total_rows_and_status(
+                s["id"], shipment_count
+            )
+            last = latest.get(s["id"])
+            out.append(
+                {
+                    "id": s["id"],
+                    "name": s["name"],
+                    "dataset_type": s["dataset_type"],
+                    "mode": s["mode"],
+                    "status": status,
+                    "last_run_at": last["started_at"] if last else None,
+                    "rows_last_run": (last["rows_out"] if last else None),
+                    "total_rows": total_rows,
+                    "schedule": s["schedule"],
+                    "endpoint_or_path": s["endpoint_or_path"],
+                    "detail": s["detail"],
+                    "gap_note": s["gap_note"],
+                    "enabled": s["enabled"],
+                }
+            )
+        return {"sources": out}
+    except Exception as e:
+        logger.error(f"GET /api/pipelines failed: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return {"sources": [], "error": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.post("/api/pipelines/{source_id}/run")
+async def run_pipeline(source_id: str) -> Dict[str, Any]:
+    """Record a manual refresh run for a source into ingestion_runs.
+
+    For manifest-filedrop, rows_ingested = current shipment count. For others,
+    records a run with a "manual refresh recorded" message (real fetch wiring
+    can come later). Returns {status,id,run_id,rows_ingested,message}.
+    """
+    started_at = datetime.utcnow()
+
+    rows_ingested: Optional[int] = None
+    if source_id == "manifest-filedrop":
+        rows_ingested = await _current_shipment_count()
+        message = f"manual refresh recorded — {rows_ingested or 0} shipments in store"
+    else:
+        message = "manual refresh recorded"
+
+    conn = None
+    try:
+        conn = _pipelines._pipelines_conn()
+        cur = conn.cursor()
+        _pipelines._ensure_pipeline_tables(cur)
+        _pipelines.seed_sources(cur)
+
+        # Guard: source must exist in the registry.
+        cur.execute(
+            "SELECT 1 FROM risk_scoring.data_sources WHERE id = %s", (source_id,)
+        )
+        if cur.fetchone() is None:
+            conn.commit()
+            raise HTTPException(status_code=404, detail=f"Unknown source: {source_id}")
+
+        ended_at = datetime.utcnow()
+        run_id = _pipelines.insert_run(
+            cur,
+            source_id=source_id,
+            started_at=started_at,
+            ended_at=ended_at,
+            status="success",
+            rows_in=rows_ingested,
+            rows_out=rows_ingested,
+            message=message,
+        )
+        conn.commit()
+        return {
+            "status": "success",
+            "id": source_id,
+            "run_id": run_id,
+            "rows_ingested": rows_ingested,
+            "message": message,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"POST /api/pipelines/{source_id}/run failed: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return {"status": "error", "id": source_id, "detail": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.get("/api/pipelines/{source_id}/runs")
+async def get_pipeline_runs(source_id: str) -> Dict[str, Any]:
+    """Return the most recent 20 ingestion runs for a source (newest first).
+
+    Response: { "runs": [ {run_id,started_at,ended_at,status,rows_in,rows_out,
+                message} ] }
+    """
+    conn = None
+    try:
+        conn = _pipelines._pipelines_conn()
+        cur = conn.cursor()
+        _pipelines._ensure_pipeline_tables(cur)
+        runs = _pipelines.list_runs(cur, source_id, limit=20)
+        return {"runs": runs}
+    except Exception as e:
+        logger.error(f"GET /api/pipelines/{source_id}/runs failed: {e}")
+        return {"runs": [], "error": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+class PipelinePatchBody(BaseModel):
+    enabled: Optional[bool] = None
+    schedule: Optional[str] = None
+
+
+@app.patch("/api/pipelines/{source_id}")
+async def patch_pipeline(source_id: str, body: PipelinePatchBody = Body(...)) -> Dict[str, Any]:
+    """Toggle `enabled` and/or update `schedule` for a source. Returns {ok:true}."""
+    conn = None
+    try:
+        conn = _pipelines._pipelines_conn()
+        cur = conn.cursor()
+        _pipelines._ensure_pipeline_tables(cur)
+        _pipelines.seed_sources(cur)
+
+        sets: List[str] = []
+        params: List[Any] = []
+        if body.enabled is not None:
+            sets.append("enabled = %s")
+            params.append(body.enabled)
+        if body.schedule is not None:
+            sets.append("schedule = %s")
+            params.append(body.schedule)
+
+        if not sets:
+            conn.commit()
+            return {"ok": False, "detail": "no fields to update (enabled/schedule)"}
+
+        sets.append("updated_at = %s")
+        params.append(datetime.utcnow())
+        params.append(source_id)
+
+        cur.execute(
+            f"UPDATE risk_scoring.data_sources SET {', '.join(sets)} WHERE id = %s",
+            params,
+        )
+        if cur.rowcount == 0:
+            conn.commit()
+            raise HTTPException(status_code=404, detail=f"Unknown source: {source_id}")
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"PATCH /api/pipelines/{source_id} failed: {e}")
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return {"ok": False, "detail": str(e)}
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _coerce_review_into_gate1(body: Dict[str, Any]) -> Dict[str, Any]:
     """Map a ProfessionalOfficerAnalysisForm payload (or a flat review) into the
     gate1_outcomes column shape.

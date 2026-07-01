@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   Layers, FolderLock, Anchor, Network, BookOpen, ChevronRight,
-  ChevronLeft, ShieldCheck, BarChart3
+  ChevronLeft, ShieldCheck, BarChart3, Database
 } from 'lucide-react';
 
 interface NavItem {
@@ -26,6 +26,7 @@ const navItems: NavItem[] = [
   { id: 'shipments', label: 'Shipment Intelligence', icon: <Anchor className="w-5 h-5" />, section: 'primary' },
   { id: 'entities', label: 'Entity Resolution', icon: <Network className="w-5 h-5" />, section: 'primary' },
   { id: 'risk-models', label: 'Risk Model Management', icon: <BarChart3 className="w-5 h-5" />, section: 'admin' },
+  { id: 'data-pipelines', label: 'Data Pipelines', icon: <Database className="w-5 h-5" />, section: 'admin' },
 ];
 
 export default function V2Sidebar({

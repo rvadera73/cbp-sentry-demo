@@ -18,6 +18,7 @@ import V2EntityResolutionPage from './v2/pages/V2EntityResolutionPage'
 import V2EntityWorkspacePage from './v2/pages/V2EntityWorkspacePage'
 import V2WatchlistsPage from './v2/pages/V2WatchlistsPage'
 import RiskModelManagementV2 from './pages/RiskModelManagement/RiskModelManagementV2'
+import V2DataPipelinesPage from './v2/pages/V2DataPipelinesPage'
 import { CBPOfficer, AIFinding, ReferralPackage, Case, Shipment } from './v2/types/v2.types'
 import { useV2Cases } from './v2/hooks/useV2Cases'
 import { useV2Referrals } from './v2/hooks/useV2Referrals'
@@ -45,6 +46,7 @@ function V2AppWrapper() {
       'entity-workspace': 'entity-workspace',
       watchlists: 'watchlists',
       'risk-models': 'risk-models',
+      'data-pipelines': 'data-pipelines',
       referrals: 'referrals',
     };
     if (tabMap[path]) setActiveTab(tabMap[path]);
@@ -301,6 +303,7 @@ function V2AppWrapper() {
     />,
     watchlists: <V2WatchlistsPage />,
     'risk-models': <RiskModelManagementV2 />,
+    'data-pipelines': <V2DataPipelinesPage />,
   }
 
   return (
@@ -395,6 +398,10 @@ function App() {
             />
             <Route
               path="/risk-models"
+              element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['analyst']} />}
+            />
+            <Route
+              path="/data-pipelines"
               element={<ProtectedRoute element={<V2AppWrapper />} allowedRoles={['analyst']} />}
             />
 
