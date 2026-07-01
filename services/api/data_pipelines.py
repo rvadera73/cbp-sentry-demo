@@ -373,33 +373,62 @@ _DEFAULT_STATUS = {
 }
 
 
+def _registry_row_count(source_label: str) -> Optional[int]:
+    """Rows in reference/entity_registry.csv for a registry source (GLEIF/EDGAR/OpenCorporates)."""
+    path = _REF_DIR / "entity_registry.csv"
+    if not path.exists():
+        return None
+    try:
+        with path.open(encoding="utf-8") as f:
+            return sum(
+                1 for row in csv.DictReader(f)
+                if (row.get("source") or "").strip().upper() == source_label.upper()
+            )
+    except Exception:
+        return None
+
+
 def compute_total_rows_and_status(
     source_id: str,
     shipment_count: Optional[int],
 ) -> tuple[Optional[int], str]:
-    """Compute (total_rows, status) for a source using cheap live signals.
+    """Compute (total_rows, status) for a source, honest about operational reality:
 
-    shipment_count is passed in from main.py (data service /shipments count) so
-    this module stays sync/DB-only and does no HTTP.
+      healthy        — live/loaded and actively serving the running system
+      seed           — real data present, but from a manual/one-time load with no
+                       live scheduled fetcher (reference + registry enrichment)
+      not_configured — needs setup it lacks (e.g. OpenCorporates without a token) or
+                       no data present
+
+    shipment_count is passed in from main.py so this module stays sync/DB-only.
     """
     if source_id == "manifest-filedrop":
         total = shipment_count
-        status = "healthy" if (total or 0) > 0 else "not_configured"
-        return total, status
+        return total, ("healthy" if (total or 0) > 0 else "not_configured")
 
+    # Reference sources: real data, but NOT on a live schedule -> "seed".
     if source_id == "adcvd-fedreg":
         total = _adcvd_row_count()
-        return (total, "healthy") if total is not None else (None, "not_configured")
-
+        return (total, "seed") if total else (None, "not_configured")
     if source_id == "comtrade":
         total = _comtrade_row_count()
-        return (total, "healthy") if total is not None else (None, "not_configured")
+        return (total, "seed") if total else (None, "not_configured")
 
     if source_id == "eapa-cbp":
         total = _eapa_row_count()
-        if total is None:
-            return 0, "not_configured"
-        return total, "healthy"
+        return (0, "not_configured") if total is None else (total, "healthy")
 
-    # vessel / isf / entity — wired subsystems, sensible healthy default.
+    # Entity-registry enrichment: one-time run, not scheduled -> "seed".
+    if source_id in ("gleif", "sec-edgar"):
+        total = _registry_row_count("GLEIF" if source_id == "gleif" else "EDGAR")
+        return (total, "seed") if total else (None, "not_configured")
+
+    # OpenCorporates: token-gated -> not operational until OC_API_TOKEN is set.
+    if source_id == "opencorporates":
+        if not os.getenv("OC_API_TOKEN"):
+            return None, "not_configured"
+        total = _registry_row_count("OpenCorporates")
+        return (total, "seed") if total else (None, "healthy")
+
+    # vessel / isf / entity — wired subsystems actively serving data.
     return None, _DEFAULT_STATUS.get(source_id, "healthy")

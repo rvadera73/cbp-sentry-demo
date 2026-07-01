@@ -67,6 +67,13 @@ const PipelineStatusCell: React.FC<{ status: string }> = ({ status }) => {
       </span>
     );
   }
+  if (status === 'seed') {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border bg-amber-50 text-amber-700 border-amber-300" title="Real data present, but from a one-time / manual load — not on a live schedule yet">
+        seed · not live
+      </span>
+    );
+  }
   return <StatusPill status={status} />;
 };
 

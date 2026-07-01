@@ -8,7 +8,7 @@ import { API_BASE_URL } from '../../services/apiUrl';
  */
 export type PipelineDatasetType = 'manifest' | 'isf' | 'vessel' | 'entity' | 'reference';
 export type PipelineMode = 'online' | 'file' | 'derived';
-export type PipelineStatus = 'healthy' | 'stale' | 'error' | 'not_configured';
+export type PipelineStatus = 'healthy' | 'stale' | 'error' | 'not_configured' | 'seed';
 
 export interface PipelineSource {
   id: string;
