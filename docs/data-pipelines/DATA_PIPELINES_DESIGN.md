@@ -14,6 +14,9 @@
 | 2026-06-30 | Manifest = file-drop hub + aggregate API (decided). Added Hub DVC layout + golden-seed + file-drop (§11), DQ gates (§13), orchestration (§14), canonical-schema recommendation (§15). |
 | 2026-06-30 | Per-data-point sourcing plan + two-tier entity strategy (§16); per-gate plan mapping the 8 Gate-1 rules to sources (§17); Gate-1 sample-manifest critical path for May–Jul (§18). Altana clarified = recommendation, not a raw score. |
 | 2026-07-01 | FINALIZED design (§19): data flywheel (EAPA→manifests→scoring→entity list→labeled history), locked decisions, Data Pipeline tab spec, Gate-1 implementation sequence. Manifest ingest bugs fixed (830 rows load, ~25 in-scope critical). |
+| 2026-07-01 | Built the **Data Pipelines tab** (registry + run-ledger + 4 endpoints + admin UI under Intelligence Control), seeded with 7 real sources. |
+| 2026-07-01 | **EAPA real data journey**: Federal Register API (27 cases) → **Wayback Machine** pivot to cbp.gov (94 cases, 58 named, since cbp.gov Akamai-blocks server IPs) → **PDF harvest** of determination notices (227 entities, 417 relationships, 99/102 PDFs, 7 "Various Importers" cracked into real names) → **loaded into the entity graph** (204 entities, 414 edges; persistent via cord-integration startup). |
+| 2026-07-01 | **Entity-registry enrichment** added (§20): GLEIF + SEC EDGAR (free, no token) + OpenCorporates (free token) to resolve EAPA entities → real address / ownership / affiliates / officers, closing the thin CORD cross-ref. |
 
 ---
 
@@ -458,3 +461,35 @@ Under **Intelligence Control** — a catalog + control panel (the "details about
 - **Deferred (Gate-2/3):** Altana live, satellite AIS, Dagster, the LightGBM / Bayesian models.
 
 > Foundation already done (2026-07-01): the **manifest file-drop ingest works** (bugs fixed — boolean coercion, parser column mapping, silent-failure hardening); 830 demo rows load, ~25 in-scope VN→US 7604/8541 at ≥90.
+
+---
+
+# Part E — Build log & entity-intelligence (as-built, 2026-07-01)
+
+## 20. EAPA entity intelligence — what shipped, and why it took the path it did
+
+The goal: turn EAPA from a synthetic seed into **real, named enforcement actors with their networks** — the H2 core of a Gate-1 system.
+
+**The sourcing journey (each step forced by a real blocker):**
+1. **Federal Register API** — real but only ~27 EAPA docs (Commerce "covered merchandise referral" subset; merchandise-focused, sparse names).
+2. **cbp.gov is the rich source (~280 cases) but Akamai-blocks datacenter IPs (403).** Pivoted to the **Wayback Machine** (archive.org, not blocked): unioning snapshots across ~2 years → **94 real cases, 58 with respondent names**, incl. in-scope aluminum (Thompson Aluminum, Kingtom Aluminio).
+3. **The determination PDFs** carry the per-case importers, foreign exporter/manufacturer, alleger, counsel. Access quirk: cbp.gov 403s the `requests` lib but serves **`urllib`**; listing pages blocked, `/document` landing pages + `/sites` PDFs are direct. Harvested **99/102 PDFs → 227 entities, 417 relationships**, and cracked **7 "Various Importers"** cases into real names (EAPA-8201 → an 11-importer ring, 66 edges).
+4. **Loaded into `senzing_entities`/`senzing_relationships`** (204 entities, 414 real edges: CO_RESPONDENT / SUPPLIED_BY / ALLEGED_BY / RELATED_ENTITY), cross-referenced against the 244K CORD by normalized name, **persistent** via the cord-integration Dockerfile startup.
+
+**Artifacts:** `scripts/fetch_eapa_fedreg.py` (FR+Wayback → `eapa_real.csv`), `scripts/fetch_eapa_pdfs.py` (PDFs → `eapa_entities.csv` / `eapa_relationships.csv` / `eapa_enriched.csv`), `services/cord-integration/load_eapa_network.py`.
+
+**Honest limits:** PDF parsing is heuristic (some role/comma-split noise — determination notices parse cleanly, initiation notices are sparser); the CORD cross-ref was thin (1 hit) because small US importers aren't in CORD's international sources (GLEIF/OFAC/ICIJ) — which is exactly what §20.1 fixes.
+
+## 20.1 Entity-registry enrichment (closing the CORD gap)
+
+The thin cross-ref is a **missing-source** problem, not a limit. Resolve the EAPA entities against the registries that DO cover them:
+
+| Registry | Cost | Gives | Status |
+|---|---|---|---|
+| **GLEIF** (LEI) | free, no key | legal name, registered address, **parent/child ownership**, affiliates | ✅ building now (proven: matched Thompson Aluminum + Zinus's NO/DK affiliates) |
+| **SEC EDGAR** | free (declared UA) | public-company officers/subsidiaries | ✅ building now (low coverage — importers are mostly private) |
+| **OpenCorporates** | **free token** | US **state-registry** company #, **incorporation date (= entity age, Rule 5)**, **officers** → shared-officer edges, address | ⚠️ wired; activates when `OC_API_TOKEN` is set (register at opencorporates.com/api_accounts/new) |
+
+Output → `entity_registry.csv` + `entity_registry_relationships.csv` → loaded into CORD/senzing (real addresses/ownership/officers → SHARED_ADDRESS / OWNED_BY / SHARED_OFFICER edges). This is the two-tier entity strategy (§16) made real: deep, registry-resolved profiles for the in-domain actors on top of CORD's global screening base. Registered as new sources in the Data Pipelines tab.
+
+**Dependency:** GLEIF + EDGAR need nothing. OpenCorporates (richest US officer/registry data) needs a free token from the user — the agent cannot self-register an account.
