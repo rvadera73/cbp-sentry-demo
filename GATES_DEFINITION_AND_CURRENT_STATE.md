@@ -7,6 +7,14 @@
 > **See also:** `CLAUDE.md` for developer guide, `docs/ARCHITECTURE.md` for system architecture,
 > `docs/DESIGN.md` for UI/UX and scoring design.
 
+> **⚡ UPDATE 2026-07-01 — Gate-1 scoring is now REAL.** (Authoritative as-built + build log: `docs/data-pipelines/DATA_PIPELINES_DESIGN.md` §22.)
+> - **Gate-1 deterministic 8-rule engine implemented** (was a 7-factor weighted average that diluted single strong signals). Referral decision (OFAC, or Element-9 + corroboration) floors to the critical tier. The ENGINE now scores **36 in-scope VN→US 7604/8541 criticals** — from the rules, not a seeded column. *(closes issue #16)*
+> - **PPV feedback loop live**: `POST /api/feedback → risk_scoring.gate1_outcomes → GET /api/feedback/ppv` (14.3% on demo dispositions, > 10% target). Remaining for Gate-1: accumulate REAL officer outcomes *(issue #17)*.
+> - **Manifest ingest fixed** (was silently inserting 0 rows) → 830 demo rows load & score.
+> - **Real EAPA intelligence**: 94 cases / 227 entities / 417 relationships (Federal Register + Wayback + determination-PDF harvest), loaded into the entity graph and surfaced in Entity Resolution + the Duties & Enforcement tab. EAPA is now REAL, not the earlier synthetic seed.
+> - **Data Pipelines tab** added (10 sources; honest healthy / seed / not_configured status).
+> - Open items tracked as GitHub issues **#17–#22**.
+
 ---
 
 ## PART 1: CURRENT AS-IS STATE (June 24, 2026)

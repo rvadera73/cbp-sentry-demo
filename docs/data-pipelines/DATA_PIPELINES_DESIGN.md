@@ -19,6 +19,8 @@
 | 2026-07-01 | **Entity-registry enrichment** added (§20): GLEIF + SEC EDGAR (free, no token) + OpenCorporates (free token) to resolve EAPA entities → real address / ownership / affiliates / officers, closing the thin CORD cross-ref. |
 | 2026-07-01 | Registry enrichment RUN: GLEIF matched 31/209, +8 affiliate nodes, +9 ownership edges (Greenbrier/Hog Slat/MasterBrand hierarchies); loaded + persistent; GLEIF/OpenCorporates/EDGAR registered in the Data Pipelines tab. |
 | 2026-07-01 | Free/no-key entity sources exhausted (GLEIF✓ EDGAR✓ USASpending✗=noise). Small private importers need a free API key (OpenCorporates/SAM.gov). Logged as OPEN ITEM. **Gate-1 readiness assessment** added (§21). |
+| 2026-07-01 | **#16 DONE** — Gate-1 deterministic 8-rule engine + referral critical floor → engine scores 36 in-scope criticals for real (not the file column). **#17** volume met + PPV loop verified (14.3% on demo, > 10%). |
+| 2026-07-01 | Pipeline status made honest (healthy / **seed** / not_configured). Real EAPA determinations surfaced in the **Duties & Enforcement** tab. Lesson: ingestion isn't 'done' until data is used + shown in the UI. As-built architecture + open items added (§22–23). |
 
 ---
 
@@ -525,3 +527,53 @@ Gate-1 closes on **≥10% PPV from real officer dispositions**. Have ~25 in-scop
 - ✅ **#16 DONE** (commit cf5bc04) — Gate-1 deterministic rule engine implemented (8 rules + referral decision + critical floor). The ENGINE now scores in-scope manifests to real tiers: **36 in-scope VN→US 7604/8541 criticals** = the Element-9 referral cases, from the rules — not the manifest file's Risk Score column. Non-referral rows correctly stay sub-critical.
 - 🟡 **#17** — volume met (**36 in-scope referral criticals**) + **PPV loop verified end-to-end** (demo: referred 7, confirmed 1, PPV **14.3% > 10% target**). Remaining is operational: accumulate REAL officer dispositions over the window.
 - Entity enrichment beyond GLEIF remains an **open item, not a blocker**.
+
+---
+
+# Part F — As-built architecture & open items (2026-07-01)
+
+## 22. As-built architecture (current state)
+
+### Services (docker-compose)
+| Service | Port | Role |
+|---|---|---|
+| **sentry-ui** | 3001 (nginx) | React SPA. Tabs: Command Center, Active Investigations (Referral Queue), Shipment Intelligence (incl. Duties & Enforcement), Entity Resolution, Risk Model Management, **Data Pipelines** |
+| **sentry-api** | 8000 (FastAPI) | scoring engine, manifest ingest, `/api/rescore`, Gate-1 rules, PPV feedback loop, `/api/eapa/cases`, pipeline registry, model-registry proxy, corridor proxy |
+| **sentry-data** | 8005 | shipments + corridors store (Postgres) |
+| **sentry-cord-integration** | 8004 | Senzing **mock** (SQLite): 244K CORD entities + real EAPA network + registry affiliates; entity resolution + relationship derivation |
+| **cbp-risk-engine** | 8010 (`/api/mcp/`) | MLOps model registry (versions, promote, gates) |
+| **sentry-db** | 5432 | Postgres — schemas: public, cbp_sentry, risk_scoring |
+
+### Gate-1 scoring path (real, end-to-end)
+`manifest (file-drop) → parse/dedup → risk_scoring_engine.score_shipment`:
+- 7-factor weighted model, **+ Gate-1 deterministic 8-rule floor** (ISF Element-9, OFAC, AD/CVD corridor, dwell, new-shipper, pricing, transship, ISF-amendments) **+ referral decision → critical floor**, + XGBoost maturity-delta →
+- `calculated_risk_score` (via `/api/rescore`, deterministic under the production model) →
+- **36 in-scope VN→US 7604/8541 criticals** (the Element-9 referral cases) →
+- officer disposition `POST /api/feedback` → `risk_scoring.gate1_outcomes` → `GET /api/feedback/ppv` (**14.3%** on demo outcomes, > 10% target).
+
+### Entity intelligence (H2)
+CORD 244K (GLEIF/OFAC/OpenSanctions/ICIJ/OpenOwnership) **+ real EAPA network** (204 entities, 423 edges — co-respondent rings, supplier links, alleger) **+ GLEIF registry affiliates** (Greenbrier/Hog Slat/MasterBrand hierarchies), persisted via the cord-integration startup. EAPA sourced FR API + **Wayback** (cbp.gov Akamai-blocked) + **determination-PDF harvest**. Surfaced in Entity Resolution and the Duties & Enforcement tab.
+
+### Data Pipelines tab — 10 sources, honest status
+5 **healthy** (manifest, vessel, isf, entity-cord, eapa) · 4 **seed** (adcvd, comtrade, gleif, sec-edgar — real data, not live-scheduled) · 1 **not_configured** (opencorporates — no token).
+
+## 23. Open items (as of 2026-07-01) — tracked as GitHub issues
+
+**Gate-1 blocker (remaining):**
+- **#17** — accumulate REAL officer dispositions for ≥10% PPV (mechanism + volume done; operational remainder). *(#16 CLOSED — engine scores for real.)*
+
+**Data / entity coverage:**
+- **#18** — OpenCorporates token (free tier vs paid; unlocks US small-importer officers/incorporation → Rule 5). Non-blocking.
+- **#22** — SAM.gov + UK Companies House connectors (free-key registry alternatives).
+- **#20** — clean up EAPA PDF-parse noise (role/comma-split heuristics).
+
+**Operational / UI:**
+- **#19** — verify EAPA networks render in the Entity Resolution UI (search → workspace → graph).
+- **#21** — real vessel dwell baselines (Rule 4; currently hardcoded).
+
+**Pipeline maturity (designed, not yet built):**
+- Comtrade fetcher (currently 6-row seed) + AD/CVD scheduler (currently manual) → move from **seed** to live-scheduled.
+- **Scheduler / orchestration** (APScheduler) — pipelines are manual Run-now today.
+- **Reference & Historical Data Hub** + golden-seed bootstrap (§11) — designed, not built.
+- **Manifest generator** seeded from real EAPA (for #17 volume top-up) — used demo files so far.
+- Real **Senzing** deployment (currently SQLite mock).
