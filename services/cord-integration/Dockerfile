@@ -23,6 +23,11 @@ COPY services/cord-integration/demo_entities.py .
 COPY services/cord-integration/seed_cbp_entities.py .
 COPY services/cord-integration/seed_eapa_senzing.py .
 COPY services/cord-integration/derive_relationships.py .
+COPY services/cord-integration/load_eapa_network.py .
+
+# Real EAPA entity network (from the PDF harvester) loaded at startup
+COPY services/api/reference/eapa_entities.csv /app/reference/eapa_entities.csv
+COPY services/api/reference/eapa_relationships.csv /app/reference/eapa_relationships.csv
 
 # Copy database files
 COPY data/ /app/data/
@@ -38,4 +43,4 @@ EXPOSE 8004
 # deriver can see them), THEN derive CORD relationships into
 # senzing_relationships (idempotent; backgrounded so it doesn't block serving),
 # then serve.
-CMD ["sh", "-c", "python3 seed_eapa_senzing.py >/tmp/seedeapa.log 2>&1; python3 derive_relationships.py >/tmp/derive.log 2>&1 & exec uvicorn main:app --host 0.0.0.0 --port 8004"]
+CMD ["sh", "-c", "python3 seed_eapa_senzing.py >/tmp/seedeapa.log 2>&1; python3 load_eapa_network.py --entities /app/reference/eapa_entities.csv --relationships /app/reference/eapa_relationships.csv >/tmp/loadeapa.log 2>&1; python3 derive_relationships.py >/tmp/derive.log 2>&1 & exec uvicorn main:app --host 0.0.0.0 --port 8004"]
