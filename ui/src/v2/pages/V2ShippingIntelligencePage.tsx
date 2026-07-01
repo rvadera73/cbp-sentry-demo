@@ -73,6 +73,31 @@ export default function V2ShippingIntelligencePage({
 
   const { corridor: selectedCorridor } = useCorridorDetail(selectedCorridorId || '');
 
+  // Real EAPA determination cases for the Duties & Enforcement tab (harvested
+  // reference/eapa_enriched.csv), keyed off the corridor's commodity so an
+  // aluminum/solar lane shows its real enforcement precedents.
+  const eapaCommodityKw = useMemo(() => {
+    const hs = String((corridorShipments[0] as any)?.hs_code || (selectedCorridor as any)?.primary_hs_chapters?.[0] || '');
+    if (hs.startsWith('7604')) return 'alumin';
+    if (hs.startsWith('8541')) return 'solar';
+    return ((corridorShipments[0] as any)?.commodity_name || '').split(' ')[0] || '';
+  }, [corridorShipments, selectedCorridor]);
+  const [eapaCases, setEapaCases] = useState<any[]>([]);
+  React.useEffect(() => {
+    const load = async (kw: string) => {
+      const q = kw ? `?commodity=${encodeURIComponent(kw)}&limit=40` : '?limit=40';
+      const r = await fetch(`${API_BASE_URL}/eapa/cases${q}`);
+      return r.ok ? ((await r.json()).cases || []) : [];
+    };
+    (async () => {
+      let cases = await load(eapaCommodityKw);
+      // Fallback: if the corridor's commodity matched nothing, show all real cases
+      // so the harvested data always surfaces here.
+      if (cases.length === 0 && eapaCommodityKw) cases = await load('');
+      setEapaCases(cases);
+    })().catch(() => setEapaCases([]));
+  }, [eapaCommodityKw]);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -332,24 +357,26 @@ export default function V2ShippingIntelligencePage({
                   />
 
                   <DataTable
-                    title="EAPA ENFORCEMENT ACTIONS"
+                    title={`EAPA ENFORCEMENT PRECEDENTS — REAL CBP DETERMINATIONS (${eapaCases.length})`}
                     columns={[
-                      { key: 'case_id', label: 'CASE ID', width: '15%' },
-                      { key: 'entity_name', label: 'ENTITY NAME', width: '20%' },
-                      { key: 'case_status', label: 'STATUS', width: '12%', render: (status: any) => (
-                        <span className={`px-2 py-0.5 rounded text-white text-[9px] font-bold ${
-                          status === 'AFFIRMATIVE' ? 'bg-[#D83933]' :
-                          status === 'PENDING' ? 'bg-orange-600' : 'bg-[#5C5C5C]'
-                        }`}>
-                          {status}
+                      { key: 'eapa_case', label: 'EAPA CASE', width: '11%' },
+                      { key: 'respondents', label: 'RESPONDENT / IMPORTER', width: '22%', render: (v: any, r: any) => v || r?.alleger || '—' },
+                      { key: 'commodity', label: 'COMMODITY', width: '20%', render: (v: any) => v || '—' },
+                      { key: 'country', label: 'ORIGIN', width: '9%', render: (v: any) => v || '—' },
+                      { key: 'adcvd_case', label: 'AD/CVD', width: '12%', render: (v: any) => v || '—' },
+                      { key: 'notice_type', label: 'NOTICE', width: '16%', render: (v: any) => (
+                        <span className={`px-2 py-0.5 rounded text-white text-[9px] font-bold ${/determination/i.test(v || '') ? 'bg-[#D83933]' : 'bg-orange-600'}`}>
+                          {(v || '').replace(/Notice of /i, '') || '—'}
                         </span>
                       )},
-                      { key: 'duty_evaded_usd', label: 'DUTY EVADED', width: '15%', render: (amount: any) => `$${amount?.toLocaleString() || '—'}` },
-                      { key: 'case_year', label: 'YEAR', width: '10%' },
-                      { key: 'source_description', label: 'SOURCE', width: '28%' }
+                      { key: 'source_pdf', label: 'PDF', width: '8%', render: (url: any) => url ? (
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-[#005EA2] hover:underline flex items-center space-x-1">
+                          <ExternalLink className="w-3 h-3" /><span>View</span>
+                        </a>
+                      ) : <span className={DESIGN.textGray}>—</span> }
                     ]}
-                    rows={selectedCorridor.enforcement_actions || []}
-                    emptyMessage="No recent enforcement actions for this corridor"
+                    rows={eapaCases}
+                    emptyMessage="No real EAPA determinations matched this corridor's commodity"
                   />
                 </div>
               )}

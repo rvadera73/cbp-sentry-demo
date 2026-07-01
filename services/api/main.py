@@ -5487,6 +5487,53 @@ async def list_corridors_proxy() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/eapa/cases")
+async def get_eapa_cases(
+    commodity: Optional[str] = Query(None),
+    country: Optional[str] = Query(None),
+    limit: int = Query(50),
+) -> Dict[str, Any]:
+    """Real EAPA determination cases (harvested reference/eapa_enriched.csv), for the
+    Duties & Enforcement view. Keyword-filters across commodity + party names so an
+    aluminum/solar corridor surfaces its real enforcement precedents (Kingtom Aluminio,
+    Thompson Aluminum, Waaree, ...) instead of the seeded corridor actions."""
+    import os as _os
+    import csv as _csv
+    path = _os.path.join(_os.path.dirname(__file__), "reference", "eapa_enriched.csv")
+    if not _os.path.exists(path):
+        return {"cases": [], "count": 0}
+    kw = (commodity or "").strip().lower()
+    cy = (country or "").strip().lower()
+    out: List[Dict[str, Any]] = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for r in _csv.DictReader(f):
+                hay = " ".join([r.get("commodity", ""), r.get("importers", ""),
+                                r.get("alleger", ""), r.get("foreign_suppliers", "")]).lower()
+                if kw and kw not in hay:
+                    continue
+                if cy and cy not in (r.get("country") or "").lower():
+                    continue
+                out.append({
+                    "eapa_case": r.get("eapa_case"),
+                    "respondents": r.get("importers") or r.get("foreign_suppliers") or "",
+                    "alleger": r.get("alleger") or "",
+                    "commodity": r.get("commodity") or "",
+                    "country": r.get("country") or "",
+                    "adcvd_case": r.get("adcvd_case") or "",
+                    "notice_type": r.get("notice_type") or "",
+                    "determination_date": r.get("determination_date") or "",
+                    "source_pdf": r.get("source_pdf") or "",
+                })
+    except Exception as e:
+        logger.error(f"eapa cases read failed: {e}")
+        return {"cases": [], "count": 0}
+    # Determinations first, then most recent.
+    out.sort(key=lambda r: (0 if "determination" in r["notice_type"].lower() else 1,
+                            r["determination_date"] or ""), reverse=False)
+    return {"cases": out[:limit], "count": len(out)}
+
+
 @app.get("/api/corridors/{corridor_id}")
 async def get_corridor_proxy(corridor_id: str) -> Dict[str, Any]:
     """Proxy to data service: get single corridor detail with duties and enforcement actions"""
