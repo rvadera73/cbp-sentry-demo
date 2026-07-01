@@ -56,6 +56,8 @@ def main() -> int:
     ap.add_argument("--db", default=os.getenv("SENZING_DB_PATH", "/app/data/senzing.db"))
     ap.add_argument("--entities", default="/app/reference/eapa_entities.csv")
     ap.add_argument("--relationships", default="/app/reference/eapa_relationships.csv")
+    ap.add_argument("--registry", default="/app/reference/entity_registry.csv")
+    ap.add_argument("--registry-rels", default="/app/reference/entity_registry_relationships.csv")
     args = ap.parse_args()
 
     ents = read_csv(args.entities)
@@ -138,9 +140,43 @@ def main() -> int:
                 (eid_for(n["name"]), cid, "MATCHES_CORD", 0.85, f"eapa-real:xref:{csrc}"))
             xref_n += 1
 
+    # --- registry enrichment (GLEIF/EDGAR/OpenCorporates): identity + affiliates ---
+    reg_ent, reg_rel = read_csv(args.registry), read_csv(args.registry_rels)
+    reg_nodes = reg_edges = enriched = 0
+    for r in reg_ent:
+        eid = eid_for((r.get("entity_name") or "").strip())
+        row = cur.execute("SELECT raw_data, country FROM senzing_entities WHERE entity_id=?", (eid,)).fetchone()
+        if not row:
+            continue
+        try:
+            raw = json.loads(row[0]) if row[0] else {}
+        except Exception:
+            raw = {}
+        raw["REGISTRY"] = {k: r.get(k) for k in ("source", "matched_name", "identifier", "address", "incorporation_date", "status")}
+        cur.execute("UPDATE senzing_entities SET raw_data=?, country=? WHERE entity_id=?",
+                    (json.dumps(raw), r.get("country") or row[1] or "", eid))
+        enriched += 1
+    for r in reg_rel:
+        src, dst = (r.get("src_name") or "").strip(), (r.get("dst_name") or "").strip()
+        if not src or not dst:
+            continue
+        rt = (r.get("rel_type") or "AFFILIATE").strip().upper()
+        deid = eid_for(dst)
+        if not cur.execute("SELECT 1 FROM senzing_entities WHERE entity_id=?", (deid,)).fetchone():
+            araw = {"DATA_SOURCE": "REGISTRY", "NAMES": [{"NAME_TYPE": "PRIMARY", "NAME_ORG": dst}],
+                    "FLAG": "eapa_affiliate", "REGISTRY_SOURCE": r.get("source", "")}
+            cur.execute("INSERT OR REPLACE INTO senzing_entities (entity_id, data_source, record_id, name_primary, "
+                        "country, entity_type, confidence, raw_data) VALUES (?,?,?,?,?,?,?,?)",
+                        (deid, "REGISTRY", r.get("dst_identifier", "") or "", dst, "", "organization", 0.9, json.dumps(araw)))
+            reg_nodes += 1
+        cur.execute("INSERT INTO senzing_relationships (entity_id_a, entity_id_b, relationship_type, confidence, evidence) "
+                    "VALUES (?,?,?,?,?)", (eid_for(src), deid, rt, 0.9, f"eapa-real:registry:{r.get('source','')}"))
+        reg_edges += 1
+
     conn.commit()
     conn.close()
-    print(f"[load_eapa] entities={len(nodes)} within-case-edges={edge_n} cord-xref-edges={xref_n}")
+    print(f"[load_eapa] entities={len(nodes)} within-case-edges={edge_n} cord-xref-edges={xref_n} "
+          f"| registry: enriched={enriched} affiliate-nodes={reg_nodes} ownership-edges={reg_edges}")
     return 0
 
 

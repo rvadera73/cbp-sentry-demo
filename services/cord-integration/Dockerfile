@@ -28,6 +28,9 @@ COPY services/cord-integration/load_eapa_network.py .
 # Real EAPA entity network (from the PDF harvester) loaded at startup
 COPY services/api/reference/eapa_entities.csv /app/reference/eapa_entities.csv
 COPY services/api/reference/eapa_relationships.csv /app/reference/eapa_relationships.csv
+# Public-registry enrichment (GLEIF/EDGAR/OpenCorporates): identity + affiliates
+COPY services/api/reference/entity_registry.csv /app/reference/entity_registry.csv
+COPY services/api/reference/entity_registry_relationships.csv /app/reference/entity_registry_relationships.csv
 
 # Copy database files
 COPY data/ /app/data/

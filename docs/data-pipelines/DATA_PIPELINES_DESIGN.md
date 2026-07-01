@@ -17,6 +17,7 @@
 | 2026-07-01 | Built the **Data Pipelines tab** (registry + run-ledger + 4 endpoints + admin UI under Intelligence Control), seeded with 7 real sources. |
 | 2026-07-01 | **EAPA real data journey**: Federal Register API (27 cases) → **Wayback Machine** pivot to cbp.gov (94 cases, 58 named, since cbp.gov Akamai-blocks server IPs) → **PDF harvest** of determination notices (227 entities, 417 relationships, 99/102 PDFs, 7 "Various Importers" cracked into real names) → **loaded into the entity graph** (204 entities, 414 edges; persistent via cord-integration startup). |
 | 2026-07-01 | **Entity-registry enrichment** added (§20): GLEIF + SEC EDGAR (free, no token) + OpenCorporates (free token) to resolve EAPA entities → real address / ownership / affiliates / officers, closing the thin CORD cross-ref. |
+| 2026-07-01 | Registry enrichment RUN: GLEIF matched 31/209, +8 affiliate nodes, +9 ownership edges (Greenbrier/Hog Slat/MasterBrand hierarchies); loaded + persistent; GLEIF/OpenCorporates/EDGAR registered in the Data Pipelines tab. |
 
 ---
 
@@ -493,3 +494,5 @@ The thin cross-ref is a **missing-source** problem, not a limit. Resolve the EAP
 Output → `entity_registry.csv` + `entity_registry_relationships.csv` → loaded into CORD/senzing (real addresses/ownership/officers → SHARED_ADDRESS / OWNED_BY / SHARED_OFFICER edges). This is the two-tier entity strategy (§16) made real: deep, registry-resolved profiles for the in-domain actors on top of CORD's global screening base. Registered as new sources in the Data Pipelines tab.
 
 **Dependency:** GLEIF + EDGAR need nothing. OpenCorporates (richest US officer/registry data) needs a free token from the user — the agent cannot self-register an account.
+
+**Results (GLEIF + EDGAR run, 2026-07-01):** of 209 distinct EAPA entities, GLEIF matched **31** (real address + status), EDGAR **3**, OpenCorporates 0 (no token). Loaded **8 affiliate nodes + 9 real ownership edges** into the graph — genuine associated entities: *Greenbrier → Astra Rail (Romania) / Greenbrier Poland / Greenbrier Leasing*, *Hog Slat → HS International / HS Midwest / TDM Farms*, *MasterBrand Cabinets ← MasterBrand Inc*. The 178 unmatched are small private US importers — the OpenCorporates token is the single biggest lever to lift US coverage + add officer→SHARED_OFFICER edges. GLEIF/OpenCorporates/SEC EDGAR registered as sources in the Data Pipelines tab; enrichment persists via the cord-integration startup.
