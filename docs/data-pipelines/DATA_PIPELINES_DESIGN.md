@@ -13,6 +13,7 @@
 | 2026-06-30 | Data-engineering depth: layered/medallion architecture (§5), Reference & Historical Data Hub (§11), operating-for-a-year challenges → responses (§12). Minimal-intervention principle (§1.7). |
 | 2026-06-30 | Manifest = file-drop hub + aggregate API (decided). Added Hub DVC layout + golden-seed + file-drop (§11), DQ gates (§13), orchestration (§14), canonical-schema recommendation (§15). |
 | 2026-06-30 | Per-data-point sourcing plan + two-tier entity strategy (§16); per-gate plan mapping the 8 Gate-1 rules to sources (§17); Gate-1 sample-manifest critical path for May–Jul (§18). Altana clarified = recommendation, not a raw score. |
+| 2026-07-01 | FINALIZED design (§19): data flywheel (EAPA→manifests→scoring→entity list→labeled history), locked decisions, Data Pipeline tab spec, Gate-1 implementation sequence. Manifest ingest bugs fixed (830 rows load, ~25 in-scope critical). |
 
 ---
 
@@ -394,3 +395,66 @@ The authoritative "where does each data point come from, at what scope and caden
 - Gate-1 documented target = **2–3 referrals/week (10–15/month)**; example PPV = 13 confirmed / 127 referred = 10.2%.
 - **30–40 referrals across May–Jul (~13 weeks) = ~2.5/week = on Gate-1 target ✅.** ("5/week" is the **Gate-3** rate, 4–5/week.)
 - **"90%+ critical" is the referral *score threshold*** (critical tier); **PPV ≥10% is the *confirmation* target** — different numbers. At Gate 1, ~1 in 10 of the 90%+ referrals is expected to confirm; that's success, not failure.
+
+---
+
+# Part D — FINALIZED design & implementation (locked 2026-07-01)
+
+## 19. Finalized design
+
+### 19.1 The data flywheel (validated)
+```
+  EAPA scraper (real respondents from cbp.gov)
+        │  real name + commodity + country + docket
+        ▼
+  Manifest generator ──► seeds shipments with EAPA respondents (LABELED positive)
+        │                + clean entities (negative), in-scope VN→US 7604/8541
+        ▼
+  Ingest + Score ──► risk score + rule hits + referral
+        │
+        ├──► Entity-list enrichment: flagged/scored parties → derived watchlist
+        │       layer ON TOP of the static CORD bundle (NOT a rebuild of 244K)
+        │
+        └──► Officer outcomes (gate1_outcomes) → PPV + real labels
+                 │
+                 ▼
+         Manifest HISTORY (labeled) → Gate-2 training corpus
+```
+**Why it's strong:** seeding manifests with *real EAPA respondents* makes the training data **self-labeling** (EAPA shipper = known positive; clean shipper = negative). The accumulating manifest history *is* the Gate-2 training set, and high-scoring parties build an enriched, feedback-derived watchlist that fixes the SE-Asia coverage gap over time.
+
+**Clarifications baked in:**
+- "Build CORD from risk scoring" = **enrich** (a derived watchlist layer of flagged parties), not rebuild the 244K CORD. CORD stays the screening base.
+- Training needs negatives + real outcomes too: the generator supplies negatives; officer dispositions supply real labels.
+
+### 19.2 Locked decisions
+| Decision | Locked choice |
+|---|---|
+| Build order | **Track A (Data Pipeline tab)** + **Track B (EAPA scraper)** in parallel; then manifest generator + entity enrichment; reference data alongside |
+| Reference-data scoring | Wire **AD/CVD + Comtrade** so the engine scores for real (stop relying on the file's Risk Score column) |
+| Schema | **Hybrid** — add `vessels`, `vessel_positions`, `isf_filings`; keep cached columns on `shipments` (no breaking change) |
+| Orchestrator | **APScheduler** now (worker); Dagster later, connectors orchestrator-agnostic |
+| Storage | DVC-backed hub (reference / historical / golden) + file-drop for manifests |
+| Scope | **Gate-1 only:** VN→US, HS 7604/8541 |
+
+### 19.3 Data Pipeline tab (finalized spec)
+Under **Intelligence Control** — a catalog + control panel (the "details about datasets and APIs" you asked for):
+- One row per source: dataset type · name · **mode** (🟢 online / 📄 file) · **status** (healthy/stale/error) · last run · rows (last/total) · **Run now**.
+- Grouped by dataset: Manifest · ISF · Vessel · Entity · Reference.
+- Per-source **detail drawer**: API base URL + auth + cadence, or file path; schedule; recent run history; provenance; honest gap note (ISF file-only, manifest sample, EAPA scrape).
+- Shared UI kit + model-badge consistency.
+
+### 19.4 Implementation sequence (Gate-1)
+| Step | Track | Deliverable |
+|---|---|---|
+| 1 | A | Pipeline registry (`data_sources`) + run ledger (`ingestion_runs`) + **Data Pipeline tab** (status + Run-now) |
+| 2 | B | **EAPA scraper** (cbp.gov Notices of Action + Final Determinations → `eapa_real.csv`) → load into entity list |
+| 3 | — | **Reference data**: AD/CVD (real dataset + Federal Register) + **Comtrade fetcher** → engine scores for real |
+| 4 | — | **Manifest generator** (seeded from real EAPA, labeled, time-distributed) → file-drop; top up to 30–40 in-scope critical |
+| 5 | — | **Entity enrichment**: flagged/scored parties → derived watchlist layer over CORD |
+| 6 | — | Schema tables (vessels/isf) + scheduler + auto-rescore → accumulating labeled history |
+
+### 19.5 In / out for Gate-1
+- **In:** Data Pipeline tab, EAPA scraper, reference data (AD/CVD + Comtrade), manifest generator, entity enrichment, scheduler.
+- **Deferred (Gate-2/3):** Altana live, satellite AIS, Dagster, the LightGBM / Bayesian models.
+
+> Foundation already done (2026-07-01): the **manifest file-drop ingest works** (bugs fixed — boolean coercion, parser column mapping, silent-failure hardening); 830 demo rows load, ~25 in-scope VN→US 7604/8541 at ≥90.
