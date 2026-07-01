@@ -18,6 +18,7 @@
 | 2026-07-01 | **EAPA real data journey**: Federal Register API (27 cases) → **Wayback Machine** pivot to cbp.gov (94 cases, 58 named, since cbp.gov Akamai-blocks server IPs) → **PDF harvest** of determination notices (227 entities, 417 relationships, 99/102 PDFs, 7 "Various Importers" cracked into real names) → **loaded into the entity graph** (204 entities, 414 edges; persistent via cord-integration startup). |
 | 2026-07-01 | **Entity-registry enrichment** added (§20): GLEIF + SEC EDGAR (free, no token) + OpenCorporates (free token) to resolve EAPA entities → real address / ownership / affiliates / officers, closing the thin CORD cross-ref. |
 | 2026-07-01 | Registry enrichment RUN: GLEIF matched 31/209, +8 affiliate nodes, +9 ownership edges (Greenbrier/Hog Slat/MasterBrand hierarchies); loaded + persistent; GLEIF/OpenCorporates/EDGAR registered in the Data Pipelines tab. |
+| 2026-07-01 | Free/no-key entity sources exhausted (GLEIF✓ EDGAR✓ USASpending✗=noise). Small private importers need a free API key (OpenCorporates/SAM.gov). Logged as OPEN ITEM. **Gate-1 readiness assessment** added (§21). |
 
 ---
 
@@ -496,3 +497,29 @@ Output → `entity_registry.csv` + `entity_registry_relationships.csv` → loade
 **Dependency:** GLEIF + EDGAR need nothing. OpenCorporates (richest US officer/registry data) needs a free token from the user — the agent cannot self-register an account.
 
 **Results (GLEIF + EDGAR run, 2026-07-01):** of 209 distinct EAPA entities, GLEIF matched **31** (real address + status), EDGAR **3**, OpenCorporates 0 (no token). Loaded **8 affiliate nodes + 9 real ownership edges** into the graph — genuine associated entities: *Greenbrier → Astra Rail (Romania) / Greenbrier Poland / Greenbrier Leasing*, *Hog Slat → HS International / HS Midwest / TDM Farms*, *MasterBrand Cabinets ← MasterBrand Inc*. The 178 unmatched are small private US importers — the OpenCorporates token is the single biggest lever to lift US coverage + add officer→SHARED_OFFICER edges. GLEIF/OpenCorporates/SEC EDGAR registered as sources in the Data Pipelines tab; enrichment persists via the cord-integration startup.
+
+---
+
+## 21. Gate-1 readiness assessment (2026-07-01)
+
+### ✅ Data foundation — ready
+- **Manifest ingest works** (fixed 3 silent bugs) — 830 demo rows load; ~25 in-scope VN→US 7604/8541 criticals.
+- **Data Pipelines tab** — 10 sources, observable, Run-now.
+- **Vessel/AIS** live (VesselFinder); **OFAC/CORD** screening (Rule 2).
+- **EAPA actor intelligence (H2)** — 94 real cases, 227 entities, 417 relationships, real co-respondent rings + GLEIF affiliate hierarchies, in the graph, persistent.
+
+### 🔴 Gate-1 BLOCKER #1 — the rules engine doesn't score in-scope manifests to their real tiers
+The reference data now exists (AD/CVD 5 rows, Comtrade ~6 rows) but the engine still under-scores: loading manifests, only rows we let inherit the file's own "Risk Score" reached critical; the engine alone produced mediums. **Critical path:** wire the 8 Gate-1 rules + reference lookups (AD/CVD Rule 3, Comtrade pricing Rule 6, dwell baseline Rule 4) so the ENGINE reproduces Gate-1 tiers on in-scope manifests — not the file column.
+
+### 🟡 Gate-1 BLOCKER #2 — referral volume + real outcomes for PPV
+Gate-1 closes on **≥10% PPV from real officer dispositions**. Have ~25 in-scope criticals (target 30–40); officer-review persistence + `gate1_outcomes` feedback loop already built. **Need:** top up manifests to 30–40 in-scope criticals + accumulate reviewed outcomes to measure PPV.
+
+### 🔵 Open items — NON-blocking
+1. **OpenCorporates token** — lifts small-importer entity coverage (Rule 5 entity-age + officers → shared-officer edges). Free tier exists; **commercial/bulk cost unknown (quote-based)**. Rule 5 is a weak rule (+10 pts, 70% conf) → improves H2 richness, does **not** block Gate-1. *(decision pending on cost)*
+2. Verify EAPA networks render in the Entity Resolution UI (search → workspace → graph).
+3. PDF-parse noise cleanup (role/comma-split heuristics).
+4. Vessel dwell baselines (hardcoded → real per commodity/port).
+5. SAM.gov / UK Companies House (free keys) as legit registry alternatives.
+
+### Bottom line
+Gate-1 is gated by **(1) reference-data-into-scoring** (make the engine score for real) then **(2) volume + outcomes** (PPV). Entity enrichment beyond GLEIF is an **open item, not a blocker**.
