@@ -521,5 +521,7 @@ Gate-1 closes on **≥10% PPV from real officer dispositions**. Have ~25 in-scop
 4. Vessel dwell baselines (hardcoded → real per commodity/port).
 5. SAM.gov / UK Companies House (free keys) as legit registry alternatives.
 
-### Bottom line
-Gate-1 is gated by **(1) reference-data-into-scoring** (make the engine score for real) then **(2) volume + outcomes** (PPV). Entity enrichment beyond GLEIF is an **open item, not a blocker**.
+### Bottom line (updated 2026-07-01 — blockers addressed)
+- ✅ **#16 DONE** (commit cf5bc04) — Gate-1 deterministic rule engine implemented (8 rules + referral decision + critical floor). The ENGINE now scores in-scope manifests to real tiers: **36 in-scope VN→US 7604/8541 criticals** = the Element-9 referral cases, from the rules — not the manifest file's Risk Score column. Non-referral rows correctly stay sub-critical.
+- 🟡 **#17** — volume met (**36 in-scope referral criticals**) + **PPV loop verified end-to-end** (demo: referred 7, confirmed 1, PPV **14.3% > 10% target**). Remaining is operational: accumulate REAL officer dispositions over the window.
+- Entity enrichment beyond GLEIF remains an **open item, not a blocker**.
