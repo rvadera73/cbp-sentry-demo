@@ -577,3 +577,34 @@ CORD 244K (GLEIF/OFAC/OpenSanctions/ICIJ/OpenOwnership) **+ real EAPA network** 
 - **Reference & Historical Data Hub** + golden-seed bootstrap (§11) — designed, not built.
 - **Manifest generator** seeded from real EAPA (for #17 volume top-up) — used demo files so far.
 - Real **Senzing** deployment (currently SQLite mock).
+
+---
+
+## 24. Program progress — the gate ladder (2026-07-01)
+
+**Mission:** detect illegal transshipment / AD-CVD duty evasion (scope VN→US, HS 7604 aluminum + 8541 solar), maturing the risk model through 3 gates, each gated on real **PPV** (confirmed ÷ referred).
+
+| Gate | Maturity | Model | PPV target | Referrals/wk | Status |
+|---|---|---|---|---|---|
+| **1** | 15% | Deterministic 8 rules | ≥10% | 2–3 | 🟢 built & real; closure pending real outcomes |
+| **2** | 30% | Rules + LightGBM | ≥30% | 3–4 | 🟡 ~5% — depends on Gate-1 outcomes to train |
+| **3** | 50% | Bayesian ensemble | ≥50% | 4–5 | ⚪ 0% — future |
+
+**Progress scorecard**
+| Dimension | Status | Notes |
+|---|---|---|
+| Manifest ingest | ✅ real | was inserting 0 rows silently — fixed; 830 rows load & score |
+| Gate-1 scoring engine | ✅ real | 8-rule deterministic + referral critical floor → 36 in-scope criticals from the engine |
+| PPV feedback loop | ✅ built / ⚠️ demo | verified at 14.3%; needs real officer outcomes |
+| Vessel / AIS | ✅ live | VesselFinder |
+| Reference data (AD/CVD, Comtrade) | 🟡 seed | real, used by scoring, not live-scheduled |
+| Entity intelligence (H2) | ✅ real | CORD 244K + real EAPA network (94/227/417) + GLEIF affiliates |
+| Model registry / MLOps | ✅ | versioning, promote, gates, rescore/revert, badges |
+| UI | ✅ | Command Center, Referral Queue, Entity Resolution, Shipment Intel + Duties & Enforcement (real EAPA), Data Pipelines tab, officer review |
+
+**Gate-by-gate**
+- **Gate 1 — at the threshold.** Built (~90%): rule engine, referral logic, PPV loop, real data + every officer surface. Left (only blocker, #17): accumulate REAL officer dispositions → PPV ≥10% (operational). Optional accelerators: manifest-volume generator (seed from real EAPA respondents), pipeline scheduling, entity coverage (#18–22).
+- **Gate 2 — ~5%, not started (by design).** Needs Gate-1 outcomes to train. Then: LightGBM on 287 EAPA + outcomes; features = supply-chain opacity + portfolio reach + entity/ownership (the EAPA network + GLEIF affiliates feed this) + Altana live → ≥30% PPV. Ready: labeled EAPA corpus + entity graph. Not built: the model, new features, Altana activation.
+- **Gate 3 — 0%, future.** Bayesian ensemble + weekly dynamic thresholds + optional satellite imagery → ≥50% PPV.
+
+**Critical path:** (1) close Gate 1 via real outcomes (#17); (2) open Gate 2 (LightGBM on accumulated outcomes + entity/opacity features); (3) Gate 3 (ensemble + dynamic thresholds). The machinery is built and real — Gate-1 closure is an operational loop, not more engineering.
