@@ -53,3 +53,9 @@ logs/
 tmp/
 temp/
 *.tmp
+
+# --- cleanup 2026-07-01: build artifacts + binaries (keep on disk, untrack) ---
+*.db
+*.tsbuildinfo
+coverage.xml
+*.zip
